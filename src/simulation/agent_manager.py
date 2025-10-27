@@ -31,6 +31,17 @@ class AgentManager:
         self.weather = WeatherManager("Soup Kitchen District")
         self.local_weather: Dict[str, float] = self.weather.state
         self.log: List[Dict] = []
+        self.logger = None
+        self.logger_facility = None
+
+    # ------------------------------------------------------------------
+    # Logging integration
+    # ------------------------------------------------------------------
+
+    def attach_logger(self, logger, facility_name: str):
+        """Attach a SimulationLogger instance for telemetry capture."""
+        self.logger = logger
+        self.logger_facility = facility_name
 
     # ------------------------------------------------------------------
     # Agent control
@@ -89,6 +100,20 @@ class AgentManager:
             }
             self.log.append(entry)
             print(f"{agent.__class__.__name__:>14} -> {action:>22}")
+            if self.logger and self.logger_facility:
+                self.logger.record_agent_tick(
+                    tick=self.timestep,
+                    facility=self.logger_facility,
+                    agent_type=agent.__class__.__name__,
+                    agent_id=agent.id,
+                    action=action,
+                    mood={
+                        "fear": agent.mood.fear,
+                        "trust": agent.mood.trust,
+                        "loyalty": agent.mood.loyalty,
+                        "greed": agent.mood.greed,
+                    },
+                )
 
     def run(self, ticks: int = 5):
         """Run simulation for N ticks."""

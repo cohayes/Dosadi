@@ -49,13 +49,15 @@ class PersistentEventSystem:
                 print(f"⚠️ Persistent Event started at {facility.profile.name}: {event_name}")
                 self.active_events[event_name] = random.randint(3, 7)  # duration
                 self.registry[event_name]["apply"](facility)
+                return event_name
+        return None
 
     def tick(self, facility):
         """Advance all active events, decaying them gradually."""
         expired = []
-        for event, remaining in self.active_events.items():
+        for event in list(self.active_events.keys()):
             self.active_events[event] -= 1
-            if remaining > 0:
+            if self.active_events[event] > 0:
                 # reapply mild effects each tick
                 self.registry[event]["apply"](facility)
             else:
@@ -67,6 +69,7 @@ class PersistentEventSystem:
                 self.registry[event]["recover"](facility)
             del self.active_events[event]
             print(f"✅ Event ended: {event}")
+        return expired
 
     # ------------------------------------------------------------------
     # Event Definitions
