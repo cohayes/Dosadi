@@ -18,6 +18,7 @@ import random
 from typing import Dict, List
 from src.simulation.weather_manager import WeatherManager
 from src.simulation.agent_manager import AgentManager
+from src.simulation.external_forces_manager import ExternalForcesManager
 
 
 class DistrictManager:
@@ -33,10 +34,12 @@ class DistrictManager:
         }
 
         # Subsystems
+        self.external_forces = ExternalForcesManager()
         self.weather = WeatherManager(name)
         self.facilities: List[AgentManager] = []
         self.timestep = 0
         self.report_log: List[Dict] = []
+        
 
     # ------------------------------------------------------------------
     # Facility and agent registration
@@ -92,6 +95,9 @@ class DistrictManager:
         """Advance all subsystems one step."""
         self.timestep += 1
         print(f"\n===== DISTRICT {self.name.upper()} | TICK {self.timestep} =====")
+        
+        # Step 0: apply external pressures before local updates
+        self.external_forces.tick(self)
 
         # Step 1: advance weather with agent feedback
         all_actions = []

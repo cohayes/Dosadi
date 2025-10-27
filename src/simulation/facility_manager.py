@@ -12,6 +12,7 @@ from typing import Dict
 from src.simulation.agent_manager import AgentManager
 from src.simulation.facility_profile import FacilityProfile, FACILITY_TEMPLATES
 from src.simulation.event_system import EventSystem
+from src.simulation.persistent_event_system import PersistentEventSystem
 
 
 class FacilityManager(AgentManager):
@@ -22,6 +23,7 @@ class FacilityManager(AgentManager):
 
         self.profile: FacilityProfile = FACILITY_TEMPLATES[profile_name]
         self.event_system = EventSystem()
+        self.persistent_events = PersistentEventSystem()
         self.resources: Dict[str, float] = {**self.profile.input_resources, **self.profile.output_resources}
         # initialize resources to moderate stock
         for r in self.resources:
@@ -93,5 +95,12 @@ class FacilityManager(AgentManager):
         event_triggered = self.event_system.maybe_trigger(self, chance=0.1)
         if event_triggered:
             print(f"[{self.profile.name}] ⚠️  Event occurred: {event_triggered}")
+        
+        # Random chance to trigger persistent events
+        self.persistent_events.maybe_trigger(self, chance=0.08)
+
+        # Update active events
+        self.persistent_events.tick(self)
+
 
         print(f"[{self.profile.name}] ✅ Efficiency={eff:.2f}, Output={self.last_output}")

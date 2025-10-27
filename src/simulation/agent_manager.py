@@ -17,6 +17,9 @@ from src.agents.patron import Patron
 from src.agents.server import Server
 from src.agents.security_guard import SecurityGuard
 from src.agents.boss import Boss
+from src.agents.cook import Cook
+from src.agents.waiter import Waiter
+from src.agents.negotiator import Negotiator
 from src.agents.faction_alignment import FactionAlignment
 from src.simulation.weather_manager import WeatherManager
 
@@ -48,6 +51,9 @@ class AgentManager:
             "server": Server,
             "guard": SecurityGuard,
             "boss": Boss,
+            "waiter": Waiter,
+            "negotiator": Negotiator,
+            "cook": Cook,
         }
         cls = cls_map.get(agent_type.lower())
         if cls:
