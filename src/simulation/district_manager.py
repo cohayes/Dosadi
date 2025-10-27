@@ -15,14 +15,21 @@ Author: Project Dosadi
 """
 
 import random
-from typing import Dict, List
+from typing import Dict, List, Optional
 from src.simulation.weather_manager import WeatherManager
 from src.simulation.agent_manager import AgentManager
 from src.simulation.external_forces_manager import ExternalForcesManager
+from src.simulation.logging import SimulationLogger
 
 
 class DistrictManager:
-    def __init__(self, name: str, primary_industry: str = "services", quota_target: float = 100.0):
+    def __init__(
+        self,
+        name: str,
+        primary_industry: str = "services",
+        quota_target: float = 100.0,
+        logger: Optional[SimulationLogger] = None,
+    ):
         self.name = name
         self.primary_industry = primary_industry
         self.quota_target = quota_target
@@ -39,6 +46,7 @@ class DistrictManager:
         self.facilities: List[AgentManager] = []
         self.timestep = 0
         self.report_log: List[Dict] = []
+        self.logger = logger or SimulationLogger()
         
 
     # ------------------------------------------------------------------
@@ -48,6 +56,9 @@ class DistrictManager:
     def add_facility(self, facility: AgentManager):
         """Attach an AgentManager to this district."""
         facility.weather = self.weather
+        if self.logger:
+            facility_name = getattr(getattr(facility, "profile", None), "name", facility.__class__.__name__)
+            facility.attach_logger(self.logger, facility_name)
         self.facilities.append(facility)
 
     def seed_facilities(self, n: int = 1):
@@ -122,6 +133,24 @@ class DistrictManager:
             "faction_power": self.faction_power.copy(),
             "weather": self.weather.state.copy(),
         })
+        if self.logger:
+            self.logger.record_district_tick(
+                tick=self.timestep,
+                production=production,
+                quota_ratio=q_ratio,
+                faction_power=self.faction_power,
+                weather=self.weather.state,
+            )
+
+    # ------------------------------------------------------------------
+    # Reporting helpers
+    # ------------------------------------------------------------------
+
+    def export_logs(self, path: str):
+        """Persist accumulated logs to disk."""
+
+        if self.logger:
+            self.logger.to_json(path)
 
     def run(self, ticks: int = 10):
         """Run the full district simulation for N ticks."""

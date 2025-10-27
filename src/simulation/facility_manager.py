@@ -82,9 +82,20 @@ class FacilityManager(AgentManager):
         # Let agents act (same as AgentManager)
         super().tick()
 
+        events = []
+
         # Skip production if no inputs
         if not self.has_inputs():
             print(f"[{self.profile.name}] ❌ Missing inputs, production halted.")
+            if self.logger and self.logger_facility:
+                self.logger.record_facility_tick(
+                    tick=self.timestep,
+                    facility=self.logger_facility,
+                    efficiency=0.0,
+                    output={},
+                    resources=self.resources,
+                    events=["missing_inputs"],
+                )
             return
 
         # Consume, produce, log
@@ -94,13 +105,27 @@ class FacilityManager(AgentManager):
         # Random chance to trigger local event
         event_triggered = self.event_system.maybe_trigger(self, chance=0.1)
         if event_triggered:
+            events.append(event_triggered)
             print(f"[{self.profile.name}] ⚠️  Event occurred: {event_triggered}")
-        
+
         # Random chance to trigger persistent events
-        self.persistent_events.maybe_trigger(self, chance=0.08)
+        persistent_event = self.persistent_events.maybe_trigger(self, chance=0.08)
+        if persistent_event:
+            events.append(f"persistent:{persistent_event}")
 
         # Update active events
-        self.persistent_events.tick(self)
-
+        ended_events = self.persistent_events.tick(self)
+        for ended in ended_events:
+            events.append(f"ended:{ended}")
 
         print(f"[{self.profile.name}] ✅ Efficiency={eff:.2f}, Output={self.last_output}")
+
+        if self.logger and self.logger_facility:
+            self.logger.record_facility_tick(
+                tick=self.timestep,
+                facility=self.logger_facility,
+                efficiency=eff,
+                output=self.last_output,
+                resources=self.resources,
+                events=events,
+            )

@@ -52,8 +52,12 @@ def main():
     # Run simulation
     district.run(ticks=30)
 
+    # Export telemetry for later analysis
+    district.export_logs("logs/ward07_run.json")
+
     print("\n=== SIMULATION COMPLETE ===")
     print(f"District '{district.name}' finished after {district.timestep} ticks.")
+    print("Logs written to logs/ward07_run.json")
 
 
 if __name__ == "__main__":
