@@ -2,7 +2,7 @@
 
 ## Overview
 Power on Dosadi is bureaucratic, layered, and self-reinforcing.  
-Law is less about justice and more about **control through compliance**.  
+Law exists not for justice but for **control through compliance**.  
 Survival is legal only when it is registered.
 
 ---
@@ -10,38 +10,37 @@ Survival is legal only when it is registered.
 ## Structure of Authority
 | Tier | Domain | Description |
 |------|---------|--------------|
-| **King / Overseer** | Planetary | The symbolic apex; maintains the illusion of centralized control. |
-| **Dukes** | Regional | Manage macro-industries and enforce quotas. |
-| **Counts** | Ward-Level | Administer water, labor, and surveillance within their districts. |
-| **Barons & Bishops** | Institutional | Operate key facilities (medical, food, or technical). |
-| **Mayors** | Local | Handle daily resource distribution and crowd control. |
+| **King / Overseer** | Planetary | Symbolic apex; maintains illusion of order. |
+| **Dukes** | Regional | Manage industries and enforce quotas. |
+| **Counts** | Ward-Level | Administer labor, surveillance, and resources. |
+| **Barons, Bishops, Mayors** | Institutional | Oversee military, social, and industrial organization respectively. |
 
 ---
 
 ## Law as System Control
-- **Registration:** every person, tool, and breath is logged into central accounting.  
-- **Auditing:** random loyalty tests ensure obedience.  
-- **Compliance Incentives:** privileges like cooling time or extra moisture are granted for cooperation.  
-- **Punitive Measures:** misallocation, unregistered repair, or unsanctioned speech results in ration penalties or exile.  
+- **Registration:** every person, tool, and breath is logged.  
+- **Auditing:** random loyalty checks ensure hierarchy integrity.  
+- **Compliance Incentives:** rewards in rations or privileges reinforce obedience.  
+- **Punitive Measures:** unregistered repair, speech, or hoarding result in deprivation or exile.  
 
 ---
 
 ## Bureaucracy and Corruption
-- Officials justify corruption as efficiency — “better that someone competent breaks the rules.”  
-- Access to data is power: auditors can alter metrics to favor allies or suppress rivals.  
-- Surveillance is both **instrument and addiction** — bureaucrats fear losing visibility as much as losing status.  
+- **Might makes right** — the powerful act freely so long as they maintain control.  
+- Corruption is not deviance but stability; favors keep systems fluid.  
+- **Tarnishing one’s image** in the eyes of superiors is a bureaucrat’s greatest fear — reputation equals survival.  
 
 ---
 
 ## Cultural Impact
-- Obedience is a survival mechanism, not a virtue.  
-- Trust networks form within layers of mutual extortion.  
-- “Loyalty tests” are ritualized — citizens publicly denounce others to demonstrate purity.  
-- Law shapes identity: one is defined by registration, not belief.
+- Obedience is pragmatic, not moral.  
+- Power is a prediction market: citizens bet their loyalty on the next victor.  
+- **Access to higher echelons** of any faction requires visible, often brutal, tests of loyalty.  
+- **Belief in tomorrow’s victor** shapes behavior and identity — adaptability is the only lasting virtue.
 
 ---
 
 ## Simulation Relevance
-- Legal systems provide behavioral constraints for agents (e.g., patrols, inspections).  
-- Corruption acts as both a lubricant and instability factor in the economy.  
-- Loyalty, compliance, and fear become quantifiable social states.  
+- Law provides environmental constraints on behavior (e.g., patrols, audits).  
+- Fear and loyalty metrics regulate agent interaction.  
+- Corruption defines the difference between stable and collapsing systems.

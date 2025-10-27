@@ -1,51 +1,49 @@
 # Industry and Economy of Dosadi
 
 ## Overview
-Dosadi’s economy is closed, hierarchical, and resource-constrained.  
-Every industry revolves around one element: **water** — the medium of life, energy, and power.  
-Labor, loyalty, and maintenance all exist in service to the Well.
+Dosadi’s economy is hierarchical and closed.  
+Every industry revolves around one element: **water**, the universal medium of power.  
+Labor, loyalty, and maintenance all orbit this scarcity.
 
 ---
 
 ## Economic Principles
-- **Water as Currency:** all value is expressed through moisture equivalents.  
-- **Energy Rationing:** power generation and heat exchange are tightly regulated.  
-- **Maintenance as Capital:** functional equipment and skilled repairers are the true stores of wealth.  
-- **Surveillance as Infrastructure:** every transaction doubles as a data point for control.  
+- **Water as Currency:** every act converts to moisture debt or credit.  
+- **Energy Rationing:** heat and power are controlled by quota.  
+- **Maintenance as Wealth:** tools and skills endure longer than tokens.  
+- **Surveillance as Market:** all exchanges generate data for superiors.  
 
 ---
 
 ## Industrial Sectors
 | Sector | Function | Control |
 |---------|-----------|---------|
-| **Extraction** | Reclamation from waste, respiration, and corpse recovery. | Ward Counts / Technicians |
-| **Processing** | Filtration, condensation, and purity monitoring. | Bureaucratic Guilds |
-| **Manufacturing** | Suit components, filters, and circuit boards. | Industrial Barons |
-| **Food Production** | Synth-meat, fungal mass, and nutrient slurry. | Biochemical Wards |
-| **Maintenance / Repair** | Vital for system continuity; semi-legal economy. | Guilds & Black Markets |
-| **Security** | Armament, surveillance, and enforcement. | Dukes & Military Branches |
-| **Trade and Black Market** | Circulates forbidden modifications, contraband, and unregistered moisture. | Unaligned Operatives |
+| **Extraction** | Reclaim moisture from waste and respiration. | Technician Guilds |
+| **Processing** | Filtration and purity enforcement. | Bureaucratic Wards |
+| **Manufacturing** | Suits, filters, armatures. | Industrial Barons |
+| **Food Production** | Synth-meat, fungi, nutrient gel. | Biochemical Wards |
+| **Maintenance / Repair** | Sustains infrastructure; semi-legal underclass. | Guilds & Black Markets |
+| **Security** | Enforcement and surveillance. | Dukes & Military |
+| **Trade / Smuggling** | Moves unregistered goods and data. | Black-market networks |
 
 ---
 
 ## The Black Market
-The black market forms a **shadow economy** of efficiency and defiance:
-- Trades in illegal condensation units and unregistered repairs.  
-- Employs scavengers, rogue technicians, and smugglers.  
-- Operates under tacit approval — its collapse would cripple the official economy.  
+- Functions as a **shadow regulator** — too vital to destroy.  
+- Trades in banned moisture units, data leaks, and unlicensed repairs.  
+- Operates in tolerated illegality: officials profit indirectly.
 
 ---
 
 ## Economic Simulation Hooks
-- **Supply Chains:** simulate inter-ward dependencies (e.g., moisture → filtration → distribution).  
-- **Corruption Flow:** efficiency trades off with loyalty; bribery as systemic equilibrium.  
-- **Scarcity Pressure:** dynamic scarcity influences social tension and agent risk-taking.  
-- **Repair Ecosystem:** degradation events drive resource flow and faction interaction.  
+- **Supply Chains:** model inter-ward dependencies and bottlenecks.  
+- **Corruption:** flourishes wherever authority lacks the teeth to enforce compliance.  
+- **Scarcity Pressure:** shifting scarcity provokes social volatility.  
+- **Repair Ecosystem:** degradation events generate demand, alliances, and betrayal.
 
 ---
 
 ## Future Expansion
-Later phases may introduce:
 - Trade networks across wards.  
-- Faction-based markets and monopolies.  
-- Hidden economies (information, favor, and trust as commodities).  
+- Faction monopolies and collapses.  
+- Hidden economies (information, trust, addiction).
