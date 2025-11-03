@@ -1,0 +1,1 @@
+Dosadi v2 establishes a top-down omniscient systems model; all prior character-level experiments deprecated.
