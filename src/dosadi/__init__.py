@@ -26,8 +26,4 @@ __all__ = [
     "minute_tick",
     "run_day0_playbook",
 ]
-=======
-    "WorldState",
-    "default_registry",
-]
 
