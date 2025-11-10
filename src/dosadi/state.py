@@ -11,7 +11,9 @@ resource aggregation needed for the conservation law described in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +305,36 @@ class CaseState:
 
 
 @dataclass(slots=True)
+
+class RouteState:
+    """Minimal directed route representation used by logistics systems."""
+
+    id: str
+    origin: str
+    destination: str
+    distance_km: float
+    risk: float
+    surcharge: float
+    escort_jobs: List[str] = field(default_factory=list)
+    incidents: List[Dict[str, object]] = field(default_factory=list)
+    delivered_volume_liters: float = 0.0
+
+    def record_incident(self, *, kind: str, severity: str, tick: int, notes: str) -> None:
+        self.incidents.append(
+            {
+                "kind": kind,
+                "severity": severity,
+                "tick": tick,
+                "notes": notes,
+            }
+        )
+
+    def apply_delivery(self, volume_liters: float) -> None:
+        self.delivered_volume_liters += volume_liters
+
+
+@dataclass(slots=True)
+
 class WardState:
     id: str
     name: str
@@ -313,6 +345,8 @@ class WardState:
     stocks: StockState = field(default_factory=StockState)
     governor_faction: Optional[str] = None
     newsfeed: List[str] = field(default_factory=list)
+    legitimacy: float = 0.55
+    facilities: MutableMapping[str, int] = field(default_factory=dict)
 
     def apply_environment(self) -> None:
         self.environment.stress = self.environment.compute_stress()
@@ -326,6 +360,12 @@ class WardState:
 @dataclass(slots=True)
 class WorldConfig:
     tick_seconds: float = 0.6
+    ticks_per_minute: int = 100
+    minutes_per_day: int = 1440
+
+    @property
+    def ticks_per_day(self) -> int:
+        return self.ticks_per_minute * self.minutes_per_day
 
 
 @dataclass
@@ -333,6 +373,8 @@ class WorldState:
     tick: int = 0
     minute: int = 0
     day: int = 0
+    seed: int = 0
+    time_min: int = 0
     config: WorldConfig = field(default_factory=WorldConfig)
     wards: MutableMapping[str, WardState] = field(default_factory=dict)
     factions: MutableMapping[str, FactionState] = field(default_factory=dict)
@@ -341,6 +383,16 @@ class WorldState:
     cases: MutableMapping[str, CaseState] = field(default_factory=dict)
     rumors: MutableMapping[str, RumorState] = field(default_factory=dict)
     events_outbox: List[str] = field(default_factory=list)
+    routes: MutableMapping[str, RouteState] = field(default_factory=dict)
+    policy: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
+    market_quotes: List[Dict[str, object]] = field(default_factory=list)
+    trades: List[Dict[str, object]] = field(default_factory=list)
+    labor_postings: List[Dict[str, object]] = field(default_factory=list)
+    labor_assignments: List[Dict[str, object]] = field(default_factory=list)
+    maintenance_tasks: List[Dict[str, object]] = field(default_factory=list)
+    clinic_records: List[Dict[str, object]] = field(default_factory=list)
+    law_cases: List[Dict[str, object]] = field(default_factory=list)
+    security_reports: List[Dict[str, object]] = field(default_factory=list)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
@@ -350,6 +402,9 @@ class WorldState:
 
     def register_agent(self, agent: AgentState) -> None:
         self.agents[agent.id] = agent
+
+    def register_route(self, route: RouteState) -> None:
+        self.routes[route.id] = route
 
     def resource_snapshot(self) -> Dict[str, float]:
         """Return approximate conserved quantities used by audits."""
@@ -370,10 +425,37 @@ class WorldState:
 
     def advance_tick(self) -> None:
         self.tick += 1
-        if self.tick % 100 == 0:
+        ticks_per_minute = max(1, int(self.config.ticks_per_minute))
+        minutes_per_day = max(1, int(self.config.minutes_per_day))
+
+        if self.tick % ticks_per_minute == 0:
             self.minute += 1
-        if self.tick % 144_000 == 0:
-            self.day += 1
+            self.time_min = self.minute
+            if self.minute > 0 and self.minute % minutes_per_day == 0:
+                self.day += 1
+
+    def advance_ticks(self, count: int) -> None:
+        if count <= 0:
+            return
+        for _ in range(count):
+            self.advance_tick()
+
+    def advance_minutes(self, minutes: int) -> None:
+        if minutes <= 0:
+            return
+        self.advance_ticks(minutes * max(1, int(self.config.ticks_per_minute)))
+
+
+def minute_tick(state: WorldState) -> None:
+    """Advance the state by one simulation minute."""
+
+    state.advance_minutes(1)
+
+
+def day_tick(state: WorldState) -> None:
+    """Advance the state by one simulation day."""
+
+    state.advance_minutes(max(1, int(state.config.minutes_per_day)))
 
 
 def _clamp(lo: float, hi: float, value: float) -> float:
@@ -394,11 +476,14 @@ __all__ = [
     "FactionMetrics",
     "InfrastructureState",
     "MemoryState",
+    "RouteState",
     "RumorState",
     "StockState",
     "SuitState",
     "WardState",
     "WorldConfig",
     "WorldState",
+    "day_tick",
+    "minute_tick",
 ]
 
