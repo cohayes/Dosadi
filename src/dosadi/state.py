@@ -11,7 +11,9 @@ resource aggregation needed for the conservation law described in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +305,7 @@ class CaseState:
 
 
 @dataclass(slots=True)
+
 class RouteState:
     """Minimal directed route representation used by logistics systems."""
 
@@ -331,6 +334,7 @@ class RouteState:
 
 
 @dataclass(slots=True)
+
 class WardState:
     id: str
     name: str
