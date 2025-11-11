@@ -1,14 +1,10 @@
 ---
-title: Dosadi_Simulation_Runtime
-doc_id: D-RUNTIME-0001
-version: 1.0.0
-status: stable
+title: Simulation_Runtime
+doc_id: D-RUNTIME-0002
+version: 0.9.0
+status: draft
 owners: [cohayes]
-depends_on: 
-includes:
-  - D-RUNTIME-0002  # Runtime_Event_And_Message_Taxonomy
-  - D-RUNTIME-0003  # Shared_Variable_Registry
-  - D-RUNTIME-0004  # Global_Schemas
+depends_on: [D-RUNTIME-0001]
 last_updated: 2025-11-11
 ---
 # **Tick Loop & Scheduling v1**
