@@ -1,6 +1,6 @@
 ---
 title: Hydraulic_Interfaces
-doc_id: D-INT-0003
+doc_id: D-INT-0001
 version: 1.2.0
 status: draft
 owners: [cohayes]
@@ -9,7 +9,7 @@ depends_on:
   - D-RUNTIME-0001   # scheduler/timebase
   - D-ECON-0001      # economy (royalties, pricing, penalties)
   - D-WORLD-0001     # environment dynamics (loss, leakage)
-includes:
+previous:
   - D-INT-0001       # Compact API Checklist (rolled in here)
 ---
 
