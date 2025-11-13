@@ -8,8 +8,8 @@ small API while preserving deterministic decay behaviour.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, MutableMapping
+from dataclasses import dataclass
+from typing import Dict, Iterable, Iterator
 
 
 @dataclass(slots=True)

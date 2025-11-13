@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from statistics import mean
+
+from collections import defaultdict
 
 from collections import defaultdict
 
@@ -82,6 +85,12 @@ class EconomySystem(SimulationSystem):
                     )
                 )
                 faction.metrics.econ.reliability = max(0.0, faction.metrics.econ.reliability - 0.01)
+
+        if self.registry is not None and self.world.factions:
+            avg_reliability = mean(
+                faction.metrics.econ.reliability for faction in self.world.factions.values()
+            )
+            self.registry.set("econ.R", avg_reliability)
 
 
 __all__ = ["EconomySystem"]

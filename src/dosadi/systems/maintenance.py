@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from statistics import mean
 
 from .base import SimulationSystem
 from ..event import Event, EventPriority
@@ -60,6 +61,11 @@ class MaintenanceSystem(SimulationSystem):
             summary = ledger.summary()
             self.registry.set("infra.service.parts", summary["parts_cost"])
             self.registry.set("infra.service.deferred", summary["deferred"])
+            if self.world.wards:
+                avg_maintenance = mean(
+                    ward.infrastructure.maintenance_index for ward in self.world.wards.values()
+                )
+                self.registry.set("infra.M", avg_maintenance)
 
 
 __all__ = ["MaintenanceSystem"]

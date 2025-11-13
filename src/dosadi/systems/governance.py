@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from statistics import mean
 from typing import Dict
 
 from .base import SimulationSystem
@@ -47,6 +48,12 @@ class GovernanceSystem(SimulationSystem):
                 )
             if self.rng.random() < 0.01:
                 self._spawn_incident(clock, ward.id, faction.id)
+
+        if self.registry is not None and self.world.factions:
+            legitimacy = mean(f.metrics.gov.legitimacy for f in self.world.factions.values())
+            corruption = mean(f.metrics.gov.corruption for f in self.world.factions.values())
+            self.registry.set("gov.L", legitimacy)
+            self.registry.set("gov.C", corruption)
 
     def _spawn_incident(self, clock: SimulationClock, ward_id: str, faction_id: str) -> None:
         incident_id = f"infosec:{ward_id}:{clock.current_tick}"
