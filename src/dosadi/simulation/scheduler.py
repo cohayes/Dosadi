@@ -21,6 +21,9 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 import heapq
 from typing import Callable, DefaultDict, Iterable, List, MutableMapping, Tuple
+from time import perf_counter
+
+from ..event import Event, EventBus, EventPriority
 
 TickHandler = Callable[["SimulationClock"], None]
 DelayedHandler = Callable[["SimulationClock"], None]
@@ -35,6 +38,7 @@ class Phase(Enum):
     AGENT_ACTIVITY = auto()
     ENVIRONMENTAL_UPDATE = auto()
     RUMOR_AND_INFORMATION = auto()
+    SOCIAL_AUDIT = auto()
     REFLECTION = auto()
 
     @classmethod
@@ -48,6 +52,7 @@ class Phase(Enum):
             cls.AGENT_ACTIVITY,
             cls.ENVIRONMENTAL_UPDATE,
             cls.RUMOR_AND_INFORMATION,
+            cls.SOCIAL_AUDIT,
             cls.REFLECTION,
         )
 
@@ -121,6 +126,13 @@ class SimulationScheduler:
     time_dilation: MutableMapping[str, float] = field(default_factory=dict)
     _delayed_events: List[Tuple[int, int, DelayedHandler]] = field(default_factory=list)
     _delayed_counter: int = 0
+    bus: EventBus | None = None
+    registry: "SharedVariableRegistry" | None = None
+    _phase_metrics: DefaultDict[Phase, List[float]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    _cadence_coefficient: float = 1.0
+    _last_adjust_tick: int = 0
 
     def register_handler(self, phase: Phase, handler: TickHandler) -> None:
         """Attach ``handler`` to a phase.
@@ -168,6 +180,12 @@ class SimulationScheduler:
 
         return self.time_dilation.get(scope, 1.0)
 
+    def attach_bus(self, bus: EventBus) -> None:
+        self.bus = bus
+
+    def attach_registry(self, registry: "SharedVariableRegistry") -> None:
+        self.registry = registry
+
     def run_tick(self) -> None:
         """Advance the clock by one tick and execute the cascade."""
 
@@ -177,9 +195,16 @@ class SimulationScheduler:
 
         self._run_due_events(snapshot)
 
+        backlog = len(self._delayed_events)
+
         for phase in Phase.ordered():
             for handler in self.phase_handlers.get(phase, ()):  # type: ignore[arg-type]
+                start = perf_counter()
                 handler(snapshot)
+                duration = perf_counter() - start
+                self._record_phase_metric(phase, duration)
+
+        self._maybe_adjust_cadence(snapshot, backlog)
 
     def run(self, ticks: int) -> None:
         """Execute ``ticks`` ticks."""
@@ -195,6 +220,57 @@ class SimulationScheduler:
         while self._delayed_events and self._delayed_events[0][0] <= snapshot.current_tick:
             _, _, _, handler = heapq.heappop(self._delayed_events)
             handler(snapshot)
+
+    def _record_phase_metric(self, phase: Phase, duration: float) -> None:
+        metrics = self._phase_metrics[phase]
+        metrics.append(duration)
+        if len(metrics) > 50:
+            del metrics[0]
+
+    def _maybe_adjust_cadence(self, snapshot: SimulationClock, backlog: int) -> None:
+        if snapshot.current_tick <= self._last_adjust_tick:
+            return
+        window = [
+            sum(values) / len(values)
+            for values in self._phase_metrics.values()
+            if values
+        ]
+        if not window:
+            return
+        avg_duration = sum(window) / len(window)
+
+        target = self._cadence_coefficient
+        if backlog > 25 or avg_duration > 0.02:
+            target = min(2.0, self._cadence_coefficient + 0.1)
+        elif backlog == 0 and avg_duration < 0.005:
+            target = max(0.5, self._cadence_coefficient - 0.1)
+
+        if abs(target - self._cadence_coefficient) < 1e-6:
+            return
+
+        self._cadence_coefficient = target
+        self._last_adjust_tick = snapshot.current_tick + 25
+        self.time_dilation["__scheduler__"] = target
+        if self.registry is not None:
+            self.registry.set("scheduler.cadence", target)
+        if self.bus is not None:
+            event = Event(
+                id=f"cadence:{snapshot.current_tick}",
+                type="CadenceAdjust",
+                tick=snapshot.current_tick,
+                ttl=240,
+                payload={
+                    "coefficient": target,
+                    "avg_duration": avg_duration,
+                    "backlog": backlog,
+                },
+                priority=EventPriority.HIGH,
+                emitter="SimulationScheduler",
+            )
+            self.bus.publish(event)
+
+
+from ..registry import SharedVariableRegistry
 
 
 __all__ = [
