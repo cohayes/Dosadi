@@ -18,11 +18,14 @@ analysis notebooks).
 
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import heapq
 import itertools
-from typing import Callable, Dict, Iterable, Iterator, List, MutableSequence, Optional
+from typing import Callable, Dict, Iterable, Iterator, List, MutableMapping, MutableSequence, Optional
+
+TelemetrySubscriber = Callable[["TelemetrySnapshot"], None]
 
 
 class EventPriority(Enum):
@@ -110,6 +113,11 @@ class EventBus:
         self._queue: List[tuple[int, int, Event]] = []
         self._counter = itertools.count()
         self._outbox: List[Event] = []
+        self._queue_depth: MutableMapping[str, int] = defaultdict(int)
+        self._expired_counts: Counter[str] = Counter()
+        self._dropped_counts: Counter[str] = Counter()
+        self._telemetry_subscribers: List[TelemetrySubscriber] = []
+        self._telemetry_log: List[TelemetrySnapshot] = []
 
     # ------------------------------------------------------------------
     # Subscription management
@@ -139,6 +147,7 @@ class EventBus:
             (event.priority.queue_index, next(self._counter), event),
         )
         self._outbox.append(event)
+        self._queue_depth[event.type] += 1
 
     def dispatch(self) -> List[Event]:
         """Drain the queue and notify matching subscribers.
@@ -151,7 +160,9 @@ class EventBus:
         delivered: List[Event] = []
         while self._queue:
             _, _, event = heapq.heappop(self._queue)
+            self._queue_depth[event.type] = max(0, self._queue_depth[event.type] - 1)
             if event.ttl < 0:
+                self._expired_counts[event.type] += 1
                 continue
             delivered.append(event)
             for subscription in self._subscriptions:
@@ -171,6 +182,45 @@ class EventBus:
     def clear_outbox(self) -> None:
         self._outbox.clear()
 
+    # ------------------------------------------------------------------
+    # Telemetry channel
+    # ------------------------------------------------------------------
+    def subscribe_telemetry(self, callback: TelemetrySubscriber) -> None:
+        """Register a telemetry subscriber that receives tick snapshots."""
 
-__all__ = ["Event", "EventBus", "EventPriority"]
+        self._telemetry_subscribers.append(callback)
+
+    def emit_telemetry(self, snapshot: "TelemetrySnapshot") -> "TelemetrySnapshot":
+        """Record and broadcast a telemetry snapshot."""
+
+        snapshot.queue_depths = {
+            event_type: depth for event_type, depth in sorted(self._queue_depth.items())
+        }
+        snapshot.expired_events = dict(self._expired_counts)
+        snapshot.dropped_events = dict(self._dropped_counts)
+        self._telemetry_log.append(snapshot)
+        for subscriber in list(self._telemetry_subscribers):
+            subscriber(snapshot)
+        self._expired_counts.clear()
+        self._dropped_counts.clear()
+        return snapshot
+
+    @property
+    def telemetry_log(self) -> Iterable["TelemetrySnapshot"]:
+        return tuple(self._telemetry_log)
+
+
+@dataclass
+class TelemetrySnapshot:
+    """Structured metrics emitted once per tick."""
+
+    tick: int
+    phase_latency_ms: Dict[str, float] = field(default_factory=dict)
+    handler_latency_ms: Dict[str, float] = field(default_factory=dict)
+    queue_depths: Dict[str, int] = field(default_factory=dict)
+    expired_events: Dict[str, int] = field(default_factory=dict)
+    dropped_events: Dict[str, int] = field(default_factory=dict)
+
+
+__all__ = ["Event", "EventBus", "EventPriority", "TelemetrySnapshot"]
 

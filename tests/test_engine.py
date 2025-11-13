@@ -1,5 +1,7 @@
 from dosadi import SimulationEngine
 from dosadi.actions.base import Action
+from dosadi.interfaces.contracts import validate_event_payload, validate_telemetry_snapshot
+from dosadi.simulation.scheduler import Phase
 from dosadi.worldgen import WorldgenConfig, generate_world
 
 
@@ -10,6 +12,15 @@ def test_engine_runs_and_registry_updates():
     assert world.tick == 10
     assert engine.registry.get("tick") == float(world.tick)
     assert engine.registry.get("t_min") == float(world.minute)
+    metrics = engine.scheduler.last_tick_metrics()
+    assert metrics is not None
+    assert {phase_metrics.phase for phase_metrics in metrics.phases} == set(Phase.ordered())
+    telemetry = list(engine.bus.telemetry_log)
+    assert telemetry
+    for snapshot in telemetry:
+        validate_telemetry_snapshot(snapshot.__dict__)
+    assert engine.last_journal is not None
+    assert engine.last_snapshot is not None
 
 
 def test_consume_ration_action_emits_event():
@@ -29,4 +40,6 @@ def test_consume_ration_action_emits_event():
     engine.run(1)
     events = list(engine.bus.outbox)
     assert any(event.type == "RationConsumed" for event in events)
+    for event in events:
+        validate_event_payload(event.type, event.payload)
 

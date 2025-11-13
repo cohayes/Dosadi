@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
+from .simulation.snapshots import serialize_state
+
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +478,11 @@ class WorldState:
             "Information": float(information),
             "Energy": energy,
         }
+
+    def to_snapshot(self) -> Dict[str, Any]:
+        """Serialise the world into deterministic primitives."""
+
+        return serialize_state(self)
 
     def advance_tick(self) -> None:
         self.tick += 1
