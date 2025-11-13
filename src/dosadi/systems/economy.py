@@ -7,6 +7,8 @@ from statistics import mean
 
 from collections import defaultdict
 
+from collections import defaultdict
+
 from .base import SimulationSystem
 from ..event import Event, EventPriority
 from ..simulation.scheduler import Phase, SimulationClock
