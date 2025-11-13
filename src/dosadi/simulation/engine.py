@@ -17,6 +17,7 @@ from ..systems import (
     LawSystem,
     MaintenanceSystem,
     RumorSystem,
+    StressSystem,
 )
 from .scheduler import Phase, SimulationClock, SimulationScheduler
 
@@ -31,15 +32,18 @@ class SimulationEngine:
     registry: SharedVariableRegistry = field(default_factory=default_registry)
 
     def __post_init__(self) -> None:
+        self.scheduler.attach_bus(self.bus)
+        self.scheduler.attach_registry(self.registry)
         self.action_processor = ActionProcessor(self.world, self.bus)
         register_default_verbs(self.action_processor)
         self.systems = [
-            EnvironmentSystem(self.world, self.bus, rng_seed=1),
-            EconomySystem(self.world, self.bus, rng_seed=2),
-            GovernanceSystem(self.world, self.bus, rng_seed=3),
-            MaintenanceSystem(self.world, self.bus, rng_seed=4),
-            RumorSystem(self.world, self.bus, rng_seed=5),
-            LawSystem(self.world, self.bus, rng_seed=6),
+            EnvironmentSystem(self.world, self.bus, rng_seed=1, registry=self.registry),
+            EconomySystem(self.world, self.bus, rng_seed=2, registry=self.registry),
+            GovernanceSystem(self.world, self.bus, rng_seed=3, registry=self.registry),
+            MaintenanceSystem(self.world, self.bus, rng_seed=4, registry=self.registry),
+            RumorSystem(self.world, self.bus, rng_seed=5, registry=self.registry),
+            StressSystem(self.world, self.bus, rng_seed=7, registry=self.registry),
+            LawSystem(self.world, self.bus, rng_seed=6, registry=self.registry),
         ]
         for system in self.systems:
             for phase, handler in system.phase_handlers().items():

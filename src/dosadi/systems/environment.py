@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from statistics import mean
 
 from .base import SimulationSystem
 from ..event import Event, EventPriority
@@ -45,6 +46,10 @@ class EnvironmentSystem(SimulationSystem):
                         emitter="EnvironmentSystem",
                     )
                 )
+
+        if self.registry is not None and self.world.wards:
+            avg_stress = mean(ward.environment.stress for ward in self.world.wards.values())
+            self.registry.set("env.S", avg_stress)
 
 
 __all__ = ["EnvironmentSystem"]

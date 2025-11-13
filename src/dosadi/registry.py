@@ -8,8 +8,8 @@ small API while preserving deterministic decay behaviour.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, MutableMapping
+from dataclasses import dataclass
+from typing import Dict, Iterable, Iterator
 
 
 @dataclass(slots=True)
@@ -168,6 +168,46 @@ def default_registry() -> SharedVariableRegistry:
             default=0.2,
             decay=0.99,
             notes="Event salience",
+        ),
+        VariableDefinition(
+            name="Stress Reactance",
+            key="agent.stress_react",
+            units="idx",
+            lower=0.0,
+            upper=100.0,
+            default=5.0,
+            decay=0.995,
+            notes="Blended stress across agents",
+        ),
+        VariableDefinition(
+            name="Suit Parts Load",
+            key="infra.service.parts",
+            units="credits",
+            lower=0.0,
+            upper=1e6,
+            default=0.0,
+            decay=0.995,
+            notes="Trailing suit maintenance parts expenditure",
+        ),
+        VariableDefinition(
+            name="Deferred Maintenance Risk",
+            key="infra.service.deferred",
+            units="idx",
+            lower=0.0,
+            upper=1e3,
+            default=0.0,
+            decay=0.999,
+            notes="Count of outstanding deferred suit repairs",
+        ),
+        VariableDefinition(
+            name="Scheduler Cadence",
+            key="scheduler.cadence",
+            units="coef",
+            lower=0.5,
+            upper=2.0,
+            default=1.0,
+            decay=1.0,
+            notes="Adaptive cadence coefficient",
         ),
     ]
     return SharedVariableRegistry(definitions)
