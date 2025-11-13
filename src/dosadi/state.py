@@ -86,6 +86,59 @@ class StockState:
         self.credits[currency] = max(0.0, self.credits.get(currency, 0.0) + delta)
 
 
+@dataclass(slots=True)
+class SuitServiceLedgerEntry:
+    tick: int
+    agent_id: str
+    faction_id: str
+    ward_id: str
+    telemetry: Mapping[str, float]
+    parts_cost: float
+    deferred: bool
+
+
+@dataclass
+class SuitServiceLedger:
+    entries: List[SuitServiceLedgerEntry] = field(default_factory=list)
+    pending: List[SuitServiceLedgerEntry] = field(default_factory=list)
+
+    def record(
+        self,
+        *,
+        tick: int,
+        agent_id: str,
+        faction_id: str,
+        ward_id: str,
+        telemetry: Mapping[str, float],
+        parts_cost: float,
+        deferred: bool,
+    ) -> None:
+        entry = SuitServiceLedgerEntry(
+            tick=tick,
+            agent_id=agent_id,
+            faction_id=faction_id,
+            ward_id=ward_id,
+            telemetry=dict(telemetry),
+            parts_cost=max(0.0, parts_cost),
+            deferred=deferred,
+        )
+        self.entries.append(entry)
+        self.pending.append(entry)
+        if len(self.entries) > 500:
+            self.entries = self.entries[-500:]
+
+    def drain_pending(self) -> List[SuitServiceLedgerEntry]:
+        drained = list(self.pending)
+        self.pending.clear()
+        return drained
+
+    def summary(self) -> Dict[str, float]:
+        window = self.entries[-100:] if self.entries else []
+        parts = sum(entry.parts_cost for entry in window)
+        deferred = sum(1.0 for entry in window if entry.deferred)
+        return {"parts_cost": parts, "deferred": deferred}
+
+
 # ---------------------------------------------------------------------------
 # Social and governance layers
 # ---------------------------------------------------------------------------
@@ -393,6 +446,7 @@ class WorldState:
     clinic_records: List[Dict[str, object]] = field(default_factory=list)
     law_cases: List[Dict[str, object]] = field(default_factory=list)
     security_reports: List[Dict[str, object]] = field(default_factory=list)
+    suit_service_ledger: SuitServiceLedger = field(default_factory=SuitServiceLedger)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
@@ -478,6 +532,8 @@ __all__ = [
     "MemoryState",
     "RouteState",
     "RumorState",
+    "SuitServiceLedger",
+    "SuitServiceLedgerEntry",
     "StockState",
     "SuitState",
     "WardState",
