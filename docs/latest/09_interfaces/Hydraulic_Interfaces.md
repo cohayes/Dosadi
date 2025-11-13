@@ -1,6 +1,6 @@
 ---
 title: Hydraulic_Interfaces
-doc_id: D-INT-0001
+doc_id: D-INTERFACE-0001
 version: 1.2.0
 status: draft
 owners: [cohayes]
@@ -10,7 +10,7 @@ depends_on:
   - D-ECON-0001      # economy (royalties, pricing, penalties)
   - D-WORLD-0001     # environment dynamics (loss, leakage)
 previous:
-  - D-INT-0001       # Compact API Checklist (rolled in here)
+  - D-INTERFACE-0001       # Compact API Checklist (rolled in here)
 ---
 
 # Overview

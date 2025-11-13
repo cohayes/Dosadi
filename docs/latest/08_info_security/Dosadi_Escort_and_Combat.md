@@ -1,11 +1,11 @@
 ---
 title: Dosadi_Escort_and_Combat
-doc_id: D-INFO-0006
+doc_id: D-INFOSEC-0006
 version: 1.0.0
 status: stable
 owners: [cohayes]
 last_updated: 2025-11-11
-parent: D-INFO-0001
+parent: D-INFOSEC-0001
 ---
 # **Escort & Combat v1 (Convoys, Ambushes, Damage, and Aftermath)**
 

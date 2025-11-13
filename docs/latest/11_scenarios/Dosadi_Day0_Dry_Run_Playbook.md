@@ -1,8 +1,8 @@
 ---
 title: Dosadi_Day0_Dry_Run_Playbook
-doc_id: D-HEALTH-0002
+doc_id: D-SCEN-0001
 version: 1.0.0
-status: stable
+status: draft
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-HEALTH-0001

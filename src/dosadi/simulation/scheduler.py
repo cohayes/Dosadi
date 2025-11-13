@@ -90,6 +90,7 @@ class Phase(Enum):
     AGENT_ACTIVITY = auto()
     ENVIRONMENTAL_UPDATE = auto()
     RUMOR_AND_INFORMATION = auto()
+    SOCIAL_AUDIT = auto()
     REFLECTION = auto()
 
     @classmethod
@@ -103,6 +104,7 @@ class Phase(Enum):
             cls.AGENT_ACTIVITY,
             cls.ENVIRONMENTAL_UPDATE,
             cls.RUMOR_AND_INFORMATION,
+            cls.SOCIAL_AUDIT,
             cls.REFLECTION,
         )
 
@@ -246,6 +248,12 @@ class SimulationScheduler:
         """Return the dilation coefficient for ``scope`` or 1.0 if unset."""
 
         return self.time_dilation.get(scope, 1.0)
+
+    def attach_bus(self, bus: EventBus) -> None:
+        self.bus = bus
+
+    def attach_registry(self, registry: "SharedVariableRegistry") -> None:
+        self.registry = registry
 
     def run_tick(self) -> None:
         """Advance the clock by one tick and execute the cascade."""

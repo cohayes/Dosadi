@@ -9,6 +9,7 @@ from typing import Callable, Dict, Iterable, Mapping, MutableMapping, Optional
 from ..event import EventBus
 from ..simulation.scheduler import Phase, SimulationClock
 from ..state import WorldState
+from ..registry import SharedVariableRegistry
 
 
 PhaseHandler = Callable[[SimulationClock], None]
@@ -19,6 +20,7 @@ class SimulationSystem:
     world: WorldState
     bus: EventBus
     rng_seed: int
+    registry: Optional[SharedVariableRegistry] = None
 
     def __post_init__(self) -> None:
         self.rng = Random(self.rng_seed)
