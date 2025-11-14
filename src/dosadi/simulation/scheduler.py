@@ -149,10 +149,24 @@ class SimulationClock:
         return self.current_epoch // self.epochs_per_era
 
     def ticks_until_turn_boundary(self) -> int:
-        return self.ticks_per_turn - (self.current_tick % self.ticks_per_turn)
+        """Return ticks remaining until the current turn completes.
+
+        When already positioned exactly on a turn boundary the expectation is
+        that zero ticks remain rather than the full cadence.  Using modular
+        arithmetic keeps the behaviour consistent for the ``current_tick == 0``
+        case and avoids negative numbers when the clock advances.
+        """
+
+        return (-self.current_tick) % self.ticks_per_turn
 
     def ticks_until_cycle_boundary(self) -> int:
-        return self.ticks_per_cycle - (self.current_tick % self.ticks_per_cycle)
+        """Return ticks remaining until the current cycle completes.
+
+        Mirrors :meth:`ticks_until_turn_boundary` by treating exact boundaries
+        as having zero remaining ticks.
+        """
+
+        return (-self.current_tick) % self.ticks_per_cycle
 
     def copy(self) -> "SimulationClock":
         """Return a snapshot of the current clock state."""
