@@ -11,19 +11,23 @@ from collections import defaultdict
 
 from .base import SimulationSystem
 from ..event import Event, EventPriority
-from ..simulation.scheduler import Phase, SimulationClock
+from ..runtime.timebase import DAILY, Phase
+from ..simulation.scheduler import SimulationClock
 
 
 @dataclass
 class EconomySystem(SimulationSystem):
     def __post_init__(self) -> None:  # type: ignore[override]
         super().__post_init__()
-        self.register(Phase.WELL_AND_KING, self.on_well)
-        self.register(Phase.FACTION_OPERATIONS, self.on_factions)
+        self.register(Phase.ACCOUNTING, self.on_accounting)
 
-    def on_well(self, clock: SimulationClock) -> None:
+    def on_accounting(self, clock: SimulationClock) -> None:
         self.reseed(clock.current_tick)
-        if clock.current_tick % 144_000 != 0:
+        self._run_well(clock)
+        self._run_factions(clock)
+
+    def _run_well(self, clock: SimulationClock) -> None:
+        if clock.current_tick % DAILY != 0:
             return
         wards = list(self.world.wards.values())
         if not wards:
@@ -45,8 +49,7 @@ class EconomySystem(SimulationSystem):
                 )
             )
 
-    def on_factions(self, clock: SimulationClock) -> None:
-        self.reseed(clock.current_tick)
+    def _run_factions(self, clock: SimulationClock) -> None:
         pending = self.world.suit_service_ledger.drain_pending()
         costs: defaultdict[str, float] = defaultdict(float)
         deferred: defaultdict[str, int] = defaultdict(int)

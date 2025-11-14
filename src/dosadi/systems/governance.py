@@ -8,7 +8,8 @@ from typing import Dict
 
 from .base import SimulationSystem
 from ..event import Event, EventPriority
-from ..simulation.scheduler import Phase, SimulationClock
+from ..runtime.timebase import Phase
+from ..simulation.scheduler import SimulationClock
 
 
 @dataclass
@@ -17,7 +18,7 @@ class GovernanceSystem(SimulationSystem):
 
     def __post_init__(self) -> None:  # type: ignore[override]
         super().__post_init__()
-        self.register(Phase.WARD_GOVERNANCE, self.on_governance)
+        self.register(Phase.DECISION, self.on_governance)
 
     def on_governance(self, clock: SimulationClock) -> None:
         self.reseed(clock.current_tick)

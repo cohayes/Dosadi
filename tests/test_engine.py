@@ -6,7 +6,10 @@ from dosadi.worldgen import WorldgenConfig, generate_world
 
 
 def test_engine_runs_and_registry_updates():
-    world = generate_world(WorldgenConfig(seed=42, ward_count=3, faction_count=2, agents_per_faction=1))
+    config = WorldgenConfig.minimal(seed=42, wards=5)
+    config.enable_agents = True
+    config.agent_roll = type(config.agent_roll)(2, 4)
+    world = generate_world(config)
     engine = SimulationEngine(world)
     engine.run(10)
     assert world.tick == 10
@@ -24,7 +27,10 @@ def test_engine_runs_and_registry_updates():
 
 
 def test_consume_ration_action_emits_event():
-    world = generate_world(WorldgenConfig(seed=7, ward_count=2, faction_count=1, agents_per_faction=1))
+    config = WorldgenConfig.minimal(seed=7, wards=3)
+    config.enable_agents = True
+    config.agent_roll = type(config.agent_roll)(1, 2)
+    world = generate_world(config)
     engine = SimulationEngine(world)
     agent_id = next(iter(world.agents))
     action = Action(

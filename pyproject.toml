@@ -8,3 +8,6 @@ requires-python = ">=3.11"
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+markers = [
+    "doc(id): mark tying a test to a documentation source of truth",
+]

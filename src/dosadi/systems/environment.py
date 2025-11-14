@@ -7,14 +7,15 @@ from statistics import mean
 
 from .base import SimulationSystem
 from ..event import Event, EventPriority
-from ..simulation.scheduler import Phase, SimulationClock
+from ..runtime.timebase import Phase
+from ..simulation.scheduler import SimulationClock
 
 
 @dataclass
 class EnvironmentSystem(SimulationSystem):
     def __post_init__(self) -> None:  # type: ignore[override]
         super().__post_init__()
-        self.register(Phase.ENVIRONMENTAL_UPDATE, self.on_environment)
+        self.register(Phase.TRANSIT, self.on_environment)
 
     def on_environment(self, clock: SimulationClock) -> None:
         self.reseed(clock.current_tick)

@@ -31,12 +31,9 @@ class ScenarioFuzzHarness:
 
     def run(self) -> FuzzResult:
         rng = Random(self.seed)
-        config = WorldgenConfig(
-            seed=rng.randint(1, 1_000_000),
-            ward_count=3,
-            faction_count=2,
-            agents_per_faction=2,
-        )
+        config = WorldgenConfig.minimal(seed=rng.randint(1, 1_000_000), wards=4)
+        config.enable_agents = True
+        config.agent_roll = type(config.agent_roll)(3, 6)
         world = generate_world(config)
         engine = SimulationEngine(world)
         total_events = 0

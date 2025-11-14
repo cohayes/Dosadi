@@ -1,7 +1,7 @@
 """Core scheduling primitives for the Dosadi simulation.
 
 This module implements the tick/turn/cycle/epoch/era cascade described in
-``docs/Dosadi_Temporal_Simulation_v1.md``.  The scheduler is intentionally
+``docs/latest/02_runtime/Simulation_Runtime.md``.  The scheduler is intentionally
 minimal but provides the following pieces of infrastructure:
 
 * A ``SimulationClock`` that converts between raw ticks and higher-order units.
@@ -19,10 +19,11 @@ from __future__ import annotations
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from enum import Enum, auto
 import heapq
 from time import perf_counter
 from typing import Callable, DefaultDict, Iterable, List, MutableMapping, Optional, Tuple
+
+from ..runtime.timebase import Phase
 
 TickHandler = Callable[["SimulationClock"], None]
 DelayedHandler = Callable[["SimulationClock"], None]
@@ -81,34 +82,6 @@ class _Bucket:
     allows_parallel: bool
 
 
-class Phase(Enum):
-    """Simulation phases executed in fixed order every tick."""
-
-    WELL_AND_KING = auto()
-    WARD_GOVERNANCE = auto()
-    FACTION_OPERATIONS = auto()
-    AGENT_ACTIVITY = auto()
-    ENVIRONMENTAL_UPDATE = auto()
-    RUMOR_AND_INFORMATION = auto()
-    SOCIAL_AUDIT = auto()
-    REFLECTION = auto()
-
-    @classmethod
-    def ordered(cls) -> Iterable["Phase"]:
-        """Return phases in canonical execution order."""
-
-        return (
-            cls.WELL_AND_KING,
-            cls.WARD_GOVERNANCE,
-            cls.FACTION_OPERATIONS,
-            cls.AGENT_ACTIVITY,
-            cls.ENVIRONMENTAL_UPDATE,
-            cls.RUMOR_AND_INFORMATION,
-            cls.SOCIAL_AUDIT,
-            cls.REFLECTION,
-        )
-
-
 @dataclass(slots=True)
 class SimulationClock:
     """Track the simulation timeline and expose conversion helpers.
@@ -148,11 +121,32 @@ class SimulationClock:
     def current_era(self) -> int:
         return self.current_epoch // self.epochs_per_era
 
+    def _ticks_until_boundary(self, cadence: int) -> int:
+        """Return ticks remaining until the next boundary for ``cadence``.
+
+        ``cadence`` represents the number of ticks that make up the unit under
+        consideration (e.g. ``ticks_per_turn``).  The helper mirrors the
+        behaviour of ``divmod``: when ``current_tick`` is already on a boundary
+        the next boundary is ``cadence`` ticks away rather than zero, ensuring
+        callers always receive a strictly positive count.
+        """
+
+        remainder = self.current_tick % cadence
+        return cadence if remainder == 0 else cadence - remainder
+
     def ticks_until_turn_boundary(self) -> int:
-        return self.ticks_per_turn - (self.current_tick % self.ticks_per_turn)
+        """Return ticks remaining until the current turn completes.
+
+        At the moment a turn boundary is reached a new turn begins, leaving a
+        full ``ticks_per_turn`` ticks before the boundary is encountered again.
+        """
+
+        return self._ticks_until_boundary(self.ticks_per_turn)
 
     def ticks_until_cycle_boundary(self) -> int:
-        return self.ticks_per_cycle - (self.current_tick % self.ticks_per_cycle)
+        """Return ticks remaining until the current cycle completes."""
+
+        return self._ticks_until_boundary(self.ticks_per_cycle)
 
     def copy(self) -> "SimulationClock":
         """Return a snapshot of the current clock state."""

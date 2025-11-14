@@ -7,7 +7,8 @@ from typing import Dict
 
 from .base import SimulationSystem
 from ..event import Event, EventPriority
-from ..simulation.scheduler import Phase, SimulationClock
+from ..runtime.timebase import Phase
+from ..simulation.scheduler import SimulationClock
 
 
 @dataclass
@@ -16,7 +17,7 @@ class RumorSystem(SimulationSystem):
 
     def __post_init__(self) -> None:  # type: ignore[override]
         super().__post_init__()
-        self.register(Phase.RUMOR_AND_INFORMATION, self.on_rumor)
+        self.register(Phase.SOCIAL, self.on_rumor)
         self.bus.subscribe(self._on_infosec_event, predicate=self._is_infosec_event)
 
     def on_rumor(self, clock: SimulationClock) -> None:

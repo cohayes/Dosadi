@@ -64,6 +64,10 @@ class InfrastructureState:
             "reclaimers": "OK",
         }
     )
+    reservoir_retention: float = 0.99
+    facility_leak_rate: float = 0.01
+    checkpoint_severity: float = 0.5
+    royal_audit_intensity: float = 0.5
 
     def degrade(self, delta: float) -> None:
         self.maintenance_index = max(0.0, self.maintenance_index - delta)
@@ -198,6 +202,9 @@ class FactionState:
     members: List[str] = field(default_factory=list)
     assets: StockState = field(default_factory=StockState)
     metrics: FactionMetrics = field(default_factory=FactionMetrics)
+    loyalty_to_king: float = 0.5
+    smuggling_profile: MutableMapping[str, float] = field(default_factory=dict)
+    specialization: Optional[str] = None
     reputation: ReputationState = field(default_factory=ReputationState)
     contracts_active: List[str] = field(default_factory=list)
     rumor_bank: MutableMapping[str, List[str]] = field(
@@ -362,16 +369,22 @@ class CaseState:
 @dataclass(slots=True)
 
 class RouteState:
-    """Minimal directed route representation used by logistics systems."""
+    """Directed route representation used by logistics and security systems."""
 
     id: str
     origin: str
     destination: str
-    distance_km: float
-    risk: float
-    surcharge: float
-    escort_jobs: List[str] = field(default_factory=list)
+    distance_minutes: float
+    checkpoint_level: float
+    escort_risk: float
+    capacity_liters: float
+    hidden: bool = False
+    route_type: str = "OFFICIAL"
+    distance_km: float = 0.0
+    risk: float = 0.0
+    surcharge: float = 0.0
     incidents: List[Dict[str, object]] = field(default_factory=list)
+    escort_jobs: List[str] = field(default_factory=list)
     delivered_volume_liters: float = 0.0
 
     def record_incident(self, *, kind: str, severity: str, tick: int, notes: str) -> None:
@@ -395,6 +408,8 @@ class WardState:
     name: str
     ring: int
     sealed_mode: str
+    ring_label: str = ""
+    sealed: bool = False
     environment: EnvironmentState = field(default_factory=EnvironmentState)
     infrastructure: InfrastructureState = field(default_factory=InfrastructureState)
     stocks: StockState = field(default_factory=StockState)
@@ -402,6 +417,12 @@ class WardState:
     newsfeed: List[str] = field(default_factory=list)
     legitimacy: float = 0.55
     facilities: MutableMapping[str, int] = field(default_factory=dict)
+    loyalty_to_king: float = 0.5
+    smuggle_risk: float = 0.1
+    need_index: float = 0.0
+    risk_index: float = 0.0
+    rotation_debt: float = 0.0
+    specialisations: MutableMapping[str, float] = field(default_factory=dict)
 
     def apply_environment(self) -> None:
         self.environment.stress = self.environment.compute_stress()
