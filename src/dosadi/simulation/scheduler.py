@@ -17,13 +17,68 @@ state or bespoke timing logic.
 from __future__ import annotations
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import heapq
-from typing import Callable, DefaultDict, Iterable, List, MutableMapping, Tuple
+from time import perf_counter
+from typing import Callable, DefaultDict, Iterable, List, MutableMapping, Optional, Tuple
 
 TickHandler = Callable[["SimulationClock"], None]
 DelayedHandler = Callable[["SimulationClock"], None]
+
+
+@dataclass(frozen=True)
+class HandlerMetrics:
+    """Execution metadata captured for each handler invocation."""
+
+    name: str
+    phase: "Phase"
+    cadence: int
+    duration_ms: float
+    ran: bool
+
+
+@dataclass(frozen=True)
+class PhaseMetrics:
+    """Aggregated metrics for a phase within a tick."""
+
+    phase: "Phase"
+    handlers: Tuple[HandlerMetrics, ...]
+    bucket_count: int
+    parallel_buckets: int
+
+
+@dataclass(frozen=True)
+class TickMetrics:
+    """Summary metrics for a completed tick."""
+
+    tick: int
+    phases: Tuple[PhaseMetrics, ...]
+
+
+@dataclass(slots=True)
+class _HandlerRegistration:
+    """Store registration metadata for a handler."""
+
+    handler: TickHandler
+    cadence: int
+    reads: frozenset[str]
+    writes: frozenset[str]
+    name: str
+    order: int
+
+    @property
+    def has_dependency_metadata(self) -> bool:
+        return bool(self.reads or self.writes)
+
+
+@dataclass(slots=True)
+class _Bucket:
+    handlers: List[_HandlerRegistration]
+    reads: set[str]
+    writes: set[str]
+    allows_parallel: bool
 
 
 class Phase(Enum):
@@ -35,6 +90,7 @@ class Phase(Enum):
     AGENT_ACTIVITY = auto()
     ENVIRONMENTAL_UPDATE = auto()
     RUMOR_AND_INFORMATION = auto()
+    SOCIAL_AUDIT = auto()
     REFLECTION = auto()
 
     @classmethod
@@ -48,6 +104,7 @@ class Phase(Enum):
             cls.AGENT_ACTIVITY,
             cls.ENVIRONMENTAL_UPDATE,
             cls.RUMOR_AND_INFORMATION,
+            cls.SOCIAL_AUDIT,
             cls.REFLECTION,
         )
 
@@ -115,23 +172,47 @@ class SimulationScheduler:
     """Execute registered handlers following the Dosadi temporal cascade."""
 
     clock: SimulationClock = field(default_factory=SimulationClock)
-    phase_handlers: DefaultDict[Phase, List[TickHandler]] = field(
+    phase_handlers: DefaultDict[Phase, List[_HandlerRegistration]] = field(
         default_factory=lambda: defaultdict(list)
     )
     time_dilation: MutableMapping[str, float] = field(default_factory=dict)
+    max_workers: Optional[int] = None
     _delayed_events: List[Tuple[int, int, DelayedHandler]] = field(default_factory=list)
     _delayed_counter: int = 0
+    _registration_counter: int = 0
+    _last_tick_metrics: Optional[TickMetrics] = None
 
-    def register_handler(self, phase: Phase, handler: TickHandler) -> None:
-        """Attach ``handler`` to a phase.
+    def register_handler(
+        self,
+        phase: Phase,
+        handler: TickHandler,
+        *,
+        cadence: int = 1,
+        reads: Optional[Iterable[str]] = None,
+        writes: Optional[Iterable[str]] = None,
+        name: Optional[str] = None,
+    ) -> None:
+        """Attach ``handler`` to a phase with optional dependency metadata.
 
-        Handlers receive the *current* clock snapshot allowing them to respond to
-        the precise tick at which they were executed.  Handlers should be
-        idempotent and capable of being called every tick unless they consult the
-        clock to gate behavior at longer intervals.
+        ``cadence`` controls how often the handler is invoked (``1`` indicates
+        every tick).  ``reads`` and ``writes`` define the handler's declared data
+        dependencies and enable the scheduler to place it into a parallel bucket
+        when it does not conflict with other handlers.  Missing dependency
+        information results in conservative sequential execution.
         """
 
-        self.phase_handlers[phase].append(handler)
+        if cadence <= 0:
+            raise ValueError("cadence must be positive")
+        self._registration_counter += 1
+        registration = _HandlerRegistration(
+            handler=handler,
+            cadence=cadence,
+            reads=frozenset(reads or ()),
+            writes=frozenset(writes or ()),
+            name=name or getattr(handler, "__name__", f"handler_{self._registration_counter}"),
+            order=self._registration_counter,
+        )
+        self.phase_handlers[phase].append(registration)
 
     def schedule_event(
         self, delay_ticks: int, handler: DelayedHandler, *, priority: int = 0
@@ -168,6 +249,12 @@ class SimulationScheduler:
 
         return self.time_dilation.get(scope, 1.0)
 
+    def attach_bus(self, bus: EventBus) -> None:
+        self.bus = bus
+
+    def attach_registry(self, registry: "SharedVariableRegistry") -> None:
+        self.registry = registry
+
     def run_tick(self) -> None:
         """Advance the clock by one tick and execute the cascade."""
 
@@ -177,9 +264,14 @@ class SimulationScheduler:
 
         self._run_due_events(snapshot)
 
+        phase_metrics: List[PhaseMetrics] = []
         for phase in Phase.ordered():
-            for handler in self.phase_handlers.get(phase, ()):  # type: ignore[arg-type]
-                handler(snapshot)
+            metrics = self._execute_phase(phase, snapshot)
+            phase_metrics.append(metrics)
+
+        self._last_tick_metrics = TickMetrics(
+            tick=self.clock.current_tick, phases=tuple(phase_metrics)
+        )
 
     def run(self, ticks: int) -> None:
         """Execute ``ticks`` ticks."""
@@ -196,11 +288,127 @@ class SimulationScheduler:
             _, _, _, handler = heapq.heappop(self._delayed_events)
             handler(snapshot)
 
+    def last_tick_metrics(self) -> Optional[TickMetrics]:
+        """Return the metrics generated for the most recent tick."""
+
+        return self._last_tick_metrics
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _execute_phase(self, phase: Phase, snapshot: SimulationClock) -> PhaseMetrics:
+        registrations = self.phase_handlers.get(phase, ())
+        if not registrations:
+            return PhaseMetrics(
+                phase=phase, handlers=tuple(), bucket_count=0, parallel_buckets=0
+            )
+
+        due: List[_HandlerRegistration] = [
+            registration
+            for registration in registrations
+            if snapshot.current_tick % registration.cadence == 0
+        ]
+        if not due:
+            return PhaseMetrics(
+                phase=phase, handlers=tuple(), bucket_count=0, parallel_buckets=0
+            )
+
+        buckets = self._bucketize(sorted(due, key=lambda reg: reg.order))
+        handler_metrics: List[HandlerMetrics] = []
+        parallel_buckets = 0
+        for bucket in buckets:
+            if bucket.allows_parallel and len(bucket.handlers) > 1:
+                parallel_buckets += 1
+            handler_metrics.extend(self._run_bucket(bucket, snapshot, phase))
+
+        return PhaseMetrics(
+            phase=phase,
+            handlers=tuple(handler_metrics),
+            bucket_count=len(buckets),
+            parallel_buckets=parallel_buckets,
+        )
+
+    def _bucketize(self, registrations: List[_HandlerRegistration]) -> List[_Bucket]:
+        buckets: List[_Bucket] = []
+        for registration in registrations:
+            placed = False
+            for bucket in buckets:
+                if not self._has_conflict(bucket, registration):
+                    bucket.handlers.append(registration)
+                    bucket.reads.update(registration.reads)
+                    bucket.writes.update(registration.writes)
+                    if not registration.has_dependency_metadata:
+                        bucket.allows_parallel = False
+                    placed = True
+                    break
+            if not placed:
+                buckets.append(
+                    _Bucket(
+                        handlers=[registration],
+                        reads=set(registration.reads),
+                        writes=set(registration.writes),
+                        allows_parallel=registration.has_dependency_metadata,
+                    )
+                )
+        return buckets
+
+    def _has_conflict(
+        self, bucket: _Bucket, registration: _HandlerRegistration
+    ) -> bool:
+        if not bucket.allows_parallel or not registration.has_dependency_metadata:
+            return True
+        if bucket.writes & registration.reads:
+            return True
+        if bucket.reads & registration.writes:
+            return True
+        if bucket.writes & registration.writes:
+            return True
+        return False
+
+    def _run_bucket(
+        self, bucket: _Bucket, snapshot: SimulationClock, phase: Phase
+    ) -> List[HandlerMetrics]:
+        if bucket.allows_parallel and len(bucket.handlers) > 1:
+            max_workers = self.max_workers or len(bucket.handlers)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(self._execute_handler, registration, snapshot, phase)
+                    for registration in bucket.handlers
+                ]
+                results = [future.result() for future in futures]
+            # Ensure deterministic ordering by original registration order.
+            results.sort(key=lambda entry: entry[0])
+            return [metrics for _, metrics in results]
+
+        results = [
+            self._execute_handler(registration, snapshot, phase)
+            for registration in bucket.handlers
+        ]
+        return [metrics for _, metrics in results]
+
+    def _execute_handler(
+        self, registration: _HandlerRegistration, snapshot: SimulationClock, phase: Phase
+    ) -> Tuple[int, HandlerMetrics]:
+        start = perf_counter()
+        registration.handler(snapshot)
+        end = perf_counter()
+        metrics = HandlerMetrics(
+            name=registration.name,
+            phase=phase,
+            cadence=registration.cadence,
+            duration_ms=(end - start) * 1000.0,
+            ran=True,
+        )
+        return registration.order, metrics
+
 
 __all__ = [
     "DelayedHandler",
+    "HandlerMetrics",
+    "PhaseMetrics",
     "Phase",
     "SimulationClock",
     "SimulationScheduler",
     "TickHandler",
+    "TickMetrics",
 ]
