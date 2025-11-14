@@ -7,7 +7,8 @@ from random import Random
 from typing import Callable, Dict, Iterable, Mapping, MutableMapping, Optional
 
 from ..event import EventBus
-from ..simulation.scheduler import Phase, SimulationClock
+from ..runtime.timebase import Phase
+from ..simulation.scheduler import SimulationClock
 from ..state import WorldState
 from ..registry import SharedVariableRegistry
 

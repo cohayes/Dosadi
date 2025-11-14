@@ -103,7 +103,7 @@ class _Day0Runner:
     # ------------------------------------------------------------------
     def _build_world(self) -> WorldState:
         world = generate_world(
-            WorldgenConfig(seed=self.config.world_seed, ward_count=24, faction_count=8, agents_per_faction=8)
+            WorldgenConfig(seed=self.config.world_seed)
         )
         self._annotate_world(world)
         return world
@@ -148,28 +148,43 @@ class _Day0Runner:
             RouteState(
                 id="route:well-w2",
                 origin=w1.id,
-                destination=w2.id,
-                distance_km=4.5,
-                risk=0.08,
-                surcharge=0.05,
-            ),
-            RouteState(
-                id="route:well-w8",
-                origin=w1.id,
-                destination=w8.id,
-                distance_km=9.0,
-                risk=0.12,
-                surcharge=0.09,
-            ),
-            RouteState(
-                id="route:well-w21",
-                origin=w1.id,
-                destination=w21.id,
-                distance_km=14.0,
-                risk=0.18,
-                surcharge=0.16,
-            ),
-        ]
+                    destination=w2.id,
+                    distance_minutes=5.5,
+                    checkpoint_level=0.6,
+                    escort_risk=0.08,
+                    capacity_liters=650.0,
+                    route_type="ROYAL",
+                    distance_km=3.3,
+                    risk=0.08,
+                    surcharge=0.05,
+                ),
+                RouteState(
+                    id="route:well-w8",
+                    origin=w1.id,
+                    destination=w8.id,
+                    distance_minutes=9.0,
+                    checkpoint_level=0.5,
+                    escort_risk=0.12,
+                    capacity_liters=520.0,
+                    route_type="ROYAL",
+                    distance_km=5.4,
+                    risk=0.12,
+                    surcharge=0.09,
+                ),
+                RouteState(
+                    id="route:well-w21",
+                    origin=w1.id,
+                    destination=w21.id,
+                    distance_minutes=14.5,
+                    checkpoint_level=0.4,
+                    escort_risk=0.18,
+                    capacity_liters=360.0,
+                    route_type="ROYAL",
+                    distance_km=8.7,
+                    risk=0.18,
+                    surcharge=0.16,
+                ),
+            ]
         for route in routes:
             world.register_route(route)
 
