@@ -1,18 +1,14 @@
 ---
-title: Civic_Facility_Microdynamics_Soup_Kitchens_and_Bunkhouses
-doc_id: D-WORLD-0004
+title: Civic_Facility_Microdynamics_Soup_Kitchens_and_Bunkhouses_Legacy
+doc_id: D-WORLD-0400
 version: 0.1.0
-status: draft
+status: archived
 owners: [cohayes]
 last_updated: 2025-11-17
-depends_on:
-  - D-WORLD-0003   # Ward_Branch_Hierarchies
-  - D-ECON-0001    # Ward_Resource_and_Water_Economy (placeholder)
-  - D-INFO-0002    # Espionage_Branch
-  - D-INFO-0003    # Information_Flows_and_Report_Credibility
-  - D-INFO-0004    # Scholars_and_Clerks_Branch
-  - D-SOC-0002     # Food_Waste_and_Metabolism (placeholder)
-  - D-SOC-0003     # Logistics_Corridors_and_Safehouses (placeholder)
+superseded_by:
+  - D-WORLD-0003      # Ward_Branch_Hierarchies
+notes:
+  - "Legacy ward structure draft; kept for reference and flavor only."
 ---
 
 # Civic Facility Microdynamics: Soup Kitchens & Bunkhouses

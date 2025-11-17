@@ -1,20 +1,17 @@
 ---
-title: Dosadi_Economic_Systems
-doc_id: D-ECON-0001
-version: 1.0.0
-status: stable
-owners: [cohayes]
-depends_on: 
-includes:
-  - D-ECON-0002  # Market_Microstructure
-  - D-ECON-0003  # Credits_and_FX
-  - D-ECON-0004  # Work_and_Labor_Markets
-  - D-ECON-0005  # Food_and_Rations_Flow
-  - D-ECON-0006  # Maintenance_Fault_Loop
-  - D-ECON-0007  # Work_Rest_Scheduling
-  - D-ECON-0008  # Production_and_Fabrication
-last_updated: 2025-11-11
+doc_id: D-ECON-0100
+status: archived
+superseded_by: D-ECON-0001   # Ward_Resource_and_Water_Economy
+adr: ADR-ECON-0002
+
 ---
+> **Status:** Archived / superseded  
+> This document is an early, exploratory sketch of Dosadi's economy.  
+> It has been superseded in part by `D-ECON-0001_Ward_Resource_and_Water_Economy`
+> and future, more focused economic design docs.
+
+
+
 # Dosadi Economic Systems v1
 
 ## I. Foundational Concepts
