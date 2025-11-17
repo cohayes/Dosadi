@@ -1,12 +1,20 @@
 ---
-title: Dosadi_Telemetry_and_Audit_Infrastructure
-doc_id: D-INFOSEC-0009
-version: 1.0.0
-status: draft
-owners: [cohayes]
-last_updated: 2025-11-13
-parent: D-INFOSEC-0001
+status: archived
+last_updated: 2025-11-17
+superseded_by: D-INFO-0001   # Telemetry_and_Audit_Infrastructure
+adr: ADR-INFO-0003           # ADR_Telemetry_and_Audit_Doc_Refactor
 ---
+
+> **Status:** Archived / superseded  
+> This document has been superseded by `D-INFO-0001_Telemetry_and_Audit_Infrastructure`
+> as decided in `ADR-INFO-0003_Telemetry_and_Audit_Doc_Refactor`.  
+> Content here is retained for historical reference only and may be out of date.
+
+Note: The current canonical treatment of telemetry & audits emphasizes
+cross-branch measurement and integration with Scholars & Clerks and the
+credibility system, not just infosec/hardening concerns.
+
+
 # **Telemetry & Audit Infrastructure v1 (Identity, Sensors, Ledgers, Chain‑of‑Custody)**
 
 **Version:** v1 — 2025‑11‑12  
