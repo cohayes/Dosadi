@@ -2,7 +2,7 @@
 title: Agents
 doc_id: D-AGENT-0101
 version: 1.0.0
-status: stable
+status: draft
 owners: [cohayes]
 depends_on: [D-RUNTIME-0001]
 includes:
@@ -15,6 +15,8 @@ last_updated: 2025-11-11
 ---
 
 # Dosadi Agents v1
+
+“Position: Tier-2+; not required for minimal civic simulation. Implement after D-AGENT-0001–0003 are live in code and tested.”
 
 ## 1. Overview
 This document defines the structure, behavior, and lifecycle of intelligent agents within the Dosadi simulation. Agents are autonomous, resource-dependent organisms that perceive, act, and adapt within the planetary system. They exist at the intersection of physical, psychological, social, and environmental dynamics.

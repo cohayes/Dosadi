@@ -2,12 +2,14 @@
 title: Agent_Perception_and_Memory
 doc_id: D-AGENT-0104
 version: 1.0.0
-status: stable
+status: draft
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-AGENT-0001
 ---
 # **Dosadi Perception and Memory Systems v1**
+
+“Position: Tier-2+; not required for minimal civic simulation. Implement after D-AGENT-0001–0003 are live in code and tested.”
 
 ---
 

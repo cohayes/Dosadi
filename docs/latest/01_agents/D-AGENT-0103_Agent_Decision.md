@@ -2,12 +2,14 @@
 title: Agent_Decision
 doc_id: D-AGENT-0103
 version: 1.0.0
-status: stable
+status: draft
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-AGENT-0001
 ---
 # **Agent Decision v1 (Drive→Technique→Action Loop)**
+
+“Position: Tier-2+; not required for minimal civic simulation. Implement after D-AGENT-0001–0003 are live in code and tested.”
 
 **Purpose.** Provide a unified decision loop for Dosadi agents that chooses *what to do next* by translating **Drives** into **Techniques** and finally into concrete **Actions**, subject to constraints (safety, legality, contracts), perceived utilities, and resource budgets (time, energy, water, credits).
 

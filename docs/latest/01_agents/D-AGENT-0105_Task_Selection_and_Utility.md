@@ -2,12 +2,14 @@
 title: Agent_Task_Selection_and_Utility
 doc_id: D-AGENT-0105
 version: 1.0.0
-status: stable
+status: draft
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-AGENT-0001
 ---
 # **Task Selection & Utility v1**
+
+“Position: Tier-2+; not required for minimal civic simulation. Implement after D-AGENT-0001–0003 are live in code and tested.”
 
 Minute-by-minute decision policy for agents to choose actions from the **Agent Action API v1** under the global **Tick/Minute** cadence.
 

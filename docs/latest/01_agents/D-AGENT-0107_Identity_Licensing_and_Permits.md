@@ -9,6 +9,8 @@ parent: D-AGENT-0001
 ---
 # **Identity, Licensing & Permits v1 (IDs, Skill Licenses, Travel Passes, Inspections, Revocations)**
 
+“Position: Tier-2+; not required for minimal civic simulation. Implement after D-AGENT-0001–0003 are live in code and tested.”
+
 **Version:** v1 — 2025‑11‑13  
 **Purpose.** Define the identity model and the legal instruments that gate who may work, carry, build, heal, transport, and traverse across wards. Standardizes IDs, skill licenses, shop/guild permits, weapon/tool carry classes, travel/curfew passes, inspection workflows, and revocation/appeal—so Security, Logistics, Clinics, Fabrication, Credits & FX, and Law all speak the same language.
 

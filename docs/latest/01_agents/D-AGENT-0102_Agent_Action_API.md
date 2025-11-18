@@ -2,12 +2,14 @@
 title: Agent_Action_API
 doc_id: D-AGENT-0102
 version: 1.0.0
-status: stable
+status: draft
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-AGENT-0001
 ---
 # **Dosadi Agent Action API v1**
+
+“Position: Tier-2+; not required for minimal civic simulation. Implement after D-AGENT-0001–0003 are live in code and tested.”
 
 A unified verb set for agents and systems to change world state via the event bus.  
 Each action defines **preconditions**, **costs**, **effects**, **emitted events**, and **failure modes**.  
