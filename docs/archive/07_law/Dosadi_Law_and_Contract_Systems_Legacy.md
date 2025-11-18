@@ -2,7 +2,7 @@
 title: Dosadi_Law_and_Contract_Systems
 doc_id: D-LAW-0001
 version: 1.0.0
-status: stable
+status: archived
 owners: [cohayes]
 depends_on: 
 includes:

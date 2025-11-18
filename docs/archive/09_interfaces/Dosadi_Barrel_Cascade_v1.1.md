@@ -2,7 +2,9 @@
 title: Dosadi_Barrel_Cascade
 doc_id: D-PLANNER-0002
 version: 1.1.0
-status: stable
+status: archived
+superseded_by:
+  - D-INTERFACE-0001   # Hydraulic_Interfaces
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-PLANNER-0001

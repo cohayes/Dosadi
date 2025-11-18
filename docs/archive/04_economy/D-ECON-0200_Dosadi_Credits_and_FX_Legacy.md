@@ -1,4 +1,15 @@
-ARCHIVED -- Superseded by Version 1.1 in /docs/latest
+---
+title: Dosadi_Credits_and_FX
+doc_id: D-ECON-0200 
+version: 1.0.0
+status: archived
+owners: [cohayes]
+parent: D-ECON-0001        
+last_updated: 2025-11-11   
+superseded_by:
+  - D-ECON-0004            # Credits & FX v1.1 in docs/latest
+---
+
 # **Credits & FX v1 (Ward Money, Redemption, and Exchange)**
 
 **Purpose:** Define how ward-issued credits are minted, redeemed for water, exchanged across issuers, taxed, manipulated, and audited—so markets, contracts, labor, and the barrel cascade all have a solid monetary backbone.

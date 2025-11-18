@@ -2,10 +2,12 @@
 title: Dosadi_Contract_and_Case_State_Machines
 doc_id: D-LAW-0002
 version: 1.0.0
-status: stable
+status: archived
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-LAW-0001
+superseded_by:
+  - D-LAW-0002
 ---
 # **Contract & Case State Machines v1**
 

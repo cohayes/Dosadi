@@ -1,3 +1,15 @@
+---
+title: Dosadi_Succession_Laws
+doc_id: D-LAW-0500          
+version: 1.0.0
+status: archived
+owners: [cohayes]
+parent: D-LAW-0001
+last_updated: 2025-11-11
+superseded_by:
+  - D-LAW-0002              
+---
+
 ARCHIVED -- Superseded by Version 1.1 in /docs/latest
 # **Dosadi Succession Laws v1 (Annex)**
 

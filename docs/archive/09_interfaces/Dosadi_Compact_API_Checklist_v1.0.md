@@ -2,7 +2,7 @@
 title: Dosadi_Compact_API_Checklist
 doc_id: D-PLANNER-0001
 version: 1.0.0
-status: stable
+status: archived
 owners: [cohayes]
 depends_on: 
 includes:

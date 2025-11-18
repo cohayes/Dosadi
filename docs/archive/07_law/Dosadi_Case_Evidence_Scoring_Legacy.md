@@ -2,10 +2,12 @@
 title: Dosadi_Case_Evidence_Scoring
 doc_id: D-LAW-0003
 version: 1.0.0
-status: stable
+status: archived
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-LAW-0001
+superseded_by:
+  - D-LAW-0002
 ---
 # **Case Evidence Scoring v1**
 
