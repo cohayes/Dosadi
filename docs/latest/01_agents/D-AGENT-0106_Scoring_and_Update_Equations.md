@@ -1,6 +1,6 @@
 ---
-title: Dosadi_Agent_Scoring_and_Update_Equations
-doc_id: D-AGENT-0006
+title: Agent_Scoring_and_Update_Equations
+doc_id: D-AGENT-0106
 version: 1.0.0
 status: stable
 owners: [cohayes]

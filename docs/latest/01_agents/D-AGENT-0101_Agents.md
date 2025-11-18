@@ -1,6 +1,6 @@
 ---
-title: Dosadi_Agents
-doc_id: D-AGENT-0001
+title: Agents
+doc_id: D-AGENT-0101
 version: 1.0.0
 status: stable
 owners: [cohayes]

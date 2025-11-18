@@ -1,6 +1,6 @@
 ---
-title: Dosadi_Agent_Perception_and_Memory
-doc_id: D-AGENT-0004
+title: Agent_Perception_and_Memory
+doc_id: D-AGENT-0104
 version: 1.0.0
 status: stable
 owners: [cohayes]

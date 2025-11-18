@@ -29,6 +29,8 @@ The focus is daily civic behavior in and around:
 - Entertainment & vice venues
 - Streets and simple workplaces
 
+“Drive vector D_v0 lives in the 7-drive civic space (SURVIVAL…MORAL). All civic microdynamics and early tests use this reduced basis.”
+
 ---
 
 ## 1. Overview

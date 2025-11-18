@@ -1,6 +1,6 @@
 ---
-title: Dosadi_Agent_Decision
-doc_id: D-AGENT-0003
+title: Agent_Decision
+doc_id: D-AGENT-0103
 version: 1.0.0
 status: stable
 owners: [cohayes]
@@ -14,6 +14,8 @@ parent: D-AGENT-0001
 Integrates with **Agents v1**, **Perception & Memory v1**, **Rumor v1.1**, **Suit–Body–Environment v1**, **Work–Rest v1**, **Law & Contract Systems v1**, **Credits & FX v1.1**, **Barrel Cascade v1.1**, **Clinic & Health v1.1**, **Security/Escort v1**, and the **Tick Loop**.
 
 > Timebase: **per Minute** micro‑decisions; **per 15 Minutes** re‑plan; **per Day** goal update.
+
+“The v1 drive portfolio D_v1 extends D_v0. For agents using only civic drives, treat D_v1 as a projection where the extra components are either 0 or derived from the 7 primaries.”
 
 ---
 ## 0) Agent State for Decisions

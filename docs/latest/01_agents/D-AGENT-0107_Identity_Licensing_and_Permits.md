@@ -1,6 +1,6 @@
 ---
-title: Dosadi_Identity_Licensing_and_Permits
-doc_id: D-AGENT-0007
+title: Identity_Licensing_and_Permits
+doc_id: D-AGENT-0107
 version: 1.0.0
 status: draft
 owners: [cohayes]
@@ -15,6 +15,8 @@ parent: D-AGENT-0001
 Integrates with **Telemetry & Audit v1** (keys, boards, tokens), **Law & Contract Systems v1** (arbiters, decrees), **Logistics Corridors & Safehouses v1**, **Escort & Security v1**, **Production & Fabrication v1**, **Clinics v1.1**, **Agent Decision v1**, **Rumor v1.1**, and the **Tick Loop**.
 
 > Timebase: license validity **in days**; inspections **per encounter**; boards publish **hourly**; appeals resolved **within days** unless escalated.
+
+“This is an identity and licensing interface doc; it is physically stored under 01_agents but logically belongs to the Identity/Info-Security layer and is shared with Law, Logistics, Clinics, etc.”
 
 ---
 ## 0) Identity Model

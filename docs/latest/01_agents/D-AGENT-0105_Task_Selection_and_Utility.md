@@ -1,6 +1,6 @@
 ---
-title: Dosadi_Agent_Task_Selection_and_Utility
-doc_id: D-AGENT-0005
+title: Agent_Task_Selection_and_Utility
+doc_id: D-AGENT-0105
 version: 1.0.0
 status: stable
 owners: [cohayes]
