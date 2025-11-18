@@ -1,4 +1,12 @@
-Version 2.0
+---
+title: ADR_0001 — Dosadi v2 Core Systems Roadmap
+status: accepted
+date: 2025-11-11
+deciders: [cohayes]
+supersedes: [] 
+superseded_by: []       # fill in later if you adopt ADR_XXXX that replaces it
+---
+
 # Dosadi v2 Core Systems
 ### (Hydraulic Power, Credit Ecology, and Social Entropy)
 **Author:** Conner Hayes  
