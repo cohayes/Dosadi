@@ -618,6 +618,56 @@ def _seed_agents(
         "cultist": {"STR": 0.1, "DEX": 0.2, "CON": 0.1, "INT": 0.2, "WILL": 0.4, "CHA": 0.4},
         "smuggler": {"STR": 0.2, "DEX": 0.4, "CON": 0.2, "INT": 0.3, "WILL": 0.3, "CHA": 0.4},
     }
+    loadout_templates = {
+        "worker": {
+            "primary": "hydro-wrench",
+            "secondary": "patch-kit",
+            "support_items": ["fiber-line", "ration-pack"],
+            "kit_tags": ["maintenance", "utility"],
+            "readiness": 0.55,
+            "signature": "LOW",
+        },
+        "guard": {
+            "primary": "shock-lance",
+            "secondary": "shield-brace",
+            "support_items": ["detainer", "bandage"],
+            "kit_tags": ["security", "deterrence"],
+            "readiness": 0.75,
+            "signature": "MED",
+        },
+        "clerk": {
+            "primary": "scribe-slate",
+            "secondary": "voice-pin",
+            "support_items": ["archive-stick", "marker"],
+            "kit_tags": ["civic", "admin"],
+            "readiness": 0.45,
+            "signature": "LOW",
+        },
+        "reclaimer": {
+            "primary": "arc-cutter",
+            "secondary": "scrapper-foam",
+            "support_items": ["salvage-net", "sensor-pearl"],
+            "kit_tags": ["reclaimer", "field"],
+            "readiness": 0.62,
+            "signature": "HIGH",
+        },
+        "cultist": {
+            "primary": "ritual-knife",
+            "secondary": "charm-band",
+            "support_items": ["incense", "psalm-chit"],
+            "kit_tags": ["faith", "psychoactives"],
+            "readiness": 0.58,
+            "signature": "MED",
+        },
+        "smuggler": {
+            "primary": "silence-pistol",
+            "secondary": "flash-amp",
+            "support_items": ["data-wipe", "holo-cloak"],
+            "kit_tags": ["smuggler", "logistics"],
+            "readiness": 0.70,
+            "signature": "LOW",
+        },
+    }
     archetypes = list(archetype_affinities.keys())
 
     agent_index = 0
@@ -638,6 +688,14 @@ def _seed_agents(
                     agent.affinities[key] = max(0.0, min(1.0, rng.gauss(value, 0.08)))
                 agent.inventory["owned"].append(f"ration:{agent_index}")
                 agent.inventory["credits"]["dosadi-credit"] = rng.uniform(25.0, 250.0)
+                template = loadout_templates.get(archetype)
+                if template:
+                    agent.loadout.primary = template["primary"]
+                    agent.loadout.secondary = template["secondary"]
+                    agent.loadout.support_items.extend(template["support_items"])
+                    agent.loadout.kit_tags.extend(template["kit_tags"])
+                    agent.loadout.readiness = template["readiness"]
+                    agent.loadout.signature = template["signature"]
                 faction.members.append(agent.id)
                 world.register_agent(agent)
 
