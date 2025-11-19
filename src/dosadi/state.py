@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
+from .admin_log import AdminEventLog
 from .simulation.snapshots import serialize_state
 
 
@@ -235,18 +236,104 @@ class SuitState:
     ratings: MutableMapping[str, float] = field(
         default_factory=lambda: {"heat": 0.8, "chem": 0.6, "rad": 0.5}
     )
+    thermal_resistance: float = 0.65
+    environment_tags: Tuple[str, ...] = tuple()
+
+
+@dataclass(slots=True)
+class LoadoutState:
+    """Operational kit reference described in docs/latest/01_agents."""
+
+    primary: Optional[str] = None
+    secondary: Optional[str] = None
+    support_items: List[str] = field(default_factory=list)
+    kit_tags: List[str] = field(default_factory=list)
+    readiness: float = 0.65
+    signature: str = "LOW"
+
+    def describe(self) -> str:
+        primary = self.primary or "-"
+        secondary = self.secondary or "-"
+        support = ", ".join(self.support_items) or "<none>"
+        return f"P:{primary} / S:{secondary} / Support:{support}"
 
 
 @dataclass(slots=True)
 class BodyState:
+    """Physiological model that mirrors D-AGENT-0101."""
+
     health: float = 100.0
-    water: float = 3.0
     nutrition: float = 2500.0
+    hydration: float = 3.0
     stamina: float = 80.0
-    mental_energy: float = 80.0
+    energy: float = 80.0
     bladder: float = 0.2
     bowel: float = 0.1
+    body_mass: float = 70.0
+    activity_level: float = 0.25
+    thermoregulation_efficiency: float = 0.85
+    nutrition_capacity: float = 3200.0
+    hydration_capacity: float = 4.5
+    mental_processing_budget: float = 120.0
+    mental_processing_used: float = 0.0
     chronic: Sequence[str] = field(default_factory=tuple)
+
+    def hunger_ratio(self) -> float:
+        if self.nutrition_capacity <= 0:
+            return 1.0
+        return _clamp01(1.0 - self.nutrition / self.nutrition_capacity)
+
+    def thirst_ratio(self) -> float:
+        if self.hydration_capacity <= 0:
+            return 1.0
+        return _clamp01(1.0 - self.hydration / self.hydration_capacity)
+
+    def fatigue_ratio(self) -> float:
+        return _clamp01(1.0 - self.stamina / 100.0)
+
+    def heat_stress_index(self, env_temp: float, suit_thermal_resistance: float) -> float:
+        delta = max(0.0, env_temp - 22.0)
+        return max(0.0, delta * (1.0 - suit_thermal_resistance) / max(1e-3, self.thermoregulation_efficiency))
+
+    def cold_stress_index(self, env_temp: float, suit_thermal_resistance: float) -> float:
+        delta = max(0.0, 22.0 - env_temp)
+        return max(0.0, delta * (1.0 - suit_thermal_resistance) / max(1e-3, self.thermoregulation_efficiency))
+
+    def caloric_demand(self) -> float:
+        base_rate = 2_000.0 + 8.0 * (self.body_mass - 70.0)
+        return max(0.0, base_rate * (1.0 + 0.5 * self.activity_level))
+
+    def hydration_demand(self) -> float:
+        heat_load = self.heat_stress_index(22.0, 0.0)
+        return max(0.0, 0.035 * self.body_mass * (1.0 + 0.3 * heat_load))
+
+    def allocate_processing_budget(self, effort: float) -> float:
+        remaining = max(0.0, self.mental_processing_budget - self.mental_processing_used)
+        spent = min(remaining, max(0.0, effort))
+        self.mental_processing_used += spent
+        return spent
+
+    def reset_processing_budget(self) -> None:
+        self.mental_processing_used = 0.0
+
+    @property
+    def mental_energy(self) -> float:
+        remaining = max(0.0, self.mental_processing_budget - self.mental_processing_used)
+        return 100.0 * remaining / max(1.0, self.mental_processing_budget)
+
+    @mental_energy.setter
+    def mental_energy(self, value: float) -> None:
+        clamped = _clamp(0.0, 100.0, value)
+        remaining = clamped / 100.0 * max(1.0, self.mental_processing_budget)
+        self.mental_processing_used = max(0.0, self.mental_processing_budget - remaining)
+
+    @property
+    def water(self) -> float:
+        return self.hydration
+
+    @water.setter
+    def water(self, value: float) -> None:
+        self.hydration = max(0.0, value)
 
 
 @dataclass(slots=True)
@@ -258,10 +345,81 @@ class SocialState:
 
 
 @dataclass(slots=True)
+class PermitRecord:
+    """Identity and permitting record aligning with D-AGENT-0107."""
+
+    id: str
+    kind: str
+    status: str = "ACTIVE"
+    issued_by: Optional[str] = None
+    issued_tick: int = 0
+    expires_tick: Optional[int] = None
+    restrictions: Sequence[str] = field(default_factory=tuple)
+
+    def is_active(self, *, tick: Optional[int] = None) -> bool:
+        if self.status.upper() != "ACTIVE":
+            return False
+        if tick is not None and self.expires_tick is not None:
+            return tick <= self.expires_tick
+        return True
+
+
+@dataclass(slots=True)
+class IdentityProfile:
+    """Agent identity, handles, permits, and trust hooks."""
+
+    handles: List[str] = field(default_factory=list)
+    clearance_level: str = "CIVIC"
+    permits: MutableMapping[str, PermitRecord] = field(default_factory=dict)
+    trust_flags: MutableMapping[str, float] = field(default_factory=dict)
+    risk_tags: MutableMapping[str, float] = field(default_factory=dict)
+
+    def add_handle(self, handle: str) -> None:
+        if handle not in self.handles:
+            self.handles.append(handle)
+
+    def issue_permit(
+        self,
+        *,
+        permit_id: str,
+        kind: str,
+        issued_by: Optional[str],
+        issued_tick: int,
+        expires_tick: Optional[int] = None,
+        restrictions: Sequence[str] = (),
+    ) -> PermitRecord:
+        record = PermitRecord(
+            id=permit_id,
+            kind=kind,
+            issued_by=issued_by,
+            issued_tick=issued_tick,
+            expires_tick=expires_tick,
+            restrictions=tuple(restrictions),
+        )
+        self.permits[permit_id] = record
+        return record
+
+    def revoke_permit(self, permit_id: str, *, reason: str | None = None) -> None:
+        record = self.permits.get(permit_id)
+        if not record:
+            return
+        record.status = "REVOKED"
+        if reason:
+            record.restrictions = tuple(list(record.restrictions) + [f"revoked:{reason}"])
+
+    def active_permits(self, *, tick: Optional[int] = None) -> List[PermitRecord]:
+        return [record for record in self.permits.values() if record.is_active(tick=tick)]
+
+    def set_trust_flag(self, flag: str, value: float) -> None:
+        self.trust_flags[flag] = _clamp01(value)
+
+
+@dataclass(slots=True)
 class MemoryState:
     events: List[str] = field(default_factory=list)
     beliefs: MutableMapping[str, Dict[str, float]] = field(default_factory=dict)
     memes: MutableMapping[str, float] = field(default_factory=dict)
+    rumors: MutableMapping[str, "RumorDigest"] = field(default_factory=dict)
 
     def decay(self, *, cred_lambda: float, belief_lambda: float, salience_lambda: float) -> None:
         for belief in self.beliefs.values():
@@ -270,10 +428,53 @@ class MemoryState:
             belief["Sal"] = _clamp01(belief.get("Sal", 0.0) * salience_lambda)
         for meme, value in list(self.memes.items()):
             self.memes[meme] = _clamp01(value * 0.999)
+        for rumor in self.rumors.values():
+            rumor.credibility = _clamp01(rumor.credibility * cred_lambda)
+            rumor.salience = _clamp01(rumor.salience * salience_lambda)
 
 
 @dataclass(slots=True)
 class DriveState:
+    """Hierarchical drive vectors aligned with D-AGENT-0101."""
+
+    physiological: MutableMapping[str, float] = field(
+        default_factory=lambda: {
+            "Apathy": 0.1,
+            "Survival": 0.6,
+            "Grow": 0.3,
+        }
+    )
+    material: MutableMapping[str, float] = field(
+        default_factory=lambda: {
+            "Hoard": 0.4,
+            "Maintenance": 0.35,
+            "Innovation": 0.25,
+        }
+    )
+    social_reputation: MutableMapping[str, float] = field(
+        default_factory=lambda: {
+            "Dominance": 0.2,
+            "Subservience": 0.2,
+            "Vengeance": 0.1,
+            "Reputation": 0.3,
+            "Legacy": 0.2,
+        }
+    )
+    social_relationships: MutableMapping[str, float] = field(
+        default_factory=lambda: {
+            "Conciliation": 0.4,
+            "Paranoia": 0.3,
+            "Destruction": 0.3,
+        }
+    )
+    environmental: MutableMapping[str, float] = field(
+        default_factory=lambda: {
+            "Reclamation": 0.25,
+            "Order": 0.25,
+            "Curiosity": 0.25,
+            "Transcendence": 0.25,
+        }
+    )
     weights: MutableMapping[str, float] = field(
         default_factory=lambda: {
             "Survival": 0.6,
@@ -282,6 +483,94 @@ class DriveState:
         }
     )
 
+    def normalize(self) -> None:
+        for bucket in (
+            self.physiological,
+            self.material,
+            self.social_reputation,
+            self.social_relationships,
+            self.environmental,
+            self.weights,
+        ):
+            total = sum(bucket.values()) or 1.0
+            for key, value in bucket.items():
+                bucket[key] = max(0.0, value) / total
+
+    def debug_vector(self) -> Dict[str, float]:
+        debug: Dict[str, float] = {}
+        for bucket in (
+            self.physiological,
+            self.material,
+            self.social_reputation,
+            self.social_relationships,
+            self.environmental,
+        ):
+            debug.update(bucket)
+        return debug
+
+
+@dataclass(slots=True)
+class AffectState:
+    fear: float = 0.3
+    ambition: float = 0.4
+    loyalty: float = 0.5
+    curiosity: float = 0.4
+    stress: float = 0.3
+
+
+@dataclass(slots=True)
+class SkillState:
+    skill_id: str
+    rank: int = 1
+    xp: float = 0.0
+    xp_to_next: float = 100.0
+    last_used_tick: Optional[int] = None
+
+
+@dataclass(slots=True)
+class DecisionRecord:
+    tick: int
+    action: str
+    payload: Mapping[str, Any]
+    survival_score: float
+    long_term_score: float
+    risk_score: float
+    skill_success_prob: float
+    top_candidates: Sequence[Mapping[str, Any]] = ()
+
+
+@dataclass(slots=True)
+class KnownAgentState:
+    other_agent_id: str
+    affinity: float = 0.5
+    suspicion: float = 0.2
+    threat: float = 0.2
+    last_seen_tick: int = 0
+    faction: Optional[str] = None
+    role: Optional[str] = None
+
+
+@dataclass(slots=True)
+class KnownFacilityState:
+    facility_id: str
+    ward_id: str
+    perceived_safety: float = 0.5
+    perceived_usefulness: float = 0.5
+    last_visited_tick: int = 0
+    tags: Tuple[str, ...] = ()
+
+
+@dataclass(slots=True)
+class RumorDigest:
+    rumor_id: str
+    topic: str
+    credibility: float
+    times_heard: int
+    first_heard_tick: int
+    last_heard_tick: int
+    payload_summary: str
+    salience: float = 0.5
+
 
 @dataclass(slots=True)
 class AgentState:
@@ -289,8 +578,12 @@ class AgentState:
     name: str
     faction: str
     ward: str
+    role: Optional[str] = None
+    caste: Optional[str] = None
+    identity: IdentityProfile = field(default_factory=IdentityProfile)
     body: BodyState = field(default_factory=BodyState)
     suit: SuitState = field(default_factory=SuitState)
+    loadout: LoadoutState = field(default_factory=LoadoutState)
     affinities: MutableMapping[str, float] = field(
         default_factory=lambda: {
             "STR": 0.0,
@@ -312,7 +605,39 @@ class AgentState:
     social: SocialState = field(default_factory=SocialState)
     memory: MemoryState = field(default_factory=MemoryState)
     drives: DriveState = field(default_factory=DriveState)
+    affect: AffectState = field(default_factory=AffectState)
     techniques: List[str] = field(default_factory=lambda: ["Barter", "Observe", "Labor"])
+    skills: MutableMapping[str, SkillState] = field(default_factory=dict)
+    known_agents: MutableMapping[str, KnownAgentState] = field(default_factory=dict)
+    known_facilities: MutableMapping[str, KnownFacilityState] = field(default_factory=dict)
+    decision_trace: List[DecisionRecord] = field(default_factory=list)
+
+    def record_decision(
+        self,
+        *,
+        tick: int,
+        action: str,
+        payload: Mapping[str, Any],
+        survival_score: float,
+        long_term_score: float,
+        risk_score: float,
+        skill_success_prob: float,
+        top_candidates: Sequence[Mapping[str, Any]] = (),
+        history_limit: int = 25,
+    ) -> None:
+        entry = DecisionRecord(
+            tick=tick,
+            action=action,
+            payload=dict(payload),
+            survival_score=survival_score,
+            long_term_score=long_term_score,
+            risk_score=risk_score,
+            skill_success_prob=skill_success_prob,
+            top_candidates=tuple(dict(candidate) for candidate in top_candidates),
+        )
+        self.decision_trace.append(entry)
+        if len(self.decision_trace) > history_limit:
+            del self.decision_trace[:-history_limit]
 
 
 @dataclass(slots=True)
@@ -470,6 +795,7 @@ class WorldState:
     law_cases: List[Dict[str, object]] = field(default_factory=list)
     security_reports: List[Dict[str, object]] = field(default_factory=list)
     suit_service_ledger: SuitServiceLedger = field(default_factory=SuitServiceLedger)
+    admin_event_log: AdminEventLog = field(default_factory=AdminEventLog)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
