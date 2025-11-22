@@ -5,7 +5,7 @@ import pytest
 from dosadi.worldgen import WorldgenConfig, generate_world
 
 
-@pytest.mark.doc("D-WORLD-0002")
+@pytest.mark.doc("D-WORLD-0004")
 def test_ring_distribution_and_policy_matches_design():
     world = generate_world(WorldgenConfig())
     ring_counts = {label: 0 for label in ("inner", "middle", "outer")}
@@ -29,7 +29,7 @@ def test_ring_distribution_and_policy_matches_design():
     assert stress_by_ring["inner"] < stress_by_ring["middle"] < stress_by_ring["outer"]
 
 
-@pytest.mark.doc("D-WORLD-0002")
+@pytest.mark.doc("D-WORLD-0004")
 def test_route_network_contains_royal_spokes_and_smuggle_tunnels():
     cfg = WorldgenConfig()
     world = generate_world(cfg)
@@ -40,7 +40,7 @@ def test_route_network_contains_royal_spokes_and_smuggle_tunnels():
     assert {r.destination for r in royal_routes} >= set(inner_and_middle) - {"ward:1"}
 
 
-@pytest.mark.doc("D-WORLD-0002")
+@pytest.mark.doc("D-WORLD-0004")
 def test_faction_specialisations_cover_food_power_and_repair():
     world = generate_world(WorldgenConfig(seed=8128))
     required = {"food", "power", "suit"}

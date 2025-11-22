@@ -1,12 +1,16 @@
 ---
-title: Dosadi_Worldgen
-doc_id: D-WORLD-0002
+title: Worldgen
+doc_id: D-WORLD-0004
 version: 1.0.0
 status: stable
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-WORLD-0001
 ---
+> NOTE (2025-11-22): This document was originally D-WORLD-0002 (Dosadi_Worldgen).
+> The canonical ward attribute definitions now live in D-WORLD-0002_Ward_Attribute_Schema.
+> This file is retained as **worldgen procedure logic** and scenario guidance.
+
 # **Worldgen v1 — 36‑Ward Sandbox**
 
 Seeded generator for an initial playable Dosadi world consistent with Core Systems v2, Environment Dynamics v1, Governance & Law v1, Barrel Cascade v1, Agent Action API v1, and the Tick Loop.

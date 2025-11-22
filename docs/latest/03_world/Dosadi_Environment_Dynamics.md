@@ -6,7 +6,7 @@ status: stable
 owners: [cohayes]
 depends_on: 
 includes:
-  D-WORLD-0002  # Worldgen
+  D-WORLD-0004  # Worldgen
 last_updated: 2025-11-11
 ---
 # **Dosadi Environment Dynamics v1**
