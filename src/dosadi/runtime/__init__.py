@@ -1,5 +1,6 @@
 """Runtime primitives derived from the Simulation Timebase design."""
 
+from .ai_profiles import AI_PERSONALITIES, AiPersonality, Stance, get_ai_personality
 from .timebase import (
     CLEANUP,
     DAILY,
@@ -22,6 +23,8 @@ from .timebase import (
 )
 
 __all__ = [
+    "AI_PERSONALITIES",
+    "AiPersonality",
     "CLEANUP",
     "DAILY",
     "EVERY_TICK",
@@ -33,11 +36,13 @@ __all__ = [
     "SECONDS_PER_MINUTE",
     "SCHEDULES",
     "SOCIAL",
+    "Stance",
     "TICKS_PER_DAY",
     "TICKS_PER_HOUR",
     "TICKS_PER_MINUTE",
     "TICKS_PER_SECOND",
     "TRANSIT",
     "WEEKLY",
+    "get_ai_personality",
     "ticks_for",
 ]
