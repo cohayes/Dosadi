@@ -137,6 +137,7 @@ class CampaignState:
     phase: str
     phase_tick_started: int
     phase_history: List[CampaignPhaseHistory] = field(default_factory=list)
+    ci_stance: str = "balanced"
     global_stress_index: float = 0.25
     regime_legitimacy_index: float = 0.75
     fragmentation_index: float = 0.2
@@ -174,9 +175,10 @@ class CampaignState:
 
 
 @dataclass(slots=True)
-class ObjectiveStatus:
+class ObjectiveRuntimeState:
     objective: ObjectiveDefinition
-    status: str = "pending"
+    status_current: str = "on_track"
+    final_outcome: str = "unknown"
     message: Optional[str] = None
 
 
@@ -184,7 +186,7 @@ class ObjectiveStatus:
 class CampaignRunResult:
     scenario: ScenarioDefinition
     states: List[CampaignState]
-    objectives: List[ObjectiveStatus]
+    objectives: List[ObjectiveRuntimeState]
     events: Mapping[str, int]
 
 
@@ -206,8 +208,8 @@ class CampaignEngine:
             }),
             ci_states=seed_default_ci_states(scenario.id or "ward"),
         )
-        self.objectives: Dict[str, ObjectiveStatus] = {
-            obj.id: ObjectiveStatus(objective=obj) for obj in scenario.all_objectives()
+        self.objectives: Dict[str, ObjectiveRuntimeState] = {
+            obj.id: ObjectiveRuntimeState(objective=obj) for obj in scenario.all_objectives()
         }
         self.events: MutableMapping[str, int] = {}
         self._update_counterintelligence()
@@ -216,9 +218,18 @@ class CampaignEngine:
     def run(self, ticks: int) -> CampaignRunResult:
         history: List[CampaignState] = [self.state.snapshot()]
         for _ in range(ticks):
-            self._advance_tick()
-            history.append(self.state.snapshot())
-            self._evaluate_objectives()
+            history.append(self.step())
+        return self.build_result(history)
+
+    def step(self) -> CampaignState:
+        """Advance the simulation by a single tick and evaluate objectives."""
+
+        self._advance_tick()
+        self._evaluate_objectives()
+        return self.state.snapshot()
+
+    def build_result(self, history: List[CampaignState]) -> CampaignRunResult:
+        self._finalize_objectives()
         return CampaignRunResult(
             scenario=self.scenario,
             states=history,
@@ -231,16 +242,50 @@ class CampaignEngine:
     # ------------------------------------------------------------------
     def _advance_tick(self) -> None:
         self.state.tick += 1
-        self._update_indices()
         self._update_counterintelligence()
+        self._update_indices()
         self._update_security_summary()
         self._maybe_transition_phase()
 
     def _update_indices(self) -> None:
-        drift = 0.002 + 0.001 * ((self.state.tick % 5) / 5)
-        self.state.global_stress_index = min(1.0, self.state.global_stress_index + drift)
-        self.state.fragmentation_index = min(1.0, self.state.fragmentation_index + drift * 0.6)
-        self.state.regime_legitimacy_index = max(0.0, self.state.regime_legitimacy_index - drift * 0.4)
+        summary = self._signature_action_summary(self.state.ci_signatures)
+        modifiers = self._stance_modifiers(self.state.ci_stance)
+        infiltration_avg = (
+            sum(state.infiltration_risk for state in self.state.ci_states) / len(self.state.ci_states)
+            if self.state.ci_states
+            else 0.0
+        )
+
+        stress = self.state.global_stress_index
+        frag = self.state.fragmentation_index
+        legitimacy = self.state.regime_legitimacy_index
+
+        stress += 0.01 * modifiers["stress_scale"]
+        frag += 0.006 * modifiers["fragmentation_scale"]
+        legitimacy -= 0.004 * modifiers["legitimacy_scale"]
+
+        stress += 0.006 * infiltration_avg * modifiers["stress_scale"]
+        frag += 0.005 * infiltration_avg * modifiers["fragmentation_scale"]
+        legitimacy -= 0.005 * infiltration_avg * modifiers["legitimacy_scale"]
+
+        stress += summary["sting"] * 0.02 * modifiers["stress_scale"]
+        legitimacy -= summary["sting"] * 0.01 * modifiers["legitimacy_scale"]
+        frag += summary["sting"] * 0.005 * modifiers["fragmentation_scale"]
+
+        stress += summary["purge"] * 0.025 * modifiers["stress_scale"]
+        legitimacy -= summary["purge"] * 0.015 * modifiers["legitimacy_scale"]
+
+        infiltration_pressure = summary["monitor_only"] * 0.003 * modifiers["infiltration_pressure_scale"]
+        infiltration_relief = (summary["sting"] * 0.006 + summary["purge"] * 0.008) * modifiers[
+            "infiltration_suppression_scale"
+        ]
+        infiltration_drift = infiltration_pressure - infiltration_relief
+        frag += infiltration_drift * 0.5
+        legitimacy -= infiltration_drift * 0.4
+
+        self.state.global_stress_index = _clamp01(stress)
+        self.state.fragmentation_index = _clamp01(frag)
+        self.state.regime_legitimacy_index = _clamp01(legitimacy)
         self.state.max_global_stress_index = max(self.state.max_global_stress_index, self.state.global_stress_index)
         self.state.max_fragmentation_index = max(self.state.max_fragmentation_index, self.state.fragmentation_index)
 
@@ -267,13 +312,73 @@ class CampaignEngine:
             global_stress=self.state.global_stress_index, purge_campaigns=purge_campaigns
         )
         self.state.ci_posture = posture
+        stance = self.state.ci_stance
+        infiltration_scale = 1.0
+        suspicion_delta = 0.0
+        if stance == "cautious":
+            infiltration_scale = 1.1
+            suspicion_delta = -0.02
+        elif stance == "aggressive":
+            infiltration_scale = 0.9
+            suspicion_delta = 0.03
         for ci_state in self.state.ci_states:
             ci_state.recompute(
                 posture,
                 global_stress=self.state.global_stress_index,
                 fragmentation=self.state.fragmentation_index,
             )
+            ci_state.infiltration_risk = min(1.0, max(0.0, ci_state.infiltration_risk * infiltration_scale))
+            ci_state.suspicion_score = min(1.0, max(0.0, ci_state.suspicion_score + suspicion_delta))
         self.state.ci_signatures = assess_ci_signatures(self.state.ci_states, posture)
+        self._apply_signature_infiltration_pressure()
+
+    def _signature_action_summary(self, signatures: Iterable[SignatureAssessment]) -> dict[str, int]:
+        summary = {"sting": 0, "monitor_only": 0, "purge": 0}
+        for signature in signatures:
+            actions = set(signature.recommended_actions)
+            if "sting" in actions:
+                summary["sting"] += 1
+            if "purge_recommendation" in actions:
+                summary["purge"] += 1
+            if actions == {"monitor"}:
+                summary["monitor_only"] += 1
+        return summary
+
+    def _stance_modifiers(self, stance: str) -> dict[str, float]:
+        if stance == "cautious":
+            return {
+                "stress_scale": 0.5,
+                "legitimacy_scale": 0.7,
+                "fragmentation_scale": 0.9,
+                "infiltration_pressure_scale": 1.3,
+                "infiltration_suppression_scale": 0.7,
+            }
+        if stance == "aggressive":
+            return {
+                "stress_scale": 1.5,
+                "legitimacy_scale": 1.2,
+                "fragmentation_scale": 1.1,
+                "infiltration_pressure_scale": 0.7,
+                "infiltration_suppression_scale": 1.4,
+            }
+        return {
+            "stress_scale": 1.0,
+            "legitimacy_scale": 1.0,
+            "fragmentation_scale": 1.0,
+            "infiltration_pressure_scale": 1.0,
+            "infiltration_suppression_scale": 1.0,
+        }
+
+    def _apply_signature_infiltration_pressure(self) -> None:
+        summary = self._signature_action_summary(self.state.ci_signatures)
+        modifiers = self._stance_modifiers(self.state.ci_stance)
+
+        pressure = 0.004 * summary["monitor_only"] * modifiers["infiltration_pressure_scale"]
+        relief = (0.01 * summary["sting"] + 0.012 * summary["purge"]) * modifiers["infiltration_suppression_scale"]
+        delta = pressure - relief
+
+        for ci_state in self.state.ci_states:
+            ci_state.infiltration_risk = _clamp01(ci_state.infiltration_risk + delta)
 
     def _update_security_summary(self) -> None:
         self.state.security_summary = summarize_ward_security(
@@ -290,17 +395,31 @@ class CampaignEngine:
     # ------------------------------------------------------------------
     def _evaluate_objectives(self) -> None:
         for status in self.objectives.values():
-            if status.status in {"achieved", "failed"}:
+            if status.status_current == "failed":
                 continue
             failure = status.objective.failure_condition
             success = status.objective.success_condition
             if failure and self._condition_met(failure):
-                status.status = "failed"
+                status.status_current = "failed"
                 status.message = "failure condition met"
                 continue
             if success and self._condition_met(success):
-                status.status = "achieved"
-                status.message = "success condition met"
+                status.status_current = "on_track"
+                status.message = "constraints satisfied"
+            elif status.status_current != "failed":
+                status.status_current = "at_risk"
+                status.message = status.message or "constraints not yet satisfied"
+
+    def _finalize_objectives(self) -> None:
+        for status in self.objectives.values():
+            if status.status_current == "failed":
+                status.final_outcome = "failure"
+                continue
+            success = status.objective.success_condition
+            if success and self._condition_met(success):
+                status.final_outcome = "success"
+            else:
+                status.final_outcome = "failure"
 
     def _condition_met(self, condition: ObjectiveCondition) -> bool:
         if condition.kind == "state":
@@ -347,12 +466,16 @@ def load_scenario_definition(path: Path) -> ScenarioDefinition:
     return ScenarioDefinition.from_mapping(document.content)
 
 
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
 __all__ = [
     "CampaignEngine",
     "CampaignRunResult",
     "CampaignState",
     "ObjectiveDefinition",
-    "ObjectiveStatus",
+    "ObjectiveRuntimeState",
     "ScenarioDefinition",
     "load_scenario_definition",
 ]

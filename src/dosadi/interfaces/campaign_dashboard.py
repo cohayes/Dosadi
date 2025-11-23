@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Mapping, Sequence
 
-from ..runtime.campaign_engine import CampaignRunResult, CampaignState, ObjectiveStatus
+from ..runtime.campaign_engine import CampaignRunResult, CampaignState
 from .cli_components import ProgressBar, Section, Table, TableColumn
 
 
@@ -25,6 +25,9 @@ class CampaignDashboardCLI:
         ci_section = self._render_counterintelligence(result)
         if ci_section:
             sections.insert(1, ci_section)
+        outcome_section = self._render_objective_outcomes(result)
+        if outcome_section:
+            sections.append(outcome_section)
         return "\n\n".join(section.render() for section in sections)
 
     def _render_state(self, result: CampaignRunResult) -> Section:
@@ -55,12 +58,27 @@ class CampaignDashboardCLI:
             TableColumn("Status", 10),
         ]
         rows = [
-            [status.objective.id, status.objective.label, status.objective.priority, status.status]
+            [status.objective.id, status.objective.label, status.objective.priority, status.status_current]
             for status in objectives
         ]
         table = Table(columns, rows)
         subtitle = f"Objectives · {result.scenario.id}" if result.scenario.id else "Objectives"
         return Section(subtitle, [table.render()], width=self.width)
+
+    def _render_objective_outcomes(self, result: CampaignRunResult) -> Section | None:
+        if not result.objectives:
+            return None
+        rows = [
+            [state.objective.id, state.objective.label, state.final_outcome]
+            for state in result.objectives
+        ]
+        columns = [
+            TableColumn("Objective", 22),
+            TableColumn("Label", 28),
+            TableColumn("Outcome", 12),
+        ]
+        table = Table(columns, rows)
+        return Section("Objective Outcomes", [table.render()], width=self.width)
 
     def _render_security_summary(self, state: CampaignState) -> Section | None:
         summary = state.security_summary
@@ -102,6 +120,7 @@ class CampaignDashboardCLI:
         posture = state.ci_posture
         rows = [
             ["Posture", f"Level {posture.level} ({posture.driver})"],
+            ["Stance", state.ci_stance],
             ["Assets", ", ".join(f"{k}:{v}" for k, v in posture.active_assets.items())],
         ]
         top_states = sorted(state.ci_states, key=lambda s: s.infiltration_risk, reverse=True)[:3]
