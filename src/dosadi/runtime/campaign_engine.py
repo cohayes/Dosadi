@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field, replace
+from enum import Enum
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
+from .ai_profiles import AiPersonality
 from .yaml_loader import ParsedDocument, SimpleYAMLError
 from ..security.counterintelligence import CIPosture, CIState, seed_default_ci_states
 from ..security.security_dashboard import SignatureAssessment, WardSecuritySummary, assess_ci_signatures, summarize_ward_security
@@ -190,10 +192,46 @@ class CampaignRunResult:
     events: Mapping[str, int]
 
 
+class DukalDecision(Enum):
+    ACCEPT_CRACKDOWN = "accept_crackdown"
+    ACCEPT_FRAGMENTATION = "accept_fragmentation"
+    SEEK_RESTRAINT = "seek_restraint"
+
+
+def ai_duke_decide_campaign_path(
+    personality: AiPersonality,
+    stress: float,
+    fragmentation: float,
+    legitimacy: float,
+) -> DukalDecision:
+    """Pick a ducal campaign direction based on current pressures."""
+
+    high_control = personality.weight_control >= 0.65
+    high_paranoia = personality.paranoia >= 0.6
+    high_legitimacy = personality.weight_legitimacy >= 0.6
+    low_survival = personality.weight_survival <= 0.45
+    economy_focus = personality.weight_economy >= 0.65
+    legitimacy_stable = legitimacy >= 0.45
+
+    if fragmentation >= 0.55 and low_survival and economy_focus:
+        return DukalDecision.ACCEPT_FRAGMENTATION
+
+    if stress >= personality.crackdown_threshold and high_control and high_paranoia:
+        return DukalDecision.ACCEPT_CRACKDOWN
+
+    if high_legitimacy and personality.paranoia < 0.55 and (legitimacy_stable or stress < 0.85):
+        return DukalDecision.SEEK_RESTRAINT
+
+    if stress >= 0.75 and (high_control or high_paranoia):
+        return DukalDecision.ACCEPT_CRACKDOWN
+
+    return DukalDecision.SEEK_RESTRAINT
+
+
 class CampaignEngine:
     """Tick-level simulator that keeps coarse campaign state."""
 
-    def __init__(self, scenario: ScenarioDefinition):
+    def __init__(self, scenario: ScenarioDefinition, ai_duke_personality: AiPersonality | None = None):
         self.scenario = scenario
         self.state = CampaignState(
             tick=scenario.starting_tick,
@@ -212,6 +250,7 @@ class CampaignEngine:
             obj.id: ObjectiveRuntimeState(objective=obj) for obj in scenario.all_objectives()
         }
         self.events: MutableMapping[str, int] = {}
+        self.duke_ai_personality = ai_duke_personality
         self._update_counterintelligence()
         self._update_security_summary()
 
@@ -292,13 +331,33 @@ class CampaignEngine:
     def _maybe_transition_phase(self) -> None:
         stress = self.state.global_stress_index
         frag = self.state.fragmentation_index
+        legitimacy = self.state.regime_legitimacy_index
         current = self.state.phase
-        if stress > 0.8 and current not in {"HARD_CRACKDOWN", "OPEN_CONFLICT"}:
+        crackdown_threshold = 0.8
+        fragmentation_threshold = 0.6
+
+        if current == "RUMBLING_UNREST" and self.duke_ai_personality:
+            duke_choice = ai_duke_decide_campaign_path(
+                self.duke_ai_personality,
+                stress=stress,
+                fragmentation=frag,
+                legitimacy=legitimacy,
+            )
+            print(f"[Tick {self.state.tick}] Duke AI ({self.duke_ai_personality.id}) chooses {duke_choice.value}")
+            if duke_choice == DukalDecision.ACCEPT_CRACKDOWN:
+                crackdown_threshold = 0.72
+            elif duke_choice == DukalDecision.ACCEPT_FRAGMENTATION:
+                fragmentation_threshold = 0.5
+            elif duke_choice == DukalDecision.SEEK_RESTRAINT:
+                crackdown_threshold = 0.9
+                fragmentation_threshold = 0.7
+
+        if stress > crackdown_threshold and current not in {"HARD_CRACKDOWN", "OPEN_CONFLICT"}:
             self._record_event("purge_campaign_starts")
             self.state.transition_phase("HARD_CRACKDOWN", tick=self.state.tick)
         elif stress > 0.65 and current == "STABLE_CONTROL":
             self.state.transition_phase("RUMBLING_UNREST", tick=self.state.tick)
-        elif frag > 0.6 and current not in {"FRAGMENTED_REGIME", "OPEN_CONFLICT"}:
+        elif frag > fragmentation_threshold and current not in {"FRAGMENTED_REGIME", "OPEN_CONFLICT"}:
             self.state.transition_phase("FRAGMENTED_REGIME", tick=self.state.tick)
 
     def _record_event(self, name: str) -> None:
