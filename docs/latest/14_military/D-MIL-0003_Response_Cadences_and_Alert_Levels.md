@@ -10,7 +10,7 @@ depends_on:
   - D-WORLD-0002          # Ward_Attribute_Schema
   - D-MIL-0001            # Force_Types_and_Infrastructure
   - D-IND-0002            # Industry_Suitability_and_Evolution
-  - D-ECON-0001           # Logistics_Corridors_and_Safehouses
+  - D-ECON-0001           # Ward_Resource_and_Water_Economy
 ---
 
 # 09_military · Response Cadences and Alert Levels (D-MIL-0003)

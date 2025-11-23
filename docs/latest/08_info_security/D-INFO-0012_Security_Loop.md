@@ -1,11 +1,11 @@
 ---
-title: Dosadi_Security_Loop
-doc_id: D-INFOSEC-0004
+title: Security_Loop
+doc_id: D-INFO-0012
 version: 1.0.0
 status: stable
 owners: [cohayes]
 last_updated: 2025-11-11
-parent: D-INFOSEC-0001
+parent: D-INFO-0001
 ---
 # **Security Loop v1**
 

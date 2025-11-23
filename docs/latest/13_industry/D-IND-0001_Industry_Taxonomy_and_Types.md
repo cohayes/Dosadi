@@ -8,9 +8,9 @@ last_updated: 2025-11-21
 depends_on:
   - D-WORLD-0001        # Wards & environment overview
   - D-RUNTIME-0001      # Simulation_Timebase
-  - D-ECON-0001         # Logistics_Corridors_and_Safehouses
-  - D-ECON-0002         # Black_Market_Networks
-  - D-ECON-0003         # Food_Waste_and_Metabolism
+  - D-ECON-0001         # Ward_Resource_and_Water_Economy
+  - D-ECON-0002         # Dosadi_Market_Microstructure
+  - D-HEALTH-0002       # Food_Waste_and_Metabolism
 ---
 
 # 13_industry · Industry Taxonomy and Types (D-IND-0001)

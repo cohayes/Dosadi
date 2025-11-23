@@ -1,5 +1,5 @@
 ---
-title: Dosadi_Clinic_and_Health
+title: Clinic_and_Health
 doc_id: D-HEALTH-0001
 version: 1.1.0
 status: stable

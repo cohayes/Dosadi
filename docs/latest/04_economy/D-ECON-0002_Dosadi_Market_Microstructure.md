@@ -17,12 +17,14 @@ parent: D-ECON-0001   # Ward_Resource_and_Water_Economy
 This document upgrades the earlier Market Microstructure v1 to integrate with:
 
 - D-ECON-0001_Ward_Resource_and_Water_Economy
-- D-ECON-0003_Credits_and_FX (planned/placeholder)
-- D-ECON-0004_Work_and_Labor_Markets (planned/placeholder)
+- D-ECON-0003_Credits_and_FX 
+- D-ECON-0004_Black_Market_Networks
 - D-ECON-0005_Food_and_Rations_Flow (planned/placeholder)
 - D-ECON-0006_Maintenance_Fault_Loop (planned/placeholder)
+- D-ECON-0007_Work_Rest_Scheduling
 - D-ECON-0008_Production_and_Fabrication (planned/placeholder)
 - D-ECON-0009_Financial_Ledgers_and_Taxation (planned/placeholder)
+- D-ECON-0010_Work_and_Labor_Markets
 - D-INFO-0001_Telemetry_and_Audit_Infrastructure
 - D-INFO-0002_Espionage_Branch
 - D-INFO-0003_Information_Flows_and_Report_Credibility

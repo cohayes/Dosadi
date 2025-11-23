@@ -1,8 +1,8 @@
 ---
-title: Dosadi_Shared_Variable_Registry
+title: Shared_Variable_Registry
 doc_id: D-RUNTIME-0003
 version: 1.0.0
-status: stable
+status: draft
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-RUNTIME-0001

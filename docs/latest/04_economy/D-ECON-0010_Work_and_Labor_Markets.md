@@ -1,6 +1,6 @@
 ---
-title: Dosadi_Work_and_Labor_Markets
-doc_id: D-ECON-0004
+title: Work_and_Labor_Markets
+doc_id: D-ECON-0010
 version: 1.0.0
 status: stable
 owners: [cohayes]

@@ -1,6 +1,6 @@
 ---
 title: Rumor_Systems
-doc_id: D-INFOSEC-0001
+doc_id: D-INFO-0010
 version: 1.2.0
 status: draft
 owners: [cohayes]
@@ -8,9 +8,6 @@ last_updated: 2025-11-11
 depends_on:
   - D-RUNTIME-0001   # Simulation runtime (tick phases, scheduler)
   - D-AGENT-0001     # Agent Core (memory, perception)
-  - D-INFOSEC-0002   # Event & Message Taxonomy (for schema references)
-includes:
-  - D-INFOSEC-0003   # Stress Scenarios catalog (optional if split out later)
 ---
 
 # Overview

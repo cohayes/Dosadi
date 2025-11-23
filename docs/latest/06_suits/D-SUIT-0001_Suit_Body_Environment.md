@@ -1,5 +1,5 @@
 ---
-title: Dosadi_Suit_Body_Environment
+title: Suit_Body_Environment
 doc_id: D-SUIT-0001
 version: 1.0.0
 status: stable

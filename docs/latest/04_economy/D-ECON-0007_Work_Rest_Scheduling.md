@@ -1,5 +1,5 @@
 ---
-title: Dosadi_Work_Rest_Scheduling
+title: Work_Rest_Scheduling
 doc_id: D-ECON-0007
 version: 1.0.0
 status: stable

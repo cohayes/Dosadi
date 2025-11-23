@@ -1,8 +1,8 @@
 ---
-title: Dosadi_Factional_and_Governance
+title: Factional_and_Governance
 doc_id: D-LAW-0004
 version: 1.0.0
-status: stable
+status: draft
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-LAW-0001

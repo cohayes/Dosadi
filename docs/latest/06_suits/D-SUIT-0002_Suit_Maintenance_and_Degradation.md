@@ -1,5 +1,5 @@
 ---
-title: Dosadi_Suit_Maintenance_and_Degradation
+title: Suit_Maintenance_and_Degradation
 doc_id: D-SUIT-0002
 version: 1.0.0
 status: stable

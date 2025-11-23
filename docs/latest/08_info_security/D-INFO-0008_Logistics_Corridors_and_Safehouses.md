@@ -1,11 +1,11 @@
 ---
-title: Dosadi_Logistics_Corridors_and_Safehouses
-doc_id: D-INFOSEC-0008
+title: Logistics_Corridors_and_Safehouses
+doc_id: D-INFO-0008
 version: 1.0.0
 status: draft
 owners: [cohayes]
 last_updated: 2025-11-13
-parent: D-INFOSEC-0001
+parent: D-INFO-0001
 ---
 # **Logistics Corridors & Safehouses v1 (Routes, Lanes, Staging, and Loss Models)**
 

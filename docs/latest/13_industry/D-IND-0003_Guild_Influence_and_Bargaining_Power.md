@@ -9,7 +9,7 @@ depends_on:
   - D-WORLD-0002          # Ward_Attribute_Schema
   - D-IND-0001            # Industry_Taxonomy_and_Types
   - D-IND-0002            # Industry_Suitability_and_Evolution
-  - D-ECON-0001           # Logistics_Corridors_and_Safehouses
+  - D-ECON-0001           # Ward_Resource_and_Water_Economy
   - D-MIL-0001            # Force_Types_and_Infrastructure
   - D-MIL-0003            # Response_Cadences_and_Alert_Levels
   - D-AGENT-0101          # Occupations_and_Industrial_Roles

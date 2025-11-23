@@ -1,8 +1,8 @@
 ---
-title: Dosadi_Succession_Laws
+title: Succession_Laws
 doc_id: D-LAW-0005
 version: 1.1.0
-status: stable
+status: draft
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-LAW-0001

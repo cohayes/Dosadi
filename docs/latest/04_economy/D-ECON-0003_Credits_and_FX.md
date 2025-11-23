@@ -12,7 +12,7 @@ depends_on:
   - D-INFO-0001   # Telemetry_and_Audit_Infrastructure
   - D-INFO-0003   # Information_Flows_and_Report_Credibility
   - D-INFO-0004   # Scholars_and_Clerks_Branch
-  - D-SOC-0003    # Logistics_Corridors_and_Safehouses (placeholder)
+  - D-INFO-0008   # Logistics_Corridors_and_Safehouses (placeholder)
 ---
 
 # Credits & FX

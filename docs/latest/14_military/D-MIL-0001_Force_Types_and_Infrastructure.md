@@ -11,8 +11,8 @@ depends_on:
   - D-RUNTIME-0001        # Simulation_Timebase
   - D-IND-0001            # Industry_Taxonomy_and_Types
   - D-IND-0002            # Industry_Suitability_and_Evolution
-  - D-ECON-0001           # Logistics_Corridors_and_Safehouses
-  - D-ECON-0002           # Black_Market_Networks
+  - D-ECON-0001           # Ward_Resource_and_Water_Economy
+  - D-ECON-0002           # Dosadi_Market_Microstructure
   - D-AGENT-0001          # Core_Agent_Spec (placeholder)
 ---
 

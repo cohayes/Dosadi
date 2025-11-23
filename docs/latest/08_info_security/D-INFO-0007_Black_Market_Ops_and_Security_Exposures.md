@@ -1,11 +1,11 @@
 ---
-title: Dosadi_Black_Market_Networks
-doc_id: D-INFOSEC-0007
+title: Black_Market_Ops_and_Security_Exposures
+doc_id: D-INFO-0007
 version: 1.0.0
 status: draft
 owners: [cohayes]
 last_updated: 2025-11-13
-parent: D-INFOSEC-0001
+parent: D-INFO-0001
 ---
 # **Black‑Market Networks v1 (Smugglers, Brokers, Dark Escrow, and Laundering)**
 

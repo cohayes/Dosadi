@@ -12,7 +12,7 @@ depends_on:
   - D-WORLD-0004   # Civic_Facility_Microdynamics_Soup_Kitchens_and_Bunkhouses
   - D-INFO-0001    # Telemetry_and_Audit_Infrastructure
   - D-INFO-0004    # Scholars_and_Clerks_Branch
-  - D-SOC-0002     # Food_Waste_and_Metabolism (placeholder)
+  - D-HEALTH-0002  # Food_Waste_and_Metabolism
   - D-AGENT-0001   # Human_Agent_Biology_and_Drives (placeholder)
 ---
 

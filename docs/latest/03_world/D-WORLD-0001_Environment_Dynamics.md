@@ -1,5 +1,5 @@
 ---
-title: Dosadi_Environment_Dynamics
+title: Environment_Dynamics
 doc_id: D-WORLD-0001
 version: 1.0.0
 status: stable

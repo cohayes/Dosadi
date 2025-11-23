@@ -7,7 +7,7 @@ owners: [cohayes]
 last_updated: 2025-11-17
 depends_on:
   - D-WORLD-0003  # Ward_Branch_Hierarchies
-  - D-ECON-0001   # Dosadi_Economic_Systems
+  - D-ECON-0001   # Ward_Resource_and_Water_Economy
   - D-ECON-0003   # Credits_and_FX
   - D-ECON-0005   # Food_and_Rations_Flow
   - D-ECON-0006   # Maintenance_Fault_Loop

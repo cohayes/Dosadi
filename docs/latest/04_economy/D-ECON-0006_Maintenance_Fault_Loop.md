@@ -1,5 +1,5 @@
 ---
-title: Dosadi_Maintenance_Fault_Loop
+title: Maintenance_Fault_Loop
 doc_id: D-ECON-0006
 version: 1.0.0
 status: stable
