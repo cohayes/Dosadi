@@ -18,6 +18,28 @@ The scenario harness mirrors `docs/latest/11_scenarios/Dosadi_Scenario_Sting_Wav
    ```
    You can override config fields inline, e.g. `--config sting_injection_rate=0.12 --config world_seed=99`.
 
+### Quiet Season sandbox
+
+To exercise the minimal campaign engine against the documented Quiet Season
+scenario, run:
+
+```bash
+python -m dosadi.runtime.quiet_season_cli --ticks 12
+```
+
+The CLI will load `docs/latest/11_scenarios/S-0001_Pre_Sting_Quiet_Season.yaml`,
+advance the coarse campaign state for the requested ticks, and print a compact
+dashboard showing the current phase, objective statuses, a security summary
+derived from the INFO dashboards doc (D-INFO-0014), and a CI posture slice plus
+signature assessments derived from the counterintelligence doc set (D-MIL-0108,
+D-INFO-0009).  Add `--interactive-ci` to be prompted every few ticks to adjust
+the CI stance (cautious/balanced/aggressive) and see its effect on stress and
+infiltration risk in the dashboard output:
+
+```bash
+python -m dosadi.runtime.quiet_season_cli --ticks 12 --interactive-ci --ci-prompt-interval 4
+```
+
 ### Notebook / Jupyter quickstart
 
 ```python
