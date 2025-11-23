@@ -1,0 +1,107 @@
+ScenarioDefinition:
+  id: "pre_sting_quiet_season"
+  name: "Pre-Sting Quiet Season"
+  description: >
+    An Espionage Branch analyst cell tries to keep Dosadi from tipping into
+    premature crackdown or fragmentation during the last 'quiet' season
+    before the Sting Wave era.
+
+  starting_campaign_phase: "STABLE_CONTROL"
+  starting_tick: 0
+  duration_limit_ticks: null
+  starting_state_ref: null
+
+  world_overrides:
+    ward_overrides: []
+
+  role_configs:
+    - role_id: "espionage_cell"
+      actor_type: "espionage_branch"
+      visibility_profile: "espionage_view"
+      control_profile: "espionage_control"
+      ai_or_player: "player"
+      ai_personality_ref: null
+
+  objectives:
+    primary:
+      - id: "delay_crackdown"
+        label: "Delay Hard Crackdown"
+        type: "state"
+        success_condition:
+          kind: "state"
+          constraints:
+            campaign_phase_not_in:
+              - "HARD_CRACKDOWN"
+              - "OPEN_CONFLICT"
+            max_global_stress_index: 0.6
+        failure_condition: {{}}
+        priority: "primary"
+        scoring_weight: 1.0
+
+      - id: "limit_fragmentation"
+        label: "Limit Fragmentation"
+        type: "state"
+        success_condition:
+          kind: "state"
+          constraints:
+            max_fragmentation_index: 0.5
+        failure_condition: {{}}
+        priority: "primary"
+        scoring_weight: 0.8
+
+      - id: "constrain_purges"
+        label: "Constrain Purge Intensity"
+        type: "event"
+        success_condition:
+          kind: "event"
+          constraints:
+            max_events:
+              purge_campaign_starts: 2
+        failure_condition: {{}}
+        priority: "primary"
+        scoring_weight: 0.7
+
+    secondary:
+      - id: "resolve_guild_action_politically"
+        label: "Resolve a Guild Action Without Purge"
+        type: "event"
+        success_condition:
+          kind: "event"
+          constraints:
+            required_events:
+              - "guild_strike_resolved_without_purge"
+        failure_condition: {{}}
+        priority: "secondary"
+        scoring_weight: 0.4
+
+      - id: "neutralize_suspicious_corridor"
+        label: "Neutralize a Suspicious Corridor"
+        type: "event"
+        success_condition:
+          kind: "event"
+          constraints:
+            required_events:
+              - "protected_corridor_exposed_or_disrupted"
+        failure_condition: {{}}
+        priority: "secondary"
+        scoring_weight: 0.3
+
+    forbidden:
+      - id: "no_open_conflict"
+        label: "Avoid Open Conflict"
+        type: "state"
+        success_condition: {{}}
+        failure_condition:
+          kind: "state"
+          constraints:
+            campaign_phase_in:
+              - "OPEN_CONFLICT"
+        priority: "primary"
+        scoring_weight: 1.0
+
+  special_rules:
+    trigger_tuning_ref: "pre_sting_quiet_tuning"
+    hard_constraints:
+      - "no_global_martial_law_declaration"
+      - "no_mass_purge_at_start"
+    scripted_events_ref: null
