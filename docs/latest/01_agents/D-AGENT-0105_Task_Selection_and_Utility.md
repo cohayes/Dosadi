@@ -2,7 +2,7 @@
 title: Agent_Task_Selection_and_Utility
 doc_id: D-AGENT-0105
 version: 1.0.0
-status: draft
+status: legacy_idea
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-AGENT-0001

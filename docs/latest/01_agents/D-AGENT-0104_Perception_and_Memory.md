@@ -2,7 +2,7 @@
 title: Agent_Perception_and_Memory
 doc_id: D-AGENT-0104
 version: 1.0.0
-status: draft
+status: legacy_idea
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-AGENT-0001

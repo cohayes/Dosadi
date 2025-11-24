@@ -2,7 +2,7 @@
 title: Agent_Action_API
 doc_id: D-AGENT-0102
 version: 1.0.0
-status: draft
+status: legacy_idea
 owners: [cohayes]
 last_updated: 2025-11-11
 parent: D-AGENT-0001

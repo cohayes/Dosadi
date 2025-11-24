@@ -2,7 +2,7 @@
 title: Agents
 doc_id: D-AGENT-0901
 version: 1.0.0
-status: draft
+status: legacy_idea
 owners: [cohayes]
 depends_on: [D-RUNTIME-0001]
 includes:
