@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 from typing import Dict, List, Tuple
 
 from dosadi.agents.core import AgentState, initialize_agents_for_founding_wakeup
+from dosadi.agents.groups import create_pod_group
 from ...state import FactionState, WorldState
 
 
@@ -77,15 +78,20 @@ BASE_EDGES: Tuple[LocationEdge, ...] = (
 )
 
 
-def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> Tuple[WorldState, List[AgentState], List[Dict[str, object]]]:
+def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     """Construct the Founding Wakeup MVP topology and initial population."""
 
     world = WorldState(seed=seed)
+    world.rng.seed(seed)
+    topology_nodes = [asdict(node) for node in BASE_NODES]
+    topology_edges = [asdict(edge) for edge in BASE_EDGES]
     world.policy["topology"] = {
-        "nodes": [asdict(node) for node in BASE_NODES],
-        "edges": [asdict(edge) for edge in BASE_EDGES],
+        "nodes": topology_nodes,
+        "edges": topology_edges,
         "id": "founding_wakeup_mvp",
     }
+    world.nodes = {node.id: node for node in BASE_NODES}
+    world.edges = {edge.id: edge for edge in BASE_EDGES}
 
     colonist_faction = FactionState(
         id="faction:colonists",
@@ -102,8 +108,16 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> Tuple[WorldState
         colonist_faction.members.append(agent.id)
         world.register_agent(agent)
 
-    groups: List[Dict[str, object]] = []
-    return world, agents, groups
+    # Create pod groups based on initial occupancy
+    pod_members: Dict[str, List[str]] = {pid: [] for pid in pod_ids}
+    for agent in agents:
+        pod_members.setdefault(agent.location_id, []).append(agent.agent_id)
+
+    for pod_id, members in pod_members.items():
+        group = create_pod_group(pod_location_id=pod_id, member_ids=members, tick=world.tick)
+        world.groups.append(group)
+
+    return world
 
 
 __all__ = ["generate_founding_wakeup_mvp", "LocationNode", "LocationEdge"]

@@ -11,6 +11,8 @@ import random
 from dosadi.systems.protocols import (
     ProtocolRegistry,
     compute_effective_hazard_prob,
+    create_movement_protocol_from_goal,
+    activate_protocol,
     record_protocol_read,
 )
 
@@ -391,7 +393,20 @@ def create_agent(agent_id: str, name: str, pod_location_id: str, rng: Any) -> Ag
 
 def _topology_from_world(world: Any) -> Dict[str, Any]:
     policy = getattr(world, "policy", {}) or {}
-    return policy.get("topology", {}) if isinstance(policy, dict) else {}
+    if isinstance(policy, dict) and policy.get("topology"):
+        return policy.get("topology", {})
+
+    nodes = getattr(world, "nodes", None)
+    edges = getattr(world, "edges", None)
+    if nodes or edges:
+        node_values = list(nodes.values()) if isinstance(nodes, dict) else []
+        edge_values = list(edges.values()) if isinstance(edges, dict) else []
+        return {
+            "nodes": [n if isinstance(n, dict) else n.__dict__ for n in node_values],
+            "edges": [e if isinstance(e, dict) else e.__dict__ for e in edge_values],
+        }
+
+    return {}
 
 
 def _build_neighbors(topology: Dict[str, Any]) -> Dict[str, List[str]]:
@@ -420,6 +435,15 @@ def _edge_hazard_probability(current: str, target: str, topology: Dict[str, Any]
         if {a, b} == {current, target}:
             return float(edge.get("base_hazard_prob", 0.0))
     return 0.0
+
+
+def _edge_lookup(current: str, target: str, topology: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    for edge in topology.get("edges", []) or []:
+        a = edge.get("a")
+        b = edge.get("b")
+        if {a, b} == {current, target}:
+            return edge
+    return None
 
 
 def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
@@ -489,7 +513,7 @@ def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
 def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: int) -> Sequence[Episode]:
     """Apply the chosen action, logging episodes and updating beliefs."""
 
-    rng = random.Random((getattr(world, "seed", 0) or 0) + tick)
+    rng = getattr(world, "rng", None) or random.Random(getattr(world, "seed", 0))
     topology = _topology_from_world(world)
     episodes: List[Episode] = []
 
@@ -548,7 +572,8 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
 
     if action.verb == "MOVE":
         target = action.target_location_id or agent.location_id
-        base_hazard_prob = _edge_hazard_probability(agent.location_id, target, topology)
+        edge = _edge_lookup(agent.location_id, target, topology)
+        base_hazard_prob = 0.0 if edge is None else float(edge.get("base_hazard_prob", 0.0))
         # TODO: support explicit group travel and compliance decisions in movement selection
         group_size = 1
         registry: Optional[ProtocolRegistry] = getattr(world, "protocols", None)
@@ -559,6 +584,12 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
             group_size=group_size,
             registry=registry,
         )
+        edge_id = None
+        if edge:
+            edge_id = edge.get("id") or f"edge:{edge.get('a')}:{edge.get('b')}"
+        else:
+            edge_id = f"edge:{agent.location_id}:{target}"
+
         agent.location_id = target
         log_episode(
             event_type="MOVEMENT",
@@ -569,8 +600,14 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
             arousal=0.2,
             perceived_risk=hazard_prob,
         )
+        traversals_key = f"traversals:{edge_id}"
+        if hasattr(world, "metrics"):
+            world.metrics[traversals_key] = world.metrics.get(traversals_key, 0.0) + 1.0
         if rng.random() < hazard_prob:
             agent.physical.health = max(0.0, agent.physical.health - 0.1)
+            if hasattr(world, "metrics"):
+                incidents_key = f"incidents:{edge_id}"
+                world.metrics[incidents_key] = world.metrics.get(incidents_key, 0.0) + 1.0
             log_episode(
                 event_type="HAZARD_INCIDENT",
                 summary=f"Encountered hazard while moving to {target}",
@@ -615,6 +652,33 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
                 tags=["protocol"],
                 valence=0.05,
                 arousal=0.2,
+            )
+    elif action.verb == "AUTHOR_PROTOCOL":
+        registry: Optional[ProtocolRegistry] = getattr(world, "protocols", None)
+        corridors = action.metadata.get("corridor_ids", []) if action.metadata else []
+        if goal_ref:
+            corridors = goal_ref.target.get("corridor_ids", corridors)
+        council_group_id = None
+        if goal_ref:
+            council_group_id = goal_ref.target.get("council_group_id")
+        if registry and goal_ref:
+            protocol = create_movement_protocol_from_goal(
+                council_group_id=council_group_id or "group:council:alpha",
+                scribe_agent_id=agent.agent_id,
+                group_goal=goal_ref,
+                corridors=corridors,
+                tick=tick,
+                registry=registry,
+            )
+            activate_protocol(protocol, tick=tick)
+            log_episode(
+                event_type="AUTHOR_PROTOCOL",
+                summary="Drafted and activated a movement protocol.",
+                location_id=agent.location_id,
+                tags=["protocol", "authoring"],
+                valence=0.2,
+                arousal=0.4,
+                perceived_risk=0.1,
             )
     else:
         log_episode(
