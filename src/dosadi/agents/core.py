@@ -8,6 +8,12 @@ from typing import Any, Dict, List, Optional, Sequence
 import uuid
 import random
 
+from dosadi.systems.protocols import (
+    ProtocolRegistry,
+    compute_effective_hazard_prob,
+    record_protocol_read,
+)
+
 
 class GoalType(str, Enum):
     MAINTAIN_SURVIVAL = "MAINTAIN_SURVIVAL"
@@ -542,7 +548,17 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
 
     if action.verb == "MOVE":
         target = action.target_location_id or agent.location_id
-        hazard_prob = _edge_hazard_probability(agent.location_id, target, topology)
+        base_hazard_prob = _edge_hazard_probability(agent.location_id, target, topology)
+        # TODO: support explicit group travel and compliance decisions in movement selection
+        group_size = 1
+        registry: Optional[ProtocolRegistry] = getattr(world, "protocols", None)
+        hazard_prob = compute_effective_hazard_prob(
+            agent=agent,
+            location_id=target,
+            base_hazard_prob=base_hazard_prob,
+            group_size=group_size,
+            registry=registry,
+        )
         agent.location_id = target
         log_episode(
             event_type="MOVEMENT",
@@ -584,16 +600,22 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
         )
     elif action.verb == "READ_PROTOCOL":
         protocol_id = action.metadata.get("protocol_id") if action.metadata else None
-        if protocol_id and protocol_id not in agent.known_protocols:
-            agent.known_protocols.append(protocol_id)
-        log_episode(
-            event_type="READ_PROTOCOL",
-            summary="Reviewed station protocol.",
-            location_id=agent.location_id,
-            tags=["protocol"],
-            valence=0.05,
-            arousal=0.2,
-        )
+        registry: Optional[ProtocolRegistry] = getattr(world, "protocols", None)
+        protocol = registry.get(protocol_id) if registry and protocol_id else None
+        if protocol:
+            read_episode = record_protocol_read(agent, protocol, tick)
+            episodes.append(read_episode)
+        else:
+            if protocol_id and protocol_id not in agent.known_protocols:
+                agent.known_protocols.append(protocol_id)
+            log_episode(
+                event_type="READ_PROTOCOL",
+                summary="Reviewed station protocol.",
+                location_id=agent.location_id,
+                tags=["protocol"],
+                valence=0.05,
+                arousal=0.2,
+            )
     else:
         log_episode(
             event_type=action.verb,

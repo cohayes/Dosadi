@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional,
 
 from .admin_log import AdminEventLog
 from .simulation.snapshots import serialize_state
+from .systems.protocols import ProtocolRegistry
 
 
 
@@ -785,6 +786,7 @@ class WorldState:
     rumors: MutableMapping[str, RumorState] = field(default_factory=dict)
     events_outbox: List[str] = field(default_factory=list)
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
+    protocols: ProtocolRegistry = field(default_factory=ProtocolRegistry)
     policy: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
     market_quotes: List[Dict[str, object]] = field(default_factory=list)
     trades: List[Dict[str, object]] = field(default_factory=list)
