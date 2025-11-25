@@ -3,19 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 import uuid
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
-from dosadi.agents.core import (
-    AgentState,
-    Episode,
-    EpisodeSourceType,
-    Goal,
-    GoalHorizon,
-    GoalOrigin,
-    GoalStatus,
-    GoalType,
-    make_episode_id,
-)
+if TYPE_CHECKING:
+    from dosadi.agents.core import AgentState, Episode, Goal
 
 
 class ProtocolType(str, Enum):
@@ -107,7 +98,7 @@ class ProtocolRegistry:
 def create_movement_protocol_from_goal(
     council_group_id: str,
     scribe_agent_id: str,
-    group_goal: Goal,
+    group_goal: "Goal",
     corridors: List[str],
     tick: int,
     registry: ProtocolRegistry,
@@ -121,6 +112,8 @@ def create_movement_protocol_from_goal(
     corr_str = ", ".join(sorted(corridors))
     name = f"Group travel protocol for {corr_str}"
     description = "Travel in groups to reduce hazard risk on corridors: " + corr_str
+
+    from dosadi.agents.core import GoalOrigin, GoalStatus, GoalType
 
     if group_goal.goal_type == GoalType.AUTHOR_PROTOCOL:
         group_goal.status = GoalStatus.COMPLETED
@@ -162,10 +155,10 @@ def activate_protocol(protocol: Protocol, tick: int) -> None:
 
 
 def record_protocol_read(
-    agent: AgentState,
+    agent: "AgentState",
     protocol: Protocol,
     tick: int,
-) -> Episode:
+) -> "Episode":
     """Record that an agent has read/learned a protocol.
 
     - Adds protocol_id to agent.known_protocols (if not already present).
@@ -177,6 +170,8 @@ def record_protocol_read(
         agent.known_protocols.append(protocol.protocol_id)
 
     protocol.times_read += 1
+
+    from dosadi.agents.core import Episode, EpisodeSourceType, make_episode_id
 
     ep = Episode(
         episode_id=make_episode_id(agent.agent_id),
@@ -211,7 +206,7 @@ def record_protocol_read(
 
 
 def compute_effective_hazard_prob(
-    agent: AgentState,
+    agent: "AgentState",
     location_id: str,
     base_hazard_prob: float,
     group_size: int,

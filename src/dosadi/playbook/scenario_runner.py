@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 
+from dataclasses import dataclass
+
 from .sting_wave import StingWaveConfig, run_sting_wave_day3
 
 
@@ -78,6 +80,35 @@ register_scenario(
         doc_path="docs/latest/11_scenarios/Dosadi_Scenario_Sting_Wave_Day3.md",
         config_type=StingWaveConfig,
         runner=lambda config: run_sting_wave_day3(config),
+    )
+)
+
+@dataclass(slots=True)
+class FoundingWakeupScenarioConfig:
+    num_agents: int = 12
+    max_ticks: int = 10_000
+    seed: int = 1337
+
+
+def _run_founding_wakeup(config: FoundingWakeupScenarioConfig):
+    from ..runtime import founding_wakeup as fw
+
+    if isinstance(config, dict):
+        config = FoundingWakeupScenarioConfig(**config)
+    return fw.run_founding_wakeup_mvp(
+        num_agents=config.num_agents,
+        max_ticks=config.max_ticks,
+        seed=config.seed,
+    )
+
+
+register_scenario(
+    ScenarioEntry(
+        name="founding_wakeup_mvp",
+        description="Founding wakeup MVP runtime wiring",
+        doc_path="docs/latest/02_runtime/D-RUNTIME-0200_Founding_Wakeup_MVP_Runtime_v1-1-0.md",
+        config_type=FoundingWakeupScenarioConfig,
+        runner=lambda config: _run_founding_wakeup(config),
     )
 )
 

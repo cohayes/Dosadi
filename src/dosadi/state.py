@@ -11,12 +11,16 @@ resource aggregation needed for the conservation law described in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import random
 
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 from .admin_log import AdminEventLog
 from .simulation.snapshots import serialize_state
-from .systems.protocols import ProtocolRegistry
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .systems.protocols import ProtocolRegistry
 
 
 
@@ -770,12 +774,19 @@ class WorldConfig:
         return self.ticks_per_minute * self.minutes_per_day
 
 
+def _protocol_registry_factory():
+    from .systems.protocols import ProtocolRegistry
+
+    return ProtocolRegistry()
+
+
 @dataclass
 class WorldState:
     tick: int = 0
     minute: int = 0
     day: int = 0
     seed: int = 0
+    rng: random.Random = field(default_factory=random.Random)
     time_min: int = 0
     config: WorldConfig = field(default_factory=WorldConfig)
     wards: MutableMapping[str, WardState] = field(default_factory=dict)
@@ -786,7 +797,10 @@ class WorldState:
     rumors: MutableMapping[str, RumorState] = field(default_factory=dict)
     events_outbox: List[str] = field(default_factory=list)
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
-    protocols: ProtocolRegistry = field(default_factory=ProtocolRegistry)
+    protocols: "ProtocolRegistry" = field(default_factory=_protocol_registry_factory)
+    nodes: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
+    edges: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
+    groups: List[Any] = field(default_factory=list)
     policy: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
     market_quotes: List[Dict[str, object]] = field(default_factory=list)
     trades: List[Dict[str, object]] = field(default_factory=list)
@@ -798,6 +812,8 @@ class WorldState:
     security_reports: List[Dict[str, object]] = field(default_factory=list)
     suit_service_ledger: SuitServiceLedger = field(default_factory=SuitServiceLedger)
     admin_event_log: AdminEventLog = field(default_factory=AdminEventLog)
+    metrics: MutableMapping[str, float] = field(default_factory=dict)
+    runtime_config: Any = None
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
