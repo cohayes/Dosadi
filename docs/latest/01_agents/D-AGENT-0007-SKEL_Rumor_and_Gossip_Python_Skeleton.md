@@ -6,9 +6,6 @@ status: draft
 owners: [cohayes]
 last_updated: 2025-11-18
 depends_on:
-  - D-AGENT-0001   # Agent_Core_Schema_v0
-  - D-AGENT-0002   # Agent_Decision_Rule_v0
-  - D-AGENT-0004   # Agent_Action_API_v0
   - D-AGENT-0005   # Perception_and_Memory_v0
   - D-AGENT-0006   # Skills_and_Learning_v0
   - D-AGENT-0007   # Rumor_and_Gossip_Dynamics_v0

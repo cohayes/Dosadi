@@ -2,7 +2,7 @@
 title: Agent_System_Overview_v1
 doc_id: D-AGENT-0000
 version: 1.0.0
-status: draft
+status: legacy_idea
 owners: [cohayes]
 last_updated: 2025-11-18
 depends_on:

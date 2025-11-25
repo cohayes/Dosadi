@@ -1,6 +1,6 @@
 ---
 title: Occupations_and_Industrial_Roles
-doc_id: D-AGENT-0101
+doc_id: D-IND-0061
 version: 1.0.0
 status: draft
 owners: [cohayes]
@@ -15,7 +15,7 @@ depends_on:
   - D-ECON-0001           # Logistics_Corridors_and_Safehouses
 ---
 
-# 01_agents · Occupations and Industrial Roles (D-AGENT-0101)
+# 01_agents · Occupations and Industrial Roles (D-IND-0061)
 
 ## 1. Purpose
 

@@ -6,10 +6,6 @@ status: draft
 owners: [cohayes]
 last_updated: 2025-11-24
 depends_on:
-  - D-AGENT-0000   # Agent_System_Overview_v1
-  - D-AGENT-0001   # Agent_Core_Schema_v0
-  - D-AGENT-0002   # Agent_Decision_Rule_v0
-  - D-AGENT-0003   # Drive_Facility_Impact_Matrix_v0
   - D-AGENT-0005   # Perception_and_Memory_v0
   - D-AGENT-0109   # Tier3_Stat_Framework_and_Flagship_Characters (examples)
   - D-RUNTIME-0001 # Simulation_Timebase

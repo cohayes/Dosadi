@@ -2,7 +2,7 @@
 title: Agent_Action_API_Python_Skeleton
 doc_id: D-AGENT-0004-SKEL
 version: 0.1.0
-status: draft
+status: legacy_idea
 owners: [cohayes]
 last_updated: 2025-11-18
 depends_on:

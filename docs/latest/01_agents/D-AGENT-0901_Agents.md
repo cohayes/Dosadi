@@ -6,11 +6,6 @@ status: legacy_idea
 owners: [cohayes]
 depends_on: [D-RUNTIME-0001]
 includes:
-  - D-AGENT-0002  # Agent Action API
-  - D-AGENT-0003  # Agent Decision
-  - D-AGENT-0004  # Perception and Memory
-  - D-AGENT-0005  # Task Selection and Utility
-  - D-AGENT-0006  # Scoring and Update Equations
 last_updated: 2025-11-11
 ---
 

@@ -1,15 +1,13 @@
 ---
 title: Identity_Licensing_and_Permits
-doc_id: D-AGENT-0107
+doc_id: D-INFO-0080
 version: 1.0.0
 status: draft
 owners: [cohayes]
 last_updated: 2025-11-13
-parent: D-AGENT-0001
+parent: D-INFO-0001
 ---
 # **Identity, Licensing & Permits v1 (IDs, Skill Licenses, Travel Passes, Inspections, Revocations)**
-
-“Position: Tier-2+; not required for minimal civic simulation. Implement after D-AGENT-0001–0003 are live in code and tested.”
 
 **Version:** v1 — 2025‑11‑13  
 **Purpose.** Define the identity model and the legal instruments that gate who may work, carry, build, heal, transport, and traverse across wards. Standardizes IDs, skill licenses, shop/guild permits, weapon/tool carry classes, travel/curfew passes, inspection workflows, and revocation/appeal—so Security, Logistics, Clinics, Fabrication, Credits & FX, and Law all speak the same language.
@@ -17,8 +15,6 @@ parent: D-AGENT-0001
 Integrates with **Telemetry & Audit v1** (keys, boards, tokens), **Law & Contract Systems v1** (arbiters, decrees), **Logistics Corridors & Safehouses v1**, **Escort & Security v1**, **Production & Fabrication v1**, **Clinics v1.1**, **Agent Decision v1**, **Rumor v1.1**, and the **Tick Loop**.
 
 > Timebase: license validity **in days**; inspections **per encounter**; boards publish **hourly**; appeals resolved **within days** unless escalated.
-
-“This is an identity and licensing interface doc; it is physically stored under 01_agents but logically belongs to the Identity/Info-Security layer and is shared with Law, Logistics, Clinics, etc.”
 
 ---
 ## 0) Identity Model
