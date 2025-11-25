@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 import uuid
 import random
 
@@ -253,6 +253,7 @@ class AgentState:
 
     def record_episode(self, episode: Episode) -> None:
         self.episodes.append(episode)
+        self.update_beliefs_from_episode(episode)
 
     def update_beliefs_from_episode(self, episode: Episode) -> None:
         if episode.location_id:
@@ -263,6 +264,17 @@ class AgentState:
         if not self.goals:
             return None
         return max(self.goals, key=lambda g: g.score_for_selection())
+
+
+@dataclass
+class Action:
+    """Lightweight action representation for the MVP decision loop."""
+
+    actor_id: str
+    verb: str
+    target_location_id: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    related_goal_id: Optional[str] = None
 
 
 def create_agent(agent_id: str, name: str, pod_location_id: str, rng: Any) -> AgentState:
@@ -371,6 +383,231 @@ def create_agent(agent_id: str, name: str, pod_location_id: str, rng: Any) -> Ag
     return agent
 
 
+def _topology_from_world(world: Any) -> Dict[str, Any]:
+    policy = getattr(world, "policy", {}) or {}
+    return policy.get("topology", {}) if isinstance(policy, dict) else {}
+
+
+def _build_neighbors(topology: Dict[str, Any]) -> Dict[str, List[str]]:
+    neighbors: Dict[str, List[str]] = {}
+    for edge in topology.get("edges", []) or []:
+        a = edge.get("a")
+        b = edge.get("b")
+        if not a or not b:
+            continue
+        neighbors.setdefault(a, []).append(b)
+        neighbors.setdefault(b, []).append(a)
+    return neighbors
+
+
+def _find_well_core_id(topology: Dict[str, Any]) -> Optional[str]:
+    for node in topology.get("nodes", []) or []:
+        if node.get("is_well_core"):
+            return node.get("id")
+    return None
+
+
+def _edge_hazard_probability(current: str, target: str, topology: Dict[str, Any]) -> float:
+    for edge in topology.get("edges", []) or []:
+        a = edge.get("a")
+        b = edge.get("b")
+        if {a, b} == {current, target}:
+            return float(edge.get("base_hazard_prob", 0.0))
+    return 0.0
+
+
+def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
+    """Select a coarse next action using goals, beliefs, and topology hints."""
+
+    focus_goal = agent.choose_focus_goal()
+    topology = _topology_from_world(world)
+    neighbors = _build_neighbors(topology)
+    well_core_id = _find_well_core_id(topology) or "loc:well-core"
+
+    def best_neighbor_location() -> Optional[str]:
+        options = neighbors.get(agent.location_id, [])
+        if not options:
+            return None
+        scored = []
+        for loc in options:
+            belief = agent.place_beliefs.get(loc)
+            danger = belief.danger_score if belief else 0.0
+            scored.append((danger, loc))
+        scored.sort(key=lambda pair: pair[0])
+        return scored[0][1]
+
+    if focus_goal and focus_goal.goal_type in {
+        GoalType.ACQUIRE_RESOURCE,
+        GoalType.GATHER_INFORMATION,
+        GoalType.FORM_GROUP,
+        GoalType.STABILIZE_POD,
+        GoalType.REDUCE_POD_RISK,
+    }:
+        if agent.location_id != well_core_id:
+            target_loc = well_core_id if well_core_id in neighbors.get(agent.location_id, []) else best_neighbor_location()
+            if target_loc:
+                return Action(
+                    actor_id=agent.agent_id,
+                    verb="MOVE",
+                    target_location_id=target_loc,
+                    related_goal_id=focus_goal.goal_id,
+                )
+
+    if focus_goal and focus_goal.goal_type in {
+        GoalType.MAINTAIN_RELATIONSHIPS,
+        GoalType.ORGANIZE_GROUP,
+    }:
+        return Action(
+            actor_id=agent.agent_id,
+            verb="POD_MEETING",
+            target_location_id=agent.location_id,
+            related_goal_id=focus_goal.goal_id,
+        )
+
+    if agent.location_id == well_core_id and focus_goal and focus_goal.goal_type == GoalType.FORM_GROUP:
+        return Action(
+            actor_id=agent.agent_id,
+            verb="COUNCIL_MEETING",
+            target_location_id=well_core_id,
+            related_goal_id=focus_goal.goal_id,
+        )
+
+    return Action(
+        actor_id=agent.agent_id,
+        verb="REST_IN_POD",
+        target_location_id=agent.location_id,
+        related_goal_id=focus_goal.goal_id if focus_goal else None,
+    )
+
+
+def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: int) -> Sequence[Episode]:
+    """Apply the chosen action, logging episodes and updating beliefs."""
+
+    rng = random.Random((getattr(world, "seed", 0) or 0) + tick)
+    topology = _topology_from_world(world)
+    episodes: List[Episode] = []
+
+    goal_ref: Optional[Goal] = None
+    if action.related_goal_id:
+        goal_ref = next((g for g in agent.goals if g.goal_id == action.related_goal_id), None)
+
+    def goal_delta() -> List[EpisodeGoalDelta]:
+        if not goal_ref:
+            return []
+        return [
+            EpisodeGoalDelta(
+                goal_id=goal_ref.goal_id,
+                pre_status=goal_ref.status,
+                post_status=goal_ref.status,
+                delta_progress=0.0,
+            )
+        ]
+
+    def log_episode(
+        *,
+        event_type: str,
+        summary: str,
+        location_id: Optional[str],
+        tags: Optional[List[str]] = None,
+        valence: float = 0.0,
+        arousal: float = 0.0,
+        perceived_risk: float = 0.0,
+    ) -> Episode:
+        episode = Episode(
+            episode_id=make_episode_id(agent.agent_id),
+            owner_id=agent.agent_id,
+            event_id=None,
+            tick_start=tick,
+            tick_end=tick,
+            location_id=location_id,
+            context_tags=[],
+            source_type=EpisodeSourceType.DIRECT,
+            source_agent_id=None,
+            participants=[],
+            event_type=event_type,
+            summary=summary,
+            goals_involved=goal_delta(),
+            outcome={},
+            valence=valence,
+            arousal=arousal,
+            dominant_feeling=None,
+            perceived_risk=perceived_risk,
+            perceived_reliability=1.0,
+            privacy="PRIVATE",
+            tags=tags or [],
+        )
+        agent.record_episode(episode)
+        episodes.append(episode)
+        return episode
+
+    if action.verb == "MOVE":
+        target = action.target_location_id or agent.location_id
+        hazard_prob = _edge_hazard_probability(agent.location_id, target, topology)
+        agent.location_id = target
+        log_episode(
+            event_type="MOVEMENT",
+            summary=f"Moved to {target}",
+            location_id=target,
+            tags=["movement"],
+            valence=0.0,
+            arousal=0.2,
+            perceived_risk=hazard_prob,
+        )
+        if rng.random() < hazard_prob:
+            agent.physical.health = max(0.0, agent.physical.health - 0.1)
+            log_episode(
+                event_type="HAZARD_INCIDENT",
+                summary=f"Encountered hazard while moving to {target}",
+                location_id=target,
+                tags=["hazard"],
+                valence=-0.7,
+                arousal=0.8,
+                perceived_risk=1.0,
+            )
+    elif action.verb == "POD_MEETING":
+        log_episode(
+            event_type="POD_MEETING",
+            summary="Participated in a pod meeting.",
+            location_id=agent.location_id,
+            tags=["meeting"],
+            valence=0.1,
+            arousal=0.3,
+        )
+    elif action.verb == "COUNCIL_MEETING":
+        log_episode(
+            event_type="COUNCIL_MEETING",
+            summary="Attended a proto-council gathering at well core.",
+            location_id=action.target_location_id or agent.location_id,
+            tags=["meeting"],
+            valence=0.15,
+            arousal=0.4,
+        )
+    elif action.verb == "READ_PROTOCOL":
+        protocol_id = action.metadata.get("protocol_id") if action.metadata else None
+        if protocol_id and protocol_id not in agent.known_protocols:
+            agent.known_protocols.append(protocol_id)
+        log_episode(
+            event_type="READ_PROTOCOL",
+            summary="Reviewed station protocol.",
+            location_id=agent.location_id,
+            tags=["protocol"],
+            valence=0.05,
+            arousal=0.2,
+        )
+    else:
+        log_episode(
+            event_type=action.verb,
+            summary=f"Took action {action.verb}.",
+            location_id=agent.location_id,
+            tags=["action"],
+            valence=0.0,
+            arousal=0.1,
+        )
+
+    agent.last_decision_tick = tick
+    return episodes
+
+
 def initialize_agents_for_founding_wakeup(
     num_agents: int, seed: int, pod_ids: List[str]
 ) -> List[AgentState]:
@@ -400,6 +637,7 @@ def initialize_agents_for_founding_wakeup(
 
 __all__ = [
     "AgentState",
+    "Action",
     "Attributes",
     "Episode",
     "EpisodeGoalDelta",
@@ -412,7 +650,9 @@ __all__ = [
     "PhysicalState",
     "Personality",
     "PlaceBelief",
+    "apply_action",
     "create_agent",
+    "decide_next_action",
     "initialize_agents_for_founding_wakeup",
     "make_episode_id",
     "make_goal_id",
