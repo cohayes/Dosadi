@@ -17,6 +17,20 @@ from .core import (
     make_episode_id,
     make_goal_id,
 )
+from .groups import (
+    Group,
+    GroupRole,
+    GroupType,
+    create_pod_group,
+    create_proto_council,
+    ensure_council_gather_information_goal,
+    make_group_id,
+    maybe_form_proto_council,
+    maybe_run_council_meeting,
+    maybe_run_pod_meeting,
+    project_author_protocol_to_scribe,
+    project_gather_information_to_scouts,
+)
 
 __all__ = [
     "AgentState",
@@ -34,4 +48,16 @@ __all__ = [
     "initialize_agents_for_founding_wakeup",
     "make_episode_id",
     "make_goal_id",
+    "Group",
+    "GroupRole",
+    "GroupType",
+    "create_pod_group",
+    "create_proto_council",
+    "ensure_council_gather_information_goal",
+    "make_group_id",
+    "maybe_form_proto_council",
+    "maybe_run_council_meeting",
+    "maybe_run_pod_meeting",
+    "project_author_protocol_to_scribe",
+    "project_gather_information_to_scouts",
 ]
