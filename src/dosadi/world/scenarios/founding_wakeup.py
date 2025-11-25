@@ -6,11 +6,11 @@ Constructs the minimal topology and initial colonist population described in
 
 from __future__ import annotations
 
-import random
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Tuple
 
-from ...state import AgentState, AffectState, BodyState, FactionState, WorldState
+from dosadi.agents.core import AgentState, initialize_agents_for_founding_wakeup
+from ...state import FactionState, WorldState
 
 
 @dataclass(frozen=True)
@@ -77,51 +77,8 @@ BASE_EDGES: Tuple[LocationEdge, ...] = (
 )
 
 
-def _even_pod_assignment(num_agents: int) -> List[str]:
-    """Return a round-robin pod assignment list for ``num_agents``."""
-
-    assignments: List[str] = []
-    for idx in range(num_agents):
-        assignments.append(POD_IDS[idx % len(POD_IDS)])
-    return assignments
-
-
-def _sample_affinity_block(rng: random.Random) -> Dict[str, float]:
-    return {
-        "STR": rng.uniform(8.0, 12.0),
-        "DEX": rng.uniform(8.0, 12.0),
-        "CON": rng.uniform(8.0, 12.0),
-        "INT": rng.uniform(8.0, 12.0),
-        "WILL": rng.uniform(8.0, 12.0),
-        "CHA": rng.uniform(8.0, 12.0),
-    }
-
-
-def _base_goals() -> List[Dict[str, object]]:
-    return [
-        {
-            "id": "MAINTAIN_SURVIVAL_TODAY",
-            "priority": 1.0,
-            "horizon": "SHORT",
-        },
-        {
-            "id": "ACQUIRE_RESOURCE",
-            "priority": 0.8,
-            "horizon": "SHORT",
-            "resource": "life_support",
-        },
-        {
-            "id": "SECURE_SHELTER",
-            "priority": 0.6,
-            "horizon": "SHORT",
-        },
-    ]
-
-
 def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> Tuple[WorldState, List[AgentState], List[Dict[str, object]]]:
     """Construct the Founding Wakeup MVP topology and initial population."""
-
-    rng = random.Random(seed)
 
     world = WorldState(seed=seed)
     world.policy["topology"] = {
@@ -138,63 +95,12 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> Tuple[WorldState
     )
     world.register_faction(colonist_faction)
 
-    pod_assignments = _even_pod_assignment(num_agents)
-    if num_agents > 0:
-        leader_count = max(1, int(num_agents * 0.15))
-        leader_count = min(num_agents, leader_count)
-        leadership_pool = set(rng.sample(range(num_agents), k=leader_count))
-    else:
-        leadership_pool = set()
+    pod_ids = ["loc:pod-1", "loc:pod-2", "loc:pod-3", "loc:pod-4"]
+    agents = initialize_agents_for_founding_wakeup(num_agents=num_agents, seed=seed, pod_ids=pod_ids)
 
-    agents: List[AgentState] = []
-    for idx in range(num_agents):
-        pod_id = pod_assignments[idx]
-        agent_id = f"agent:{idx}"
-        name = f"Colonist {idx + 1:03d}"
-
-        body = BodyState(
-            health=rng.uniform(94.0, 100.0),
-            nutrition=rng.uniform(2200.0, 2800.0),
-            hydration=rng.uniform(2.4, 3.4),
-            stamina=rng.uniform(72.0, 92.0),
-            energy=rng.uniform(70.0, 90.0),
-            bladder=rng.uniform(0.1, 0.3),
-            bowel=rng.uniform(0.05, 0.25),
-            body_mass=rng.uniform(55.0, 90.0),
-            activity_level=0.15,
-        )
-
-        affect = AffectState(
-            fear=rng.uniform(0.25, 0.45),
-            ambition=rng.uniform(0.35, 0.6),
-            loyalty=rng.uniform(0.45, 0.65),
-            curiosity=rng.uniform(0.35, 0.6),
-            stress=rng.uniform(0.15, 0.35),
-        )
-
-        agent = AgentState(
-            id=agent_id,
-            name=name,
-            faction=colonist_faction.id,
-            ward=pod_id,
-            role="colonist",
-            body=body,
-            affect=affect,
-        )
-
-        agent.affinities.update(_sample_affinity_block(rng))
-        agent.identity.add_handle(agent_id)
-        agent.social.loyalty[pod_id] = rng.uniform(0.55, 0.75)
-
-        goals = _base_goals()
-        if idx in leadership_pool:
-            goals.append({"id": "REDUCE_POD_RISK", "priority": 0.75, "horizon": "MEDIUM", "scope": pod_id})
-            agent.social.loyalty["communalism"] = rng.uniform(0.6, 0.85)
-        agent.memory.beliefs["goals"] = goals
-
+    for agent in agents:
         colonist_faction.members.append(agent.id)
         world.register_agent(agent)
-        agents.append(agent)
 
     groups: List[Dict[str, object]] = []
     return world, agents, groups
