@@ -86,9 +86,9 @@ class Goal:
     def score_for_selection(self) -> float:
         """Simple scalar score for goal selection."""
 
-        p = max(0.0, min(1.0, self.priority))
-        u = max(0.0, min(1.0, self.urgency))
-        return p * (0.5 + 0.5 * u)
+        p = max(0.0, min(1.0, float(self.priority)))
+        u = max(0.0, min(1.0, float(self.urgency)))
+        return p + u
 
 
 def make_goal_id(prefix: str = "goal") -> str:
@@ -269,9 +269,44 @@ class AgentState:
             pb.update_from_episode(episode)
 
     def choose_focus_goal(self) -> Optional[Goal]:
+        """
+        Pick the current focus goal for an agent.
+
+        - Prefer goals that are ACTIVE.
+        - If there are no ACTIVE goals, fall back to PENDING goals.
+        - When a PENDING goal is chosen, promote it to ACTIVE so the agent
+          actually starts working on it.
+        - Ignore COMPLETED / FAILED / ABANDONED goals.
+        """
         if not self.goals:
             return None
-        return max(self.goals, key=lambda g: g.score_for_selection())
+
+        non_terminal = [
+            g
+            for g in self.goals
+            if g.status
+            not in (
+                GoalStatus.COMPLETED,
+                GoalStatus.FAILED,
+                GoalStatus.ABANDONED,
+            )
+        ]
+        if not non_terminal:
+            return None
+
+        active = [g for g in non_terminal if g.status == GoalStatus.ACTIVE]
+        pending = [g for g in non_terminal if g.status == GoalStatus.PENDING]
+
+        pool = active if active else pending
+        if not pool:
+            return None
+
+        best = max(pool, key=lambda g: g.score_for_selection())
+
+        if best.status == GoalStatus.PENDING:
+            best.status = GoalStatus.ACTIVE
+
+        return best
 
 
 @dataclass
