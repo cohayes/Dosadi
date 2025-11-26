@@ -550,6 +550,24 @@ def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
             related_goal_id=focus_goal.goal_id,
         )
 
+    if focus_goal and focus_goal.goal_type == GoalType.AUTHOR_PROTOCOL:
+        target_payload = focus_goal.target or {}
+        corridor_ids = (
+            target_payload.get("corridor_ids")
+            or target_payload.get("edge_ids")
+            or []
+        )
+        return Action(
+            actor_id=agent.agent_id,
+            verb="AUTHOR_PROTOCOL",
+            target_location_id=agent.location_id,
+            metadata={
+                "corridor_ids": corridor_ids,
+                "council_group_id": target_payload.get("council_group_id"),
+            },
+            related_goal_id=focus_goal.goal_id,
+        )
+
     if agent.location_id == well_core_id and focus_goal and focus_goal.goal_type == GoalType.FORM_GROUP:
         return Action(
             actor_id=agent.agent_id,

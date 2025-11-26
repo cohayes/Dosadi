@@ -333,6 +333,7 @@ def maybe_run_council_meeting(
 
     target = {
         "edge_ids": dangerous_edge_ids,
+        "corridor_ids": list(dangerous_edge_ids),
         "council_group_id": council_group.group_id,
     }
 
