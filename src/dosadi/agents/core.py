@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 import random
 
@@ -244,6 +244,7 @@ class AgentState:
     known_protocols: List[str] = field(default_factory=list)
 
     last_decision_tick: int = 0
+    rest_ticks_in_pod: int = 0
 
     @property
     def id(self) -> str:
@@ -373,37 +374,48 @@ def create_agent(agent_id: str, name: str, pod_location_id: str, rng: Any) -> Ag
         location_id=pod_location_id,
     )
 
+    def jitter_pair(priority_base: float, urgency_base: float) -> Tuple[float, float]:
+        def clamp(val: float) -> float:
+            return max(0.0, min(1.0, val))
+
+        priority_delta = rng.uniform(-0.15, 0.15)
+        urgency_delta = rng.uniform(-0.1, 0.1)
+        return clamp(priority_base + priority_delta), clamp(urgency_base + urgency_delta)
+
+    survival_priority, survival_urgency = jitter_pair(1.0, 0.3)
     survival_goal = Goal(
         goal_id=make_goal_id(),
         owner_id=agent_id,
         goal_type=GoalType.MAINTAIN_SURVIVAL,
         description="Stay alive and functional today.",
-        priority=1.0,
-        urgency=0.3,
+        priority=survival_priority,
+        urgency=survival_urgency,
         horizon=GoalHorizon.SHORT,
         status=GoalStatus.ACTIVE,
     )
 
+    acquire_priority, acquire_urgency = jitter_pair(0.7, 0.2)
     acquire_resource = Goal(
         goal_id=make_goal_id(),
         owner_id=agent_id,
         goal_type=GoalType.ACQUIRE_RESOURCE,
         description="Acquire necessary resources to support survival.",
         parent_goal_id=survival_goal.goal_id,
-        priority=0.7,
-        urgency=0.2,
+        priority=acquire_priority,
+        urgency=acquire_urgency,
         horizon=GoalHorizon.SHORT,
         status=GoalStatus.ACTIVE,
     )
 
+    shelter_priority, shelter_urgency = jitter_pair(0.6, 0.1)
     secure_shelter = Goal(
         goal_id=make_goal_id(),
         owner_id=agent_id,
         goal_type=GoalType.SECURE_SHELTER,
         description="Maintain access to a safe bunk/pod.",
         parent_goal_id=survival_goal.goal_id,
-        priority=0.6,
-        urgency=0.1,
+        priority=shelter_priority,
+        urgency=shelter_urgency,
         horizon=GoalHorizon.MEDIUM,
         status=GoalStatus.ACTIVE,
     )
@@ -538,6 +550,24 @@ def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
             related_goal_id=focus_goal.goal_id,
         )
 
+    if focus_goal and focus_goal.goal_type == GoalType.AUTHOR_PROTOCOL:
+        target_payload = focus_goal.target or {}
+        corridor_ids = (
+            target_payload.get("corridor_ids")
+            or target_payload.get("edge_ids")
+            or []
+        )
+        return Action(
+            actor_id=agent.agent_id,
+            verb="AUTHOR_PROTOCOL",
+            target_location_id=agent.location_id,
+            metadata={
+                "corridor_ids": corridor_ids,
+                "council_group_id": target_payload.get("council_group_id"),
+            },
+            related_goal_id=focus_goal.goal_id,
+        )
+
     if agent.location_id == well_core_id and focus_goal and focus_goal.goal_type == GoalType.FORM_GROUP:
         return Action(
             actor_id=agent.agent_id,
@@ -552,6 +582,21 @@ def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
         target_location_id=agent.location_id,
         related_goal_id=focus_goal.goal_id if focus_goal else None,
     )
+
+
+def _randomize_goal_priorities(agent: AgentState, rng: Any) -> None:
+    """
+    Temporarily reshuffle the priority/urgency of non-terminal goals.
+
+    This is an MVP testing aid to encourage agents stuck in REST_IN_POD
+    to explore different goal orderings.
+    """
+
+    for goal in agent.goals:
+        if goal.status not in {GoalStatus.ACTIVE, GoalStatus.PENDING}:
+            continue
+        goal.priority = max(0.0, min(1.0, rng.uniform(0.35, 1.0)))
+        goal.urgency = max(0.0, min(1.0, rng.uniform(0.0, 0.8)))
 
 
 def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: int) -> Sequence[Episode]:
@@ -724,6 +769,19 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
                 arousal=0.4,
                 perceived_risk=0.1,
             )
+    elif action.verb == "REST_IN_POD":
+        agent.rest_ticks_in_pod += 1
+        if agent.rest_ticks_in_pod >= 20:
+            _randomize_goal_priorities(agent, rng)
+            agent.rest_ticks_in_pod = 0
+        log_episode(
+            event_type=action.verb,
+            summary=f"Took action {action.verb}.",
+            location_id=agent.location_id,
+            tags=["action"],
+            valence=0.0,
+            arousal=0.1,
+        )
     else:
         log_episode(
             event_type=action.verb,
@@ -733,6 +791,9 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
             valence=0.0,
             arousal=0.1,
         )
+
+    if action.verb != "REST_IN_POD":
+        agent.rest_ticks_in_pod = 0
 
     agent.last_decision_tick = tick
     return episodes

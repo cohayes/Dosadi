@@ -90,6 +90,8 @@ def _phase_A_groups_and_council(world: WorldState, tick: int, rng: random.Random
             rng=rng,
             cooldown_ticks=cfg.council_meeting_cooldown_ticks,
             hub_location_id="loc:well-core",
+            metrics=world.metrics,
+            cfg=cfg,
         )
         if council.last_meeting_tick == tick and prev_last_meeting != tick:
             for member_id in council.member_ids:
