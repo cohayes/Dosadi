@@ -423,6 +423,15 @@ def create_agent(agent_id: str, name: str, pod_location_id: str, rng: Any) -> Ag
         )
         agent.goals.append(reduce_pod_risk)
 
+    core_types = {
+        GoalType.MAINTAIN_SURVIVAL,
+        GoalType.ACQUIRE_RESOURCE,
+        GoalType.SECURE_SHELTER,
+    }
+    for goal in agent.goals:
+        if goal.goal_type in core_types:
+            goal.status = GoalStatus.ACTIVE
+
     return agent
 
 
