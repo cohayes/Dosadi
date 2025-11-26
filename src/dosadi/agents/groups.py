@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 import random
 import uuid
 
@@ -17,6 +17,9 @@ from .core import (
     GoalType,
     make_goal_id,
 )
+
+if TYPE_CHECKING:
+    from dosadi.runtime.founding_wakeup import RuntimeConfig
 
 
 class GroupType(str, Enum):
@@ -276,6 +279,8 @@ def maybe_run_council_meeting(
     rng: random.Random,
     cooldown_ticks: int,
     hub_location_id: str = "loc:well-core",
+    metrics: Optional[Dict[str, float]] = None,
+    cfg: Optional["RuntimeConfig"] = None,
 ) -> None:
     """
     Possibly run a council meeting.
@@ -305,6 +310,55 @@ def maybe_run_council_meeting(
     # Actual episode creation will be handled in the simulation loop
     # using this event as a trigger.
     council_group.last_meeting_tick = tick
+
+    if metrics is None or cfg is None:
+        return
+
+    dangerous_edge_ids = _find_dangerous_corridors_from_metrics(
+        metrics=metrics,
+        min_incidents_for_protocol=cfg.min_incidents_for_protocol,
+        risk_threshold_for_protocol=cfg.risk_threshold_for_protocol,
+    )
+
+    if not dangerous_edge_ids:
+        return
+
+    scribe_agent_id = _select_council_scribe(council_group, agents_by_id)
+    if scribe_agent_id is None:
+        return
+
+    scribe = agents_by_id.get(scribe_agent_id)
+    if scribe is None:
+        return
+
+    target = {
+        "edge_ids": dangerous_edge_ids,
+        "council_group_id": council_group.group_id,
+    }
+
+    author_goal = Goal(
+        goal_id=make_goal_id(),
+        owner_id=scribe.agent_id,
+        goal_type=GoalType.AUTHOR_PROTOCOL,
+        description=(
+            f"Draft movement/safety protocol for dangerous corridors: "
+            + ", ".join(dangerous_edge_ids)
+        ),
+        target=target,
+        priority=0.8,
+        urgency=0.6,
+        horizon=GoalHorizon.MEDIUM,
+        status=GoalStatus.ACTIVE,
+        origin=GoalOrigin.GROUP_DECISION,
+        created_at_tick=tick,
+        last_updated_tick=tick,
+    )
+
+    scribe.goals.append(author_goal)
+
+    roles = council_group.roles_by_agent.setdefault(scribe.agent_id, [])
+    if GroupRole.SCRIBE not in roles:
+        roles.append(GroupRole.SCRIBE)
 
 
 def ensure_council_gather_information_goal(
@@ -455,3 +509,69 @@ def project_author_protocol_to_scribe(
         origin=GoalOrigin.GROUP_DECISION,
     )
     scribe.goals.append(personal_goal)
+
+
+def _find_dangerous_corridors_from_metrics(
+    metrics: Dict[str, float],
+    min_incidents_for_protocol: int,
+    risk_threshold_for_protocol: float,
+) -> List[str]:
+    """
+    Inspect world-level metrics and return a list of corridor/edge ids that are
+    'dangerous enough' to warrant a movement protocol.
+
+    Uses keys like:
+      - 'traversals:{edge_id}'
+      - 'incidents:{edge_id}'
+    """
+    dangerous: List[str] = []
+
+    for key, traversals_val in metrics.items():
+        if not key.startswith("traversals:"):
+            continue
+
+        edge_id = key.split(":", 1)[1]
+        traversals = float(traversals_val)
+        if traversals <= 0:
+            continue
+
+        incidents_key = f"incidents:{edge_id}"
+        incidents = float(metrics.get(incidents_key, 0.0))
+        if incidents < float(min_incidents_for_protocol):
+            continue
+
+        risk = incidents / traversals
+        if risk >= risk_threshold_for_protocol:
+            dangerous.append(edge_id)
+
+    return dangerous
+
+
+def _select_council_scribe(
+    council_group: Group,
+    agents_by_id: Dict[str, AgentState],
+) -> Optional[str]:
+    """
+    Choose a scribe from council members, favoring higher INT/WIL and
+    more routine-seeking personalities (lower curiosity).
+    """
+    best_id: Optional[str] = None
+    best_score: float = float("-inf")
+
+    for aid in council_group.member_ids:
+        agent = agents_by_id.get(aid)
+        if agent is None:
+            continue
+
+        attrs = agent.attributes
+        personality = agent.personality
+        score = (
+            float(attrs.INT)
+            + float(attrs.WIL)
+            + 5.0 * (1.0 - float(personality.curiosity))
+        )
+        if score > best_score:
+            best_score = score
+            best_id = aid
+
+    return best_id
