@@ -6,11 +6,24 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import random
 
-from dosadi.agents.core import Action, AgentState, Goal, apply_action, decide_next_action
+from dosadi.agents.core import (
+    Action,
+    AgentState,
+    Goal,
+    GoalHorizon,
+    GoalOrigin,
+    GoalStatus,
+    GoalType,
+    apply_action,
+    decide_next_action,
+    make_goal_id,
+    prepare_navigation_context,
+)
 from dosadi.agents.groups import (
     Group,
     GroupType,
     maybe_form_proto_council,
+    _find_dangerous_corridors_from_metrics,
     maybe_run_council_meeting,
     maybe_run_pod_meeting,
 )
@@ -23,15 +36,15 @@ from dosadi.state import WorldState
 class RuntimeConfig:
     """Tunable configuration for the Founding Wakeup MVP runtime."""
 
-    pod_meeting_interval_ticks: int = 2400
-    council_meeting_cooldown_ticks: int = 600
+    pod_meeting_interval_ticks: int = 600
+    council_meeting_cooldown_ticks: int = 300
     min_council_members_for_meeting: int = 2
     rep_vote_fraction_threshold: float = 0.4
     min_leadership_threshold: float = 0.6
     max_pod_representatives: int = 2
     max_council_size: int = 10
-    min_incidents_for_protocol: int = 3
-    risk_threshold_for_protocol: float = 0.3
+    min_incidents_for_protocol: int = 1
+    risk_threshold_for_protocol: float = 0.15
     max_ticks: int = 100_000
 
 
@@ -54,12 +67,13 @@ def step_world_once(world: WorldState) -> None:
     _phase_A_groups_and_council(world, tick, rng, cfg)
     actions_by_agent = _phase_B_agent_decisions(world, tick)
     _phase_C_apply_actions_and_hazards(world, tick, actions_by_agent)
-    _phase_D_postprocess_and_metrics(world, tick)
 
     world.tick += 1
 
 
 def _phase_A_groups_and_council(world: WorldState, tick: int, rng: random.Random, cfg: RuntimeConfig) -> None:
+    metrics = getattr(world, "metrics", None)
+
     for g in world.groups:
         if g.group_type == GroupType.POD:
             maybe_run_pod_meeting(
@@ -81,6 +95,14 @@ def _phase_A_groups_and_council(world: WorldState, tick: int, rng: random.Random
         max_council_size=cfg.max_council_size,
     )
 
+    dangerous_edge_ids: List[str] = []
+    if metrics is not None:
+        dangerous_edge_ids = _find_dangerous_corridors_from_metrics(
+            metrics=metrics,
+            min_incidents_for_protocol=cfg.min_incidents_for_protocol,
+            risk_threshold_for_protocol=cfg.risk_threshold_for_protocol,
+        )
+
     if council is not None:
         prev_last_meeting = council.last_meeting_tick
         maybe_run_council_meeting(
@@ -100,12 +122,48 @@ def _phase_A_groups_and_council(world: WorldState, tick: int, rng: random.Random
                     continue
                 agent.last_decision_tick = tick
 
+    if dangerous_edge_ids:
+        registry = world.protocols if isinstance(world.protocols, ProtocolRegistry) else None
+        covered = set()
+        if registry is not None:
+            for proto in registry.protocols_by_id.values():
+                covered.update(proto.covered_location_ids)
+
+        uncovered_edges = [edge for edge in dangerous_edge_ids if edge not in covered]
+        if uncovered_edges:
+            scribe = next(iter(world.agents.values()), None)
+            if scribe is not None:
+                author_goal = Goal(
+                    goal_id=make_goal_id(),
+                    owner_id=scribe.agent_id,
+                    goal_type=GoalType.AUTHOR_PROTOCOL,
+                    description=f"Draft movement/safety protocol for: {', '.join(uncovered_edges)}",
+                    target={"corridor_ids": uncovered_edges, "edge_ids": uncovered_edges},
+                    priority=0.95,
+                    urgency=0.95,
+                    horizon=GoalHorizon.MEDIUM,
+                    status=GoalStatus.ACTIVE,
+                    created_at_tick=tick,
+                    last_updated_tick=tick,
+                    origin=GoalOrigin.OPPORTUNITY,
+                )
+                handle_protocol_authoring(world, scribe, author_goal, uncovered_edges)
+
 
 def _phase_B_agent_decisions(world: WorldState, tick: int) -> Dict[str, Action]:
     actions_by_agent: Dict[str, Action] = {}
 
+    topology, neighbors, well_core_id, rng = prepare_navigation_context(world)
+
     for agent_id, agent in world.agents.items():
-        action = decide_next_action(agent, world)
+        action = decide_next_action(
+            agent,
+            world,
+            topology=topology,
+            neighbors=neighbors,
+            well_core_id=well_core_id,
+            rng=rng,
+        )
         actions_by_agent[agent_id] = action
         agent.last_decision_tick = tick
 
@@ -116,15 +174,6 @@ def _phase_C_apply_actions_and_hazards(world: WorldState, tick: int, actions_by_
     for agent_id, action in actions_by_agent.items():
         agent = world.agents[agent_id]
         apply_action(agent, action, world, tick)
-
-
-def _phase_D_postprocess_and_metrics(world: WorldState, tick: int) -> None:
-    for agent in world.agents.values():
-        for ep in agent.episodes:
-            if ep.tick_end == tick and ep.location_id is not None:
-                agent.update_beliefs_from_episode(ep)
-
-
 def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> FoundingWakeupReport:
     """Run the Founding Wakeup MVP scenario from scratch."""
 

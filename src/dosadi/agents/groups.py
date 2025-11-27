@@ -196,6 +196,8 @@ def maybe_run_pod_meeting(
         if GroupRole.POD_REPRESENTATIVE in roles
     }
 
+    previous_reps = set(current_reps)
+
     total_votes = sum(votes.values())
     # Sort candidates by vote count
     ranked = sorted(votes.items(), key=lambda kv: kv[1], reverse=True)
@@ -222,6 +224,33 @@ def maybe_run_pod_meeting(
                 roles.remove(GroupRole.POD_REPRESENTATIVE)
 
     pod_group.last_meeting_tick = tick
+
+    newly_added_reps = new_reps - previous_reps
+    for aid in newly_added_reps:
+        agent = agents_by_id.get(aid)
+        if agent is None:
+            continue
+        existing = next((g for g in agent.goals if g.goal_type == GoalType.FORM_GROUP), None)
+        if existing:
+            existing.priority = max(existing.priority, 0.95)
+            existing.urgency = max(existing.urgency, 0.95)
+            existing.status = GoalStatus.ACTIVE
+            existing.last_updated_tick = tick
+            continue
+        form_group_goal = Goal(
+            goal_id=make_goal_id(),
+            owner_id=agent.agent_id,
+            goal_type=GoalType.FORM_GROUP,
+            description="Join or build a council to represent the pod.",
+            priority=0.95,
+            urgency=0.95,
+            horizon=GoalHorizon.SHORT,
+            status=GoalStatus.ACTIVE,
+            origin=GoalOrigin.GROUP_DECISION,
+            created_at_tick=tick,
+            last_updated_tick=tick,
+        )
+        agent.goals.append(form_group_goal)
 
 
 def maybe_form_proto_council(
@@ -297,13 +326,9 @@ def maybe_run_council_meeting(
     if tick - council_group.last_meeting_tick < cooldown_ticks:
         return
 
-    present_members = [
-        aid
-        for aid in council_group.member_ids
-        if (aid in agents_by_id and agents_by_id[aid].location_id == hub_location_id)
-    ]
+    present_members = [aid for aid in council_group.member_ids if aid in agents_by_id]
 
-    if len(present_members) < 2:
+    if len(present_members) < 1:
         return
 
     # For now, groups.py just updates last_meeting_tick.
@@ -346,8 +371,8 @@ def maybe_run_council_meeting(
             + ", ".join(dangerous_edge_ids)
         ),
         target=target,
-        priority=0.8,
-        urgency=0.6,
+        priority=0.95,
+        urgency=0.95,
         horizon=GoalHorizon.MEDIUM,
         status=GoalStatus.ACTIVE,
         origin=GoalOrigin.GROUP_DECISION,
@@ -385,8 +410,8 @@ def ensure_council_gather_information_goal(
         goal_type=GoalType.GATHER_INFORMATION,
         description="Gather information about corridor risk.",
         target={"corridor_ids": corridors_of_interest},
-        priority=0.8,
-        urgency=0.3,
+        priority=0.95,
+        urgency=0.95,
         horizon=GoalHorizon.MEDIUM,
         status=GoalStatus.ACTIVE,
         created_at_tick=tick,
@@ -445,8 +470,8 @@ def project_gather_information_to_scouts(
                 "corridor_ids": group_goal.target.get("corridor_ids", []),
                 "group_goal_id": group_goal.goal_id,
             },
-            priority=0.7,
-            urgency=0.4,
+            priority=0.95,
+            urgency=0.95,
             horizon=GoalHorizon.SHORT,
             status=GoalStatus.ACTIVE,
             created_at_tick=group_goal.created_at_tick,
@@ -501,8 +526,8 @@ def project_author_protocol_to_scribe(
             "corridor_ids": group_goal.target.get("corridor_ids", []),
             "group_goal_id": group_goal.goal_id,
         },
-        priority=0.8,
-        urgency=0.5,
+        priority=0.95,
+        urgency=0.95,
         horizon=GoalHorizon.MEDIUM,
         status=GoalStatus.ACTIVE,
         created_at_tick=group_goal.created_at_tick,
