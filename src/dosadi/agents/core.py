@@ -230,6 +230,8 @@ class AgentState:
     roles: List[str] = field(default_factory=lambda: ["colonist"])
     ward: Optional[str] = None
 
+    home: Optional[str] = None
+
     attributes: Attributes = field(default_factory=Attributes)
     personality: Personality = field(default_factory=Personality)
     physical: PhysicalState = field(default_factory=PhysicalState)
@@ -368,6 +370,7 @@ def create_agent(agent_id: str, name: str, pod_location_id: str, rng: Any) -> Ag
         tier=1,
         roles=["colonist"],
         ward=None,
+        home=pod_location_id,
         attributes=attrs,
         personality=personality,
         physical=PhysicalState(),
@@ -484,6 +487,23 @@ def _find_well_core_id(topology: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def prepare_navigation_context(world: Any) -> Tuple[Dict[str, Any], Dict[str, List[str]], str, Any]:
+    """
+    Build reusable navigation primitives for a single decision tick.
+
+    This keeps repeated calls to _topology_from_world / _build_neighbors /
+    random.Random creation from occurring once per agent when the same world
+    snapshot is used across many agents in a tick.
+    """
+
+    topology = _topology_from_world(world)
+    neighbors = _build_neighbors(topology)
+    well_core_id = _find_well_core_id(topology) or "loc:well-core"
+    rng = getattr(world, "rng", None) or random.Random(getattr(world, "seed", 0))
+
+    return topology, neighbors, well_core_id, rng
+
+
 def _edge_hazard_probability(current: str, target: str, topology: Dict[str, Any]) -> float:
     for edge in topology.get("edges", []) or []:
         a = edge.get("a")
@@ -502,13 +522,22 @@ def _edge_lookup(current: str, target: str, topology: Dict[str, Any]) -> Optiona
     return None
 
 
-def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
+def decide_next_action(
+    agent: AgentState,
+    world: "WorldState",
+    *,
+    topology: Optional[Dict[str, Any]] = None,
+    neighbors: Optional[Dict[str, List[str]]] = None,
+    well_core_id: Optional[str] = None,
+    rng: Optional[Any] = None,
+) -> Action:
     """Select a coarse next action using goals, beliefs, and topology hints."""
 
     focus_goal = agent.choose_focus_goal()
-    topology = _topology_from_world(world)
-    neighbors = _build_neighbors(topology)
-    well_core_id = _find_well_core_id(topology) or "loc:well-core"
+    topology = topology or _topology_from_world(world)
+    neighbors = neighbors or _build_neighbors(topology)
+    well_core_id = well_core_id or _find_well_core_id(topology) or "loc:well-core"
+    rng = rng or getattr(world, "rng", None) or random.Random(getattr(world, "seed", 0))
 
     def best_neighbor_location() -> Optional[str]:
         options = neighbors.get(agent.location_id, [])
@@ -522,12 +551,33 @@ def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
         scored.sort(key=lambda pair: pair[0])
         return scored[0][1]
 
+    if focus_goal and focus_goal.goal_type == GoalType.GATHER_INFORMATION:
+        options = neighbors.get(agent.location_id, [])
+        target_loc = rng.choice(options) if options else None
+        if target_loc:
+            return Action(
+                actor_id=agent.agent_id,
+                verb="MOVE",
+                target_location_id=target_loc,
+                related_goal_id=focus_goal.goal_id,
+            )
+
+    if focus_goal and focus_goal.goal_type == GoalType.SECURE_SHELTER:
+        home_location = agent.home or agent.location_id
+        if agent.location_id != home_location:
+            target_loc = home_location if home_location in neighbors.get(agent.location_id, []) else best_neighbor_location()
+            if target_loc:
+                return Action(
+                    actor_id=agent.agent_id,
+                    verb="MOVE",
+                    target_location_id=target_loc,
+                    related_goal_id=focus_goal.goal_id,
+                )
+
     if focus_goal and focus_goal.goal_type in {
         GoalType.ACQUIRE_RESOURCE,
-        GoalType.GATHER_INFORMATION,
         GoalType.FORM_GROUP,
         GoalType.STABILIZE_POD,
-        GoalType.REDUCE_POD_RISK,
     }:
         if agent.location_id != well_core_id:
             target_loc = well_core_id if well_core_id in neighbors.get(agent.location_id, []) else best_neighbor_location()
@@ -542,6 +592,7 @@ def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
     if focus_goal and focus_goal.goal_type in {
         GoalType.MAINTAIN_RELATIONSHIPS,
         GoalType.ORGANIZE_GROUP,
+        GoalType.REDUCE_POD_RISK,
     }:
         return Action(
             actor_id=agent.agent_id,
@@ -583,20 +634,6 @@ def decide_next_action(agent: AgentState, world: "WorldState") -> Action:
         related_goal_id=focus_goal.goal_id if focus_goal else None,
     )
 
-
-def _randomize_goal_priorities(agent: AgentState, rng: Any) -> None:
-    """
-    Temporarily reshuffle the priority/urgency of non-terminal goals.
-
-    This is an MVP testing aid to encourage agents stuck in REST_IN_POD
-    to explore different goal orderings.
-    """
-
-    for goal in agent.goals:
-        if goal.status not in {GoalStatus.ACTIVE, GoalStatus.PENDING}:
-            continue
-        goal.priority = max(0.0, min(1.0, rng.uniform(0.35, 1.0)))
-        goal.urgency = max(0.0, min(1.0, rng.uniform(0.0, 0.8)))
 
 
 def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: int) -> Sequence[Episode]:
@@ -706,6 +743,14 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
                 arousal=0.8,
                 perceived_risk=1.0,
             )
+            if goal_ref and goal_ref.goal_type == GoalType.GATHER_INFORMATION:
+                hazard_encounters = goal_ref.target.get("hazard_encounters", 0) + 1
+                goal_ref.target["hazard_encounters"] = hazard_encounters
+                if hazard_encounters >= 5:
+                    goal_ref.status = GoalStatus.PENDING
+                    goal_ref.priority = 0.05
+                    goal_ref.urgency = 0.05
+                    goal_ref.last_updated_tick = tick
     elif action.verb == "POD_MEETING":
         log_episode(
             event_type="POD_MEETING",
@@ -771,9 +816,6 @@ def apply_action(agent: AgentState, action: Action, world: "WorldState", tick: i
             )
     elif action.verb == "REST_IN_POD":
         agent.rest_ticks_in_pod += 1
-        if agent.rest_ticks_in_pod >= 20:
-            _randomize_goal_priorities(agent, rng)
-            agent.rest_ticks_in_pod = 0
         log_episode(
             event_type=action.verb,
             summary=f"Took action {action.verb}.",
@@ -846,5 +888,6 @@ __all__ = [
     "decide_next_action",
     "initialize_agents_for_founding_wakeup",
     "make_episode_id",
-    "make_goal_id",
+  "make_goal_id",
+  "prepare_navigation_context",
 ]

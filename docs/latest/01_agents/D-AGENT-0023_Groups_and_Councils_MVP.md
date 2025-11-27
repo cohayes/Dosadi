@@ -50,6 +50,10 @@ In `founding_wakeup_mvp`:
   - Shares local information (pod meetings).
   - Nominates 0–2 **pod representatives** (spokespeople).
 
+- Implementation note: newly elected pod representatives immediately receive a
+  high-priority `FORM_GROUP` personal goal to pull them toward the hub and
+  form or sustain the proto-council.
+
 Pods are the first site where:
 
 - Informal leadership emerges.
@@ -389,6 +393,20 @@ def maybe_run_pod_meeting(
     ...
 ```
 
+**Trigger and consequence details**
+
+- **When it fires:**
+  - Skips immediately if the configured `meeting_interval_ticks` is `<= 0`.
+  - Requires at least `meeting_interval_ticks` since `pod_group.last_meeting_tick`.
+  - Requires the pod to have at least two members physically present at the `parent_location_id`; otherwise the meeting is treated as held but ends early with only `last_meeting_tick` updated.
+- **How representatives are chosen:**
+  - Every present member “votes” for the most competent podmate (highest `leadership_weight` plus a small noise term) drawn from the entire pod membership.
+  - Candidates become representatives when both of these are true: their vote share is at least `rep_vote_fraction_threshold` **and** their `leadership_weight` is at least `min_leadership_threshold`.
+  - The loop walks ranked vote totals until `max_representatives` are reached, allowing continuity of existing reps.
+- **State changes:**
+  - `POD_REPRESENTATIVE` roles are added/removed inside `roles_by_agent` to match the chosen set, and `last_meeting_tick` is set to the current tick.
+  - No goals or episodes are emitted here; downstream systems should watch role changes if they need to react to new spokespeople.
+
 
 ## 7.3 Proto-council formation and meetings
 
@@ -430,6 +448,18 @@ def maybe_run_council_meeting(
     """
     ...
 ```
+
+**Trigger and consequence details**
+
+- **When it fires:**
+  - Skips if `cooldown_ticks` is `<= 0` or if `tick - last_meeting_tick < cooldown_ticks`.
+  - Requires at least two council members physically present at the hub (`hub_location_id`, default `loc:well-core`).
+- **Baseline effect:**
+  - On a valid meeting, only `last_meeting_tick` is updated inside this helper; emitting COUNCIL_MEETING episodes remains the responsibility of the surrounding simulation loop.
+- **Protocol authoring hook:**
+  - If both `metrics` and `cfg` are supplied, the helper scans corridor risk metrics via `_find_dangerous_corridors_from_metrics`, using `cfg.min_incidents_for_protocol` and `cfg.risk_threshold_for_protocol` as filters.
+  - When dangerous corridors are found, the council selects a scribe (biased toward INT/WIL and low curiosity), adds a `SCRIBE` role, and injects an `AUTHOR_PROTOCOL` goal into that agent with targets listing the dangerous corridor ids.
+  - No goal is created when metrics are missing, risk is below thresholds, or no eligible scribe exists; in those cases the function exits after updating `last_meeting_tick`.
 
 
 ## 7.4 Group goals and projection
