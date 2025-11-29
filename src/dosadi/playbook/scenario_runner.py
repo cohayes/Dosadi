@@ -11,10 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 
-from dataclasses import dataclass
-
-from .sting_wave import StingWaveConfig, run_sting_wave_day3
-
 
 @dataclass(frozen=True)
 class ScenarioEntry:
@@ -71,17 +67,6 @@ def run_scenario(
     if config is None:
         config = entry.build_config(overrides)
     return entry.runner(config)
-
-
-register_scenario(
-    ScenarioEntry(
-        name="sting_wave_day3",
-        description="Sting Wave Day-3 infiltration w/ reserve + rumor KPIs",
-        doc_path="docs/latest/11_scenarios/Dosadi_Scenario_Sting_Wave_Day3.md",
-        config_type=StingWaveConfig,
-        runner=lambda config: run_sting_wave_day3(config),
-    )
-)
 
 @dataclass(slots=True)
 class FoundingWakeupScenarioConfig:
