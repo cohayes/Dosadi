@@ -1,4 +1,4 @@
-"""Group structures and helper logic for pods and proto-councils (D-AGENT-0023)."""
+"""Group structures and helper logic for pods and proto-councils (D-AGENT-0025)."""
 
 from __future__ import annotations
 

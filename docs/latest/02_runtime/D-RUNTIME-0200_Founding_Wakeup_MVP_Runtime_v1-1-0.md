@@ -12,7 +12,7 @@ depends_on:
   - D-AGENT-0020    # Agent_Model_Foundation
   - D-AGENT-0021    # Agent_Goals_and_Episodic_Memory
   - D-AGENT-0022    # Agent_MVP_Python_Skeleton
-  - D-AGENT-0023    # Groups_and_Councils_MVP
+  - D-AGENT-0025    # Groups_and_Councils_MVP
   - D-LAW-0010      # Risk_and_Protocol_Cycle
   - D-LAW-0013      # Movement_Protocols_MVP
 ---
@@ -34,7 +34,7 @@ Version 1.1.0 extends the original D-RUNTIME-0200 to incorporate **Step 6** of t
 MVP plan:
 
 - Integration of `D-AGENT-0022` (AgentState, goals, episodes).
-- Integration of `D-AGENT-0023` (pod groups, proto-council, group goals).
+- Integration of `D-AGENT-0025` (pod groups, proto-council, group goals).
 - Integration of `D-LAW-0013` (movement protocols and hazard multipliers).
 - A concrete **tick loop** for `founding_wakeup_mvp` suitable for Codex to
   implement in Python.
@@ -247,7 +247,7 @@ def step_world_once(world: WorldState) -> None:
 
 # 5. Phase A: Groups and Proto-Council
 
-Phase A wires in `D-AGENT-0023` pod and council logic.
+Phase A wires in `D-AGENT-0025` pod and council logic.
 
 
 ```python
@@ -294,7 +294,7 @@ Notes:
 
 - The **aggregation of hazard episodes** and creation of `GATHER_INFORMATION` /
   `AUTHOR_PROTOCOL` group goals are internal to `maybe_run_council_meeting` and its
-  helpers (see `D-AGENT-0023` and `D-LAW-0013`).
+  helpers (see `D-AGENT-0025` and `D-LAW-0013`).
 - The actual **creation** of `Protocol` records occurs when a scribe completes an
   `AUTHOR_PROTOCOL` goal and calls into the protocol system (see §7).
 
@@ -511,7 +511,7 @@ D-RUNTIME-0200 (v1.1.0) defines the **runtime glue** for the Founding Wakeup MVP
 - A concrete **WorldState** shape with agents, groups, topology, and protocols.
 - A stable **tick loop** with explicit phases A–E.
 - Integration of:
-  - Pod groups and proto-council (D-AGENT-0023),
+  - Pod groups and proto-council (D-AGENT-0025),
   - Agent goals, episodes, and beliefs (D-AGENT-0021, D-AGENT-0022),
   - Movement/safety protocols and hazard multipliers (D-LAW-0013).
 

@@ -1,6 +1,6 @@
 ---
 title: Groups_and_Councils_MVP
-doc_id: D-AGENT-0023
+doc_id: D-AGENT-0025
 version: 1.0.0
 status: draft
 owners: [cohayes]

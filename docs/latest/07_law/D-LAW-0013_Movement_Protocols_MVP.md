@@ -13,7 +13,7 @@ depends_on:
   - D-AGENT-0020    # Agent_Model_Foundation
   - D-AGENT-0021    # Agent_Goals_and_Episodic_Memory
   - D-AGENT-0022    # Agent_MVP_Python_Skeleton
-  - D-AGENT-0023    # Groups_and_Councils_MVP
+  - D-AGENT-0025    # Groups_and_Councils_MVP
   - D-LAW-0010      # Risk_and_Protocol_Cycle
 ---
 
@@ -215,7 +215,7 @@ Movement protocols follow a simple lifecycle in this scenario.
 
 ## 4.1 Trigger conditions (risk thresholds)
 
-When the proto-council meets and aggregates hazard episodes (see `D-AGENT-0023`):
+When the proto-council meets and aggregates hazard episodes (see `D-AGENT-0025`):
 
 - For each corridor `c`:
   - Compute an empirical risk estimate:
@@ -231,7 +231,7 @@ When the proto-council meets and aggregates hazard episodes (see `D-AGENT-0023`)
 
 Within that group goal:
 
-- A **scribe** agent is chosen (see `D-AGENT-0023`).
+- A **scribe** agent is chosen (see `D-AGENT-0025`).
 - The scribe gets a personal `Goal` with `goal_type = AUTHOR_PROTOCOL` and a
   `target` referencing the corridor(s).
 
