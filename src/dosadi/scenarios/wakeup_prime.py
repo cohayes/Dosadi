@@ -27,6 +27,7 @@ class WakeupPrimeScenarioConfig:
     num_agents: int = 240
     seed: int = 1337
     include_canteen: bool = True
+    max_ticks: int = 10_000
     basic_suit_stock: int | None = None
 
 
@@ -37,6 +38,7 @@ class WakeupPrimeReport:
     queues: List[object] = field(default_factory=list)
     config: WakeupPrimeScenarioConfig = field(default_factory=WakeupPrimeScenarioConfig)
     metadata: dict = field(default_factory=dict)
+    summary: dict = field(default_factory=dict)
 
 
 def _initial_wakeup_goals(owner_id: str) -> List[Goal]:
