@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 import random
 
-from dosadi.memory.episodes import EpisodeBuffers
+from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
 from dosadi.systems.protocols import (
     ProtocolRegistry,
     compute_effective_hazard_prob,
@@ -162,17 +162,142 @@ class PlaceBelief:
     owner_id: str
     place_id: str
 
+    fairness_score: float = 0.0
+    efficiency_score: float = 0.0
+    safety_score: float = 0.0
+    congestion_score: float = 0.0
+    reliability_score: float = 0.0
+
     danger_score: float = 0.0
     enforcement_score: float = 0.0
     opportunity_score: float = 0.0
 
+    alpha: float = 0.1
+
     last_updated_tick: int = 0
 
-    def update_from_episode(self, episode: Episode, learning_rate: float = 0.3) -> None:
-        if episode.location_id != self.place_id:
+    def _nudge(self, field_name: str, impact: float, alpha: Optional[float] = None) -> None:
+        """
+        Exponential moving average update with clamping to [-1.0, +1.0].
+
+        new = old * (1 - alpha) + impact * alpha
+        """
+
+        if impact == 0.0:
             return
 
-        is_hazard = "hazard" in (episode.tags or []) or episode.event_type in {
+        if alpha is None:
+            alpha = self.alpha
+
+        old = getattr(self, field_name, 0.0)
+        new = old * (1.0 - alpha) + impact * alpha
+
+        if new > 1.0:
+            new = 1.0
+        elif new < -1.0:
+            new = -1.0
+
+        setattr(self, field_name, new)
+
+    def update_from_episode(self, episode: Episode, learning_rate: float = 0.3) -> None:
+        # Location/target relevance check
+        ep_location = getattr(episode, "location_id", None)
+        ep_target = getattr(episode, "target_id", None)
+
+        if ep_location not in (None, ""):
+            if ep_location != self.place_id:
+                if ep_target != self.place_id:
+                    return
+        elif ep_target != self.place_id:
+            return
+
+        # Episode weight computation
+        base_importance = getattr(episode, "importance", 0.0)
+        base_reliability = getattr(episode, "reliability", 0.5)
+
+        channel = getattr(episode, "channel", None)
+        if channel == EpisodeChannel.DIRECT:
+            channel_multiplier = 1.0
+        elif channel == EpisodeChannel.OBSERVED:
+            channel_multiplier = 0.75
+        elif channel == EpisodeChannel.REPORT:
+            channel_multiplier = 0.6
+        elif channel == EpisodeChannel.RUMOR:
+            channel_multiplier = 0.4
+        elif channel == EpisodeChannel.PROTOCOL:
+            channel_multiplier = 0.5
+        elif channel == EpisodeChannel.BODY_SIGNAL:
+            channel_multiplier = 1.0
+        else:
+            channel_multiplier = 0.5
+
+        emotion = getattr(episode, "emotion", None)
+        arousal = getattr(emotion, "arousal", 0.0) if emotion is not None else 0.0
+        arousal_multiplier = 0.5 + 0.5 * max(0.0, min(1.0, arousal))
+
+        episode_weight = (
+            base_importance * base_reliability * channel_multiplier * arousal_multiplier
+        )
+
+        if episode_weight < 0.01:
+            return
+
+        role_scale = 1.0 if channel == EpisodeChannel.DIRECT else 0.5
+        weight = episode_weight
+        scale = role_scale
+
+        tags = getattr(episode, "tags", None) or set()
+        details = getattr(episode, "details", None) or {}
+
+        if "queue_served" in tags:
+            fairness_base = 0.2
+
+            wait = details.get("wait_ticks", 0)
+            if wait <= 50:
+                efficiency_base = 0.2
+            elif wait <= 200:
+                efficiency_base = 0.1
+            else:
+                efficiency_base = 0.05
+
+            reliability_base = 0.1
+
+            self._nudge("fairness_score", fairness_base * weight * scale)
+            self._nudge("efficiency_score", efficiency_base * weight * scale)
+            self._nudge("reliability_score", reliability_base * weight * scale)
+
+        if "queue_denied" in tags:
+            fairness_base = -0.4
+            reliability_base = -0.4
+
+            threat = getattr(emotion, "threat", 0.0) if emotion is not None else 0.0
+            safety_base = -0.1 * max(0.0, min(1.0, threat))
+
+            self._nudge("fairness_score", fairness_base * weight * scale)
+            self._nudge("reliability_score", reliability_base * weight * scale)
+            if safety_base != 0.0:
+                self._nudge("safety_score", safety_base * weight * scale)
+
+        if "queue_canceled" in tags:
+            efficiency_base = -0.3
+            reliability_base = -0.3
+            fairness_base = -0.1
+
+            self._nudge("efficiency_score", efficiency_base * weight * scale)
+            self._nudge("reliability_score", reliability_base * weight * scale)
+            self._nudge("fairness_score", fairness_base * weight * scale)
+
+        if "queue_fight" in tags:
+            safety_base = -0.6
+            congestion_base = 0.1
+            fairness_base = -0.1 if "guard_brutal" in tags else 0.0
+
+            self._nudge("safety_score", safety_base * weight * scale)
+            self._nudge("congestion_score", congestion_base * weight * scale)
+            if fairness_base != 0.0:
+                self._nudge("fairness_score", fairness_base * weight * scale)
+
+        is_hazard = "hazard" in tags or getattr(episode, "event_type", "") in {
             "HAZARD_INCIDENT",
             "HAZARD_NEAR_MISS",
         }
@@ -180,7 +305,9 @@ class PlaceBelief:
         target_danger = 1.0 if is_hazard else 0.0
         self.danger_score += learning_rate * (target_danger - self.danger_score)
         self.danger_score = max(0.0, min(1.0, self.danger_score))
-        self.last_updated_tick = max(self.last_updated_tick, episode.tick_end)
+
+        tick_end = getattr(episode, "tick_end", getattr(episode, "tick", 0))
+        self.last_updated_tick = max(self.last_updated_tick, tick_end)
 
 
 @dataclass

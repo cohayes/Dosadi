@@ -106,6 +106,7 @@ def process_queue(
     queue.agents_waiting = remaining_ids
 
     served_agents: List[AgentState] = []
+    wait_ticks: dict[str, int] = {}
     denied_agents: List[AgentState] = []
 
     for agent_id in served_ids:
@@ -113,10 +114,15 @@ def process_queue(
         if agent is None:
             continue
 
+        wait = 0
+        if agent.queue_join_tick is not None:
+            wait = tick - agent.queue_join_tick
+
         if queue.queue_id == "queue:suit-issue":
             if _handle_suit_issue_service(world, queue, agent, tick):
                 _clear_agent_queue_membership(agent, tick, queue, queue.stats)
                 served_agents.append(agent)
+                wait_ticks[agent.agent_id] = wait
             else:
                 _handle_queue_denial(agent, tick, queue, queue.stats)
                 denied_agents.append(agent)
@@ -124,15 +130,18 @@ def process_queue(
             _handle_assignment_service(world, queue, agent, tick)
             _clear_agent_queue_membership(agent, tick, queue, queue.stats)
             served_agents.append(agent)
+            wait_ticks[agent.agent_id] = wait
         else:
             _clear_agent_queue_membership(agent, tick, queue, queue.stats)
             served_agents.append(agent)
+            wait_ticks[agent.agent_id] = wait
 
     if served_agents:
         episode_emitter.queue_served(
             tick=tick,
             queue_location_id=queue.location_id,
             served_agents=served_agents,
+            wait_ticks=wait_ticks,
             observers=_collect_queue_observers(
                 world, queue, exclude=[a.id for a in served_agents]
             ),
