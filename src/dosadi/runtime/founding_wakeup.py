@@ -28,6 +28,8 @@ from dosadi.agents.groups import (
     maybe_run_pod_meeting,
 )
 from dosadi.systems.protocols import ProtocolRegistry, activate_protocol, create_movement_protocol_from_goal
+from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
+from dosadi.runtime.queues import process_all_queues
 from dosadi.world.scenarios.founding_wakeup import generate_founding_wakeup_mvp
 from dosadi.state import WorldState
 
@@ -52,6 +54,7 @@ class RuntimeConfig:
     min_incidents_for_protocol: int = 1
     risk_threshold_for_protocol: float = 0.15
     max_ticks: int = 100_000
+    queue_interval_ticks: int = 100
 
 
 @dataclass
@@ -69,10 +72,15 @@ def step_world_once(world: WorldState) -> None:
     world.rng = rng
     cfg: RuntimeConfig = getattr(world, "runtime_config", None) or RuntimeConfig()
     world.runtime_config = cfg
+    queue_emitter = getattr(world, "queue_episode_emitter", None) or QueueEpisodeEmitter()
+    world.queue_episode_emitter = queue_emitter
 
     _phase_A_groups_and_council(world, tick, rng, cfg)
     actions_by_agent = _phase_B_agent_decisions(world, tick)
     _phase_C_apply_actions_and_hazards(world, tick, actions_by_agent)
+
+    if tick % cfg.queue_interval_ticks == 0:
+        process_all_queues(world, tick, queue_emitter)
 
     world.tick += 1
 

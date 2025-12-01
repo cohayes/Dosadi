@@ -14,6 +14,7 @@ from dosadi.agents.core import (
     create_agent,
     make_goal_id,
 )
+from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
 from dosadi.state import WorldState
 from dosadi.world.layout_prime import DEFAULT_PODS, build_habitat_layout_prime
 
@@ -63,10 +64,33 @@ def _initial_wakeup_goals(owner_id: str) -> List[Goal]:
     ]
 
 
-def _build_wakeup_queues(_: WorldState) -> List[object]:
-    """Placeholder for wakeup queues; none are modeled yet."""
+def _register_wakeup_queues(world: WorldState) -> List[QueueState]:
+    """Create and register Wakeup Scenario Prime queues."""
 
-    return []
+    suit_queue = QueueState(
+        queue_id="queue:suit-issue",
+        location_id="queue:suit-issue:front",
+        associated_facility="fac:suit-issue-1",
+        priority_rule=QueuePriorityRule.FIFO,
+        processing_rate=2,
+        process_interval_ticks=100,
+        state=QueueLifecycleState.ACTIVE,
+    )
+
+    assignment_queue = QueueState(
+        queue_id="queue:assignment",
+        location_id="queue:assignment:front",
+        associated_facility="fac:assign-hall-1",
+        priority_rule=QueuePriorityRule.FIFO,
+        processing_rate=2,
+        process_interval_ticks=120,
+        state=QueueLifecycleState.ACTIVE,
+    )
+
+    world.register_queue(suit_queue)
+    world.register_queue(assignment_queue)
+
+    return [suit_queue, assignment_queue]
 
 
 def _create_agents(num_agents: int, pods: Iterable[str], seed: int) -> List[AgentState]:
@@ -108,7 +132,7 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
     for agent in agents:
         world.register_agent(agent)
 
-    queues = _build_wakeup_queues(world)
+    queues = _register_wakeup_queues(world)
 
     return WakeupPrimeReport(
         world=world,
