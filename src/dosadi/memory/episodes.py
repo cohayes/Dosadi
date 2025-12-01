@@ -154,8 +154,9 @@ class EpisodeBuffers:
             lowest_idx = None
             lowest_importance = 1.1
             for idx, ep in enumerate(self.short_term):
-                if ep.importance < lowest_importance:
-                    lowest_importance = ep.importance
+                imp = getattr(ep, "importance", 0.0)
+                if imp < lowest_importance:
+                    lowest_importance = imp
                     lowest_idx = idx
             if lowest_idx is not None:
                 # remove by index using rotate/popleft
@@ -172,5 +173,8 @@ class EpisodeBuffers:
         self.daily.append(episode)
         if len(self.daily) > self.daily_capacity:
             # drop lowest-importance daily episode
-            self.daily.sort(key=lambda ep: ep.importance, reverse=True)
+            self.daily.sort(
+                key=lambda ep: getattr(ep, "importance", 0.0),
+                reverse=True,
+            )
             self.daily = self.daily[: self.daily_capacity]
