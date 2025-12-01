@@ -264,13 +264,55 @@ class AgentState:
         return self.place_beliefs[place_id]
 
     def record_episode(self, episode: Episode) -> None:
+        """
+        Record an episode for this agent.
+
+        - Route all episode writes through EpisodeBuffers.push_short_term so that
+          capacity rules and eviction behavior are respected.
+        - Belief updates are now handled by sleep-time consolidation via
+          consolidate_daily_memory(), not here.
+        """
         self.episodes.push_short_term(episode)
-        self.update_beliefs_from_episode(episode)
 
     def update_beliefs_from_episode(self, episode: Episode) -> None:
         if episode.location_id:
             pb = self.get_or_create_place_belief(episode.location_id)
             pb.update_from_episode(episode)
+
+    def promote_short_term_episodes(self) -> None:
+        """
+        Promote important short-term episodes into the daily buffer.
+
+        This is a v0 heuristic that looks at episode importance, goal relevance,
+        and threat level to decide what to keep for sleep-time consolidation.
+        """
+        # We take a snapshot of short_term so we don't mutate while iterating.
+        for episode in list(self.episodes.short_term):
+            # Simple scoring heuristic; can be refined later.
+            score = (
+                episode.importance
+                + 0.5 * episode.goal_relevance
+                + 0.5 * episode.emotion.threat
+            )
+
+            # v0 threshold; can later be a config constant or derived from traits.
+            if score >= 0.6:
+                self.episodes.promote_to_daily(episode)
+
+    def consolidate_daily_memory(self) -> None:
+        """
+        Integrate daily-buffer episodes into beliefs, then clear the buffer.
+
+        This is the sleep-time consolidation step: daily episodes are turned
+        into belief updates, and the daily buffer is reset.
+        """
+        if not self.episodes.daily:
+            return
+
+        for episode in self.episodes.daily:
+            self.update_beliefs_from_episode(episode)
+
+        self.episodes.daily.clear()
 
     def choose_focus_goal(self) -> Optional[Goal]:
         """
