@@ -32,17 +32,16 @@ from dosadi.runtime.agent_navigation import (
     choose_queue_for_goal,
     step_agent_movement_toward_target,
 )
+from dosadi.memory.config import MemoryConfig
+from dosadi.runtime.memory_runtime import (
+    step_agent_memory_maintenance,
+    step_agent_sleep_wake,
+)
 from dosadi.systems.protocols import ProtocolRegistry, activate_protocol, create_movement_protocol_from_goal
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
 from dosadi.world.scenarios.founding_wakeup import generate_founding_wakeup_mvp
 from dosadi.state import WorldState
-
-# v0 memory timing constants.
-# These are intentionally much shorter than "real" day lengths for MVP runs
-# and can be tuned or replaced later with role-specific schedules.
-EPISODE_PROMOTION_INTERVAL_TICKS = 100       # ~1 minute if 1 tick ≈ 0.6s
-EPISODE_CONSOLIDATION_INTERVAL_TICKS = 6000  # ~1 hour
 
 
 @dataclass
@@ -71,6 +70,8 @@ class FoundingWakeupReport:
 
 def _step_agent_movement(world: WorldState) -> None:
     for agent in world.agents.values():
+        if getattr(agent, "is_asleep", False):
+            continue
         step_agent_movement_toward_target(agent, world)
 
 
@@ -84,6 +85,12 @@ def step_world_once(world: WorldState) -> None:
     world.runtime_config = cfg
     queue_emitter = getattr(world, "queue_episode_emitter", None) or QueueEpisodeEmitter()
     world.queue_episode_emitter = queue_emitter
+    memory_config = getattr(world, "memory_config", None) or MemoryConfig()
+    world.memory_config = memory_config
+
+    for agent in world.agents.values():
+        step_agent_sleep_wake(world, agent, tick, memory_config)
+        step_agent_memory_maintenance(world, agent, tick, memory_config)
 
     _step_agent_movement(world)
     _phase_A_groups_and_council(world, tick, rng, cfg)
@@ -181,6 +188,8 @@ def _phase_B_agent_decisions(world: WorldState, tick: int) -> Dict[str, Action]:
     topology, neighbors, well_core_id, rng = prepare_navigation_context(world)
 
     for agent_id, agent in world.agents.items():
+        if getattr(agent, "is_asleep", False):
+            continue
         focus_goal = agent.choose_focus_goal()
         queue_id, queue_location_id = choose_queue_for_goal(agent, world, focus_goal)
 
@@ -212,15 +221,6 @@ def _phase_C_apply_actions_and_hazards(world: WorldState, tick: int, actions_by_
     for agent_id, action in actions_by_agent.items():
         agent = world.agents[agent_id]
         apply_action(agent, action, world, tick)
-
-    for agent in world.agents.values():
-        # Periodically promote notable short-term episodes into daily buffer.
-        if tick % EPISODE_PROMOTION_INTERVAL_TICKS == 0:
-            agent.promote_short_term_episodes()
-
-        # Periodically consolidate daily episodes into beliefs (sleep surrogate).
-        if tick % EPISODE_CONSOLIDATION_INTERVAL_TICKS == 0:
-            agent.consolidate_daily_memory()
 
 
 def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> FoundingWakeupReport:
