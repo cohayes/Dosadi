@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 import random
 
+from dosadi.memory.episodes import EpisodeBuffers
 from dosadi.systems.protocols import (
     ProtocolRegistry,
     compute_effective_hazard_prob,
@@ -239,7 +240,7 @@ class AgentState:
     location_id: str = "loc:pod-1"
 
     goals: List[Goal] = field(default_factory=list)
-    episodes: List[Episode] = field(default_factory=list)
+    episodes: EpisodeBuffers = field(default_factory=EpisodeBuffers)
 
     place_beliefs: Dict[str, PlaceBelief] = field(default_factory=dict)
 
@@ -263,7 +264,7 @@ class AgentState:
         return self.place_beliefs[place_id]
 
     def record_episode(self, episode: Episode) -> None:
-        self.episodes.append(episode)
+        self.episodes.short_term.append(episode)
         self.update_beliefs_from_episode(episode)
 
     def update_beliefs_from_episode(self, episode: Episode) -> None:
