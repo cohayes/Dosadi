@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Tuple
+import random
 
 from dosadi.agents.core import AgentState, initialize_agents_for_founding_wakeup
 from dosadi.agents.groups import create_pod_group
+from dosadi.memory.config import MemoryConfig
 from ...state import FactionState, WorldState
 
 
@@ -83,6 +85,8 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
 
     world = WorldState(seed=seed)
     world.rng.seed(seed)
+    memory_config = MemoryConfig()
+    world.memory_config = memory_config
     topology_nodes = [asdict(node) for node in BASE_NODES]
     topology_edges = [asdict(edge) for edge in BASE_EDGES]
     world.policy["topology"] = {
@@ -107,6 +111,7 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     for agent in agents:
         colonist_faction.members.append(agent.id)
         world.register_agent(agent)
+        _initialize_agent_sleep_schedule(agent, world, memory_config)
 
     # Create pod groups based on initial occupancy
     pod_members: Dict[str, List[str]] = {pid: [] for pid in pod_ids}
@@ -118,6 +123,20 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
         world.groups.append(group)
 
     return world
+
+
+def _initialize_agent_sleep_schedule(agent: AgentState, world: WorldState, memory_config: MemoryConfig) -> None:
+    ticks_per_day = getattr(world, "ticks_per_day", 144_000)
+
+    offset = random.randint(0, ticks_per_day - 1)
+
+    agent.is_asleep = False
+    agent.next_sleep_tick = offset
+    agent.next_wake_tick = agent.next_sleep_tick + memory_config.sleep_duration_ticks
+
+    agent.last_short_term_maintenance_tick = 0
+    agent.last_daily_promotion_tick = 0
+    agent.last_consolidation_tick = -memory_config.min_consolidation_interval_ticks
 
 
 __all__ = ["generate_founding_wakeup_mvp", "LocationNode", "LocationEdge"]

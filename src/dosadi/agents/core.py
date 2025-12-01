@@ -369,6 +369,16 @@ class AgentState:
     current_queue_id: Optional[str] = None
     queue_join_tick: Optional[int] = None
 
+    # Sleep and memory scheduling
+    is_asleep: bool = False
+
+    next_sleep_tick: int = 0
+    next_wake_tick: int = 0
+
+    last_short_term_maintenance_tick: int = 0
+    last_daily_promotion_tick: int = 0
+    last_consolidation_tick: int = 0
+
     has_basic_suit: bool = False
     assignment_role: Optional[str] = None
     bunk_location_id: Optional[str] = None

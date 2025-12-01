@@ -1,6 +1,8 @@
 """Wakeup Scenario Prime builder (D-SCEN-0001)."""
 from __future__ import annotations
 
+import random
+
 from dataclasses import dataclass, field
 from typing import Iterable, List
 
@@ -14,6 +16,7 @@ from dosadi.agents.core import (
     create_agent,
     make_goal_id,
 )
+from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
 from dosadi.state import WorldState
 from dosadi.world.layout_prime import DEFAULT_PODS, build_habitat_layout_prime
@@ -124,6 +127,9 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
     world = WorldState(seed=config.seed)
     world.rng.seed(config.seed)
 
+    memory_config = MemoryConfig()
+    world.memory_config = memory_config
+
     world.policy["topology"] = layout.to_topology()
     world.nodes = layout.nodes
     world.edges = layout.edges
@@ -132,6 +138,7 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
     agents = _create_agents(config.num_agents, pods, config.seed)
     for agent in agents:
         world.register_agent(agent)
+        _initialize_agent_sleep_schedule(agent, world, memory_config)
 
     queues = _register_wakeup_queues(world)
 
@@ -146,6 +153,30 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
         config=config,
         metadata={"scenario_id": "wakeup_prime"},
     )
+
+
+def _initialize_agent_sleep_schedule(
+    agent: AgentState,
+    world: WorldState,
+    memory_config: MemoryConfig,
+) -> None:
+    """
+    Give each agent a personal sleep/wake phase.
+
+    For MVP, assign a random offset across the day so not everyone sleeps at once.
+    """
+
+    ticks_per_day = getattr(world, "ticks_per_day", 144_000)
+
+    offset = random.randint(0, ticks_per_day - 1)
+
+    agent.is_asleep = False
+    agent.next_sleep_tick = offset
+    agent.next_wake_tick = agent.next_sleep_tick + memory_config.sleep_duration_ticks
+
+    agent.last_short_term_maintenance_tick = 0
+    agent.last_daily_promotion_tick = 0
+    agent.last_consolidation_tick = -memory_config.min_consolidation_interval_ticks
 
 
 __all__ = [
