@@ -816,6 +816,7 @@ class WorldState:
     admin_event_log: AdminEventLog = field(default_factory=AdminEventLog)
     metrics: MutableMapping[str, float] = field(default_factory=dict)
     runtime_config: Any = None
+    basic_suit_stock: int = 0
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

@@ -5,6 +5,7 @@ from enum import Enum, auto
 from typing import List, Optional, Sequence, TYPE_CHECKING
 
 from dosadi.agents.core import AgentState
+from dosadi.runtime.agent_goals import complete_goals_by_kind
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 
 if TYPE_CHECKING:
@@ -86,12 +87,11 @@ def process_queue(
     episode_emitter: QueueEpisodeEmitter,
 ) -> None:
     """
-    Generic queue processing:
+    Generic queue processing with queue-specific side effects:
 
     - Select up to `processing_rate` agents according to `priority_rule`.
-    - Mark them as 'served' in the generic sense (clear queue membership).
-    - Emit queue_served episodes.
-    - Stats update, but no detailed domain-specific side effects yet.
+    - Apply queue-specific service/denial logic.
+    - Emit queue_served and queue_denied episodes accordingly.
     """
     waiting_ids: List[AgentID] = list(queue.agents_waiting)
     if not waiting_ids:
@@ -106,19 +106,47 @@ def process_queue(
     queue.agents_waiting = remaining_ids
 
     served_agents: List[AgentState] = []
+    denied_agents: List[AgentState] = []
+
     for agent_id in served_ids:
         agent = world.agents.get(agent_id)
         if agent is None:
             continue
-        _clear_agent_queue_membership(agent, tick, queue, queue.stats)
-        served_agents.append(agent)
+
+        if queue.queue_id == "queue:suit-issue":
+            if _handle_suit_issue_service(world, queue, agent, tick):
+                _clear_agent_queue_membership(agent, tick, queue, queue.stats)
+                served_agents.append(agent)
+            else:
+                _handle_queue_denial(agent, tick, queue, queue.stats)
+                denied_agents.append(agent)
+        elif queue.queue_id == "queue:assignment":
+            _handle_assignment_service(world, queue, agent, tick)
+            _clear_agent_queue_membership(agent, tick, queue, queue.stats)
+            served_agents.append(agent)
+        else:
+            _clear_agent_queue_membership(agent, tick, queue, queue.stats)
+            served_agents.append(agent)
 
     if served_agents:
         episode_emitter.queue_served(
             tick=tick,
             queue_location_id=queue.location_id,
             served_agents=served_agents,
-            observers=_collect_queue_observers(world, queue, exclude=served_ids),
+            observers=_collect_queue_observers(
+                world, queue, exclude=[a.id for a in served_agents]
+            ),
+            event_id=None,
+        )
+
+    if denied_agents:
+        episode_emitter.queue_denied(
+            tick=tick,
+            queue_location_id=queue.location_id,
+            denied_agents=denied_agents,
+            observers=_collect_queue_observers(
+                world, queue, exclude=[a.id for a in denied_agents]
+            ),
             event_id=None,
         )
 
@@ -181,3 +209,63 @@ def _collect_queue_observers(
         if agent is not None:
             observers.append(agent)
     return observers
+
+
+POD_IDS = ["pod:A", "pod:B", "pod:C", "pod:D"]
+
+
+def _handle_suit_issue_service(
+    world: "WorldState",
+    queue: QueueState,
+    agent: AgentState,
+    tick: int,
+) -> bool:
+    """Issue a basic suit if stock allows; return True if served."""
+
+    if agent.has_basic_suit:
+        return True
+
+    if world.basic_suit_stock > 0:
+        world.basic_suit_stock -= 1
+        agent.has_basic_suit = True
+        complete_goals_by_kind(agent, "get_suit")
+        return True
+
+    return False
+
+
+def _handle_assignment_service(
+    world: "WorldState",
+    queue: QueueState,
+    agent: AgentState,
+    tick: int,
+) -> None:
+    """Assign a role and bunk to the agent."""
+
+    if agent.assignment_role is None:
+        agent.assignment_role = "general_labor"
+        if "colonist" not in agent.roles:
+            agent.roles.append("colonist")
+
+    if agent.bunk_location_id is None:
+        try:
+            idx = int(agent.agent_id.split(":")[-1])
+        except Exception:
+            idx = 0
+        agent.bunk_location_id = POD_IDS[idx % len(POD_IDS)]
+
+    complete_goals_by_kind(agent, "get_assignment")
+    complete_goals_by_kind(agent, "secure_bunk")
+
+
+def _handle_queue_denial(
+    agent: AgentState,
+    tick: int,
+    queue: QueueState,
+    stats: QueueStats,
+) -> None:
+    """Clear queue membership and record denial stats."""
+
+    stats.total_denied += 1
+    agent.current_queue_id = None
+    agent.queue_join_tick = None
