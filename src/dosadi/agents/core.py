@@ -343,8 +343,9 @@ class PhysicalState:
     fatigue: float = 0.0
     hunger: float = 0.0
     thirst: float = 0.0
-    stress: float = 0.0
-    morale: float = 0.5
+    # Psychological load indicators
+    stress: float = 0.3  # 0.0 = relaxed, ~0.3–0.6 = normal Dosadi tension
+    morale: float = 0.6  # 0.0 = demoralized, 1.0 = highly motivated
 
 
 @dataclass
