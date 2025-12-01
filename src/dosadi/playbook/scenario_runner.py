@@ -75,6 +75,13 @@ class FoundingWakeupScenarioConfig:
     seed: int = 1337
 
 
+@dataclass(slots=True)
+class WakeupPrimeScenarioConfig:
+    num_agents: int = 240
+    seed: int = 1337
+    include_canteen: bool = True
+
+
 def _run_founding_wakeup(config: FoundingWakeupScenarioConfig):
     from ..runtime import founding_wakeup as fw
 
@@ -87,6 +94,14 @@ def _run_founding_wakeup(config: FoundingWakeupScenarioConfig):
     )
 
 
+def _run_wakeup_prime(config: WakeupPrimeScenarioConfig):
+    from ..scenarios.wakeup_prime import generate_wakeup_scenario_prime
+
+    if isinstance(config, dict):
+        config = WakeupPrimeScenarioConfig(**config)
+    return generate_wakeup_scenario_prime(config)
+
+
 register_scenario(
     ScenarioEntry(
         name="founding_wakeup_mvp",
@@ -97,11 +112,22 @@ register_scenario(
     )
 )
 
+register_scenario(
+    ScenarioEntry(
+        name="wakeup_prime",
+        description="Wakeup Scenario Prime",
+        doc_path="docs/latest/11_scenarios/D-SCEN-0001_Wakeup_Scenario_Prime_v0.md",
+        config_type=WakeupPrimeScenarioConfig,
+        runner=lambda config: _run_wakeup_prime(config),
+    )
+)
+
 
 __all__ = [
     "ScenarioEntry",
     "available_scenarios",
     "get_scenario_entry",
+    "WakeupPrimeScenarioConfig",
     "register_scenario",
     "run_scenario",
 ]
