@@ -27,6 +27,11 @@ from dosadi.agents.groups import (
     maybe_run_council_meeting,
     maybe_run_pod_meeting,
 )
+from dosadi.runtime.agent_navigation import (
+    attempt_join_queue,
+    choose_queue_for_goal,
+    step_agent_movement_toward_target,
+)
 from dosadi.systems.protocols import ProtocolRegistry, activate_protocol, create_movement_protocol_from_goal
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
@@ -64,6 +69,11 @@ class FoundingWakeupReport:
     summary: Dict[str, object] = field(default_factory=dict)
 
 
+def _step_agent_movement(world: WorldState) -> None:
+    for agent in world.agents.values():
+        step_agent_movement_toward_target(agent, world)
+
+
 def step_world_once(world: WorldState) -> None:
     """Advance the world by a single tick for the Founding Wakeup MVP."""
 
@@ -75,6 +85,7 @@ def step_world_once(world: WorldState) -> None:
     queue_emitter = getattr(world, "queue_episode_emitter", None) or QueueEpisodeEmitter()
     world.queue_episode_emitter = queue_emitter
 
+    _step_agent_movement(world)
     _phase_A_groups_and_council(world, tick, rng, cfg)
     actions_by_agent = _phase_B_agent_decisions(world, tick)
     _phase_C_apply_actions_and_hazards(world, tick, actions_by_agent)
@@ -170,6 +181,19 @@ def _phase_B_agent_decisions(world: WorldState, tick: int) -> Dict[str, Action]:
     topology, neighbors, well_core_id, rng = prepare_navigation_context(world)
 
     for agent_id, agent in world.agents.items():
+        focus_goal = agent.choose_focus_goal()
+        queue_id, queue_location_id = choose_queue_for_goal(agent, world, focus_goal)
+
+        if queue_location_id is not None:
+            agent.navigation_target_id = queue_location_id
+
+            if (
+                agent.location_id == queue_location_id
+                and agent.current_queue_id is None
+                and queue_id is not None
+            ):
+                attempt_join_queue(agent, world, queue_id, tick)
+
         action = decide_next_action(
             agent,
             world,

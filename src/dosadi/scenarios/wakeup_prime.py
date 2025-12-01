@@ -24,6 +24,7 @@ class WakeupPrimeScenarioConfig:
     num_agents: int = 240
     seed: int = 1337
     include_canteen: bool = True
+    basic_suit_stock: int | None = None
 
 
 @dataclass
@@ -133,6 +134,10 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
         world.register_agent(agent)
 
     queues = _register_wakeup_queues(world)
+
+    num_agents = len(agents)
+    default_suits = getattr(config, "basic_suit_stock", None)
+    world.basic_suit_stock = num_agents if default_suits is None else default_suits
 
     return WakeupPrimeReport(
         world=world,
