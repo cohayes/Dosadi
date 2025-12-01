@@ -238,6 +238,8 @@ class AgentState:
     physical: PhysicalState = field(default_factory=PhysicalState)
 
     location_id: str = "loc:pod-1"
+    current_queue_id: Optional[str] = None
+    queue_join_tick: Optional[int] = None
 
     goals: List[Goal] = field(default_factory=list)
     episodes: EpisodeBuffers = field(default_factory=EpisodeBuffers)

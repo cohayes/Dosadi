@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .systems.protocols import ProtocolRegistry
+    from .runtime.queues import QueueState
 
 
 
@@ -792,6 +793,7 @@ class WorldState:
     wards: MutableMapping[str, WardState] = field(default_factory=dict)
     factions: MutableMapping[str, FactionState] = field(default_factory=dict)
     agents: MutableMapping[str, AgentState] = field(default_factory=dict)
+    queues: MutableMapping[str, "QueueState"] = field(default_factory=dict)
     contracts: MutableMapping[str, ContractState] = field(default_factory=dict)
     cases: MutableMapping[str, CaseState] = field(default_factory=dict)
     rumors: MutableMapping[str, RumorState] = field(default_factory=dict)
@@ -823,6 +825,12 @@ class WorldState:
 
     def register_agent(self, agent: AgentState) -> None:
         self.agents[agent.id] = agent
+
+    def register_queue(self, queue: "QueueState") -> None:
+        self.queues[queue.queue_id] = queue
+
+    def get_queue(self, queue_id: str) -> Optional["QueueState"]:
+        return self.queues.get(queue_id)
 
     def register_route(self, route: RouteState) -> None:
         self.routes[route.id] = route
