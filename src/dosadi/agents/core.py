@@ -264,7 +264,7 @@ class AgentState:
         return self.place_beliefs[place_id]
 
     def record_episode(self, episode: Episode) -> None:
-        self.episodes.short_term.append(episode)
+        self.episodes.push_short_term(episode)
         self.update_beliefs_from_episode(episode)
 
     def update_beliefs_from_episode(self, episode: Episode) -> None:
