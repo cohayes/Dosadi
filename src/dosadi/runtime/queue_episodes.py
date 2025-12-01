@@ -24,10 +24,14 @@ class QueueEpisodeEmitter:
         tick: int,
         queue_location_id: str,
         served_agents: Iterable[AgentState],
+        wait_ticks: Optional[dict[str, int]] = None,
         observers: Iterable[AgentState] = (),
         event_id: Optional[str] = None,
     ) -> None:
         for agent in served_agents:
+            wait = 0
+            if wait_ticks:
+                wait = wait_ticks.get(agent.agent_id, 0)
             episode = self.factory.build_episode(
                 owner=agent,
                 tick=tick,
@@ -38,6 +42,8 @@ class QueueEpisodeEmitter:
                 target_id=queue_location_id,
                 event_id=event_id,
             )
+            episode.tags.add("queue_served")
+            episode.details["wait_ticks"] = wait
             agent.record_episode(episode)
 
         for agent in observers:
@@ -51,6 +57,7 @@ class QueueEpisodeEmitter:
                 target_id=queue_location_id,
                 event_id=event_id,
             )
+            episode.tags.add("queue_served")
             agent.record_episode(episode)
 
     def queue_denied(
@@ -73,6 +80,7 @@ class QueueEpisodeEmitter:
                 target_id=queue_location_id,
                 event_id=event_id,
             )
+            episode.tags.add("queue_denied")
             agent.record_episode(episode)
 
         for agent in observers:
@@ -86,6 +94,7 @@ class QueueEpisodeEmitter:
                 target_id=queue_location_id,
                 event_id=event_id,
             )
+            episode.tags.add("queue_denied")
             agent.record_episode(episode)
 
     def queue_canceled(
@@ -108,6 +117,7 @@ class QueueEpisodeEmitter:
                 target_id=queue_location_id,
                 event_id=event_id,
             )
+            episode.tags.add("queue_canceled")
             agent.record_episode(episode)
 
         for agent in observers:
@@ -121,6 +131,7 @@ class QueueEpisodeEmitter:
                 target_id=queue_location_id,
                 event_id=event_id,
             )
+            episode.tags.add("queue_canceled")
             agent.record_episode(episode)
 
     def queue_fight(
@@ -146,6 +157,7 @@ class QueueEpisodeEmitter:
                 target_id=queue_location_id,
                 event_id=event_id,
             )
+            episode.tags.add("queue_fight")
             agent.record_episode(episode)
 
         for agent in observers:
@@ -159,4 +171,5 @@ class QueueEpisodeEmitter:
                 target_id=queue_location_id,
                 event_id=event_id,
             )
+            episode.tags.add("queue_fight")
             agent.record_episode(episode)
