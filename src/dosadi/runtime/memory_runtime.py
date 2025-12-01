@@ -6,6 +6,14 @@ from dosadi.memory.episodes import EpisodeBuffers, Episode, EpisodeGoalRelation
 from dosadi.state import WorldState
 
 
+def _clamp01(x: float) -> float:
+    if x < 0.0:
+        return 0.0
+    if x > 1.0:
+        return 1.0
+    return x
+
+
 def _retention_score(ep: Episode) -> float:
     """
     Compute a rough retention score R(ep) in [0, 1] based on
@@ -155,6 +163,90 @@ def run_sleep_consolidation(
             pb.update_from_episode(ep)
 
     buffers.daily.clear()
+
+    # After daily episodes have been integrated into beliefs,
+    # apply slow belief-driven adjustments to stress and morale.
+    _apply_belief_driven_stress_and_morale(agent)
+
+
+def _apply_belief_driven_stress_and_morale(agent: AgentState) -> None:
+    """
+    Use PlaceBeliefs for key service locations to nudge agent.physical.stress
+    and agent.physical.morale a little bit per sleep cycle.
+
+    Follows D-MEMORY-0207: small, EMA-like drifts based on fairness / safety /
+    congestion / reliability / efficiency.
+    """
+
+    # Define which places matter for MVP (wakeup core services).
+    places_of_interest = [
+        "queue:suit-issue:front",
+        "queue:assignment:front",
+        # If beliefs are keyed by facility ids instead of queue nodes,
+        # keep these as alternates:
+        "fac:suit-issue-1",
+        "fac:assign-hall-1",
+    ]
+
+    sp_list: list[float] = []
+    mp_list: list[float] = []
+
+    for place_id in places_of_interest:
+        pb = agent.place_beliefs.get(place_id)
+        if pb is None:
+            continue
+
+        fair = pb.fairness_score
+        eff = pb.efficiency_score
+        safe = pb.safety_score
+        cong = pb.congestion_score
+        rel = pb.reliability_score
+
+        # Stress pressure per place (SP_place), as per spec:
+        # negatives are stress-relieving, positives stress-increasing.
+        sp_place = (
+            -0.6 * (-safe) +   # unsafe (safe<0) increases stress
+             0.4 * cong +      # congestion increases stress
+            -0.4 * (-rel) +    # unreliability increases stress
+            -0.2 * (-fair)     # unfairness increases stress (modestly)
+        )
+
+        # Morale pressure per place (MP_place), as per spec:
+        # positives increase morale, negatives reduce morale.
+        mp_place = (
+             0.6 * fair +      # fairness supports morale
+             0.5 * rel +       # reliability supports morale
+             0.3 * eff         # efficiency; chronic slowness erodes morale
+        )
+
+        sp_list.append(sp_place)
+        mp_list.append(mp_place)
+
+    if not sp_list and not mp_list:
+        # No relevant beliefs; no adjustment this cycle.
+        return
+
+    SP_net = sum(sp_list) / len(sp_list) if sp_list else 0.0
+    MP_net = sum(mp_list) / len(mp_list) if mp_list else 0.0
+
+    # Base step sizes (per sleep cycle)
+    stress_step_scale = 0.05
+    morale_step_scale = 0.03
+
+    # Simple tier modulation: Tier-1 more reactive, Tier-3 more buffered.
+    tier = getattr(agent, "tier", 1)
+    if tier == 1:
+        stress_step_scale *= 1.2
+        morale_step_scale *= 1.2
+    elif tier == 3:
+        stress_step_scale *= 0.8
+        morale_step_scale *= 0.8
+
+    physical = agent.physical
+
+    # Apply drifts and clamp to [0, 1]
+    physical.stress = _clamp01(physical.stress + stress_step_scale * SP_net)
+    physical.morale = _clamp01(physical.morale + morale_step_scale * MP_net)
 
 
 def step_agent_memory_maintenance(
