@@ -80,6 +80,8 @@ class WakeupPrimeScenarioConfig:
     num_agents: int = 240
     seed: int = 1337
     include_canteen: bool = True
+    max_ticks: int = 10_000
+    basic_suit_stock: int | None = None
 
 
 def _run_founding_wakeup(config: FoundingWakeupScenarioConfig):
@@ -95,11 +97,17 @@ def _run_founding_wakeup(config: FoundingWakeupScenarioConfig):
 
 
 def _run_wakeup_prime(config: WakeupPrimeScenarioConfig):
-    from ..scenarios.wakeup_prime import generate_wakeup_scenario_prime
+    from ..runtime.wakeup_prime import run_wakeup_prime
 
     if isinstance(config, dict):
         config = WakeupPrimeScenarioConfig(**config)
-    return generate_wakeup_scenario_prime(config)
+    return run_wakeup_prime(
+        num_agents=config.num_agents,
+        max_ticks=config.max_ticks,
+        seed=config.seed,
+        include_canteen=config.include_canteen,
+        basic_suit_stock=config.basic_suit_stock,
+    )
 
 
 register_scenario(

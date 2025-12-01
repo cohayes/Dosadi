@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dosadi.agents.core import AgentState
-from dosadi.memory.beliefs import PlaceBelief
+from dosadi.agents.core import AgentState, PlaceBelief
 from dosadi.memory.config import MemoryConfig
 from dosadi.memory.episodes import EpisodeBuffers, Episode, EpisodeGoalRelation
 from dosadi.state import WorldState
@@ -68,12 +67,14 @@ def promote_daily_memory(
     agent: AgentState,
     tick: int,
     config: MemoryConfig,
+    *,
+    force: bool = False,
 ) -> None:
     """
     Periodically scan short-term episodes and promote important ones to the daily buffer.
     """
 
-    if tick - agent.last_daily_promotion_tick < config.daily_promotion_interval_ticks:
+    if not force and tick - agent.last_daily_promotion_tick < config.daily_promotion_interval_ticks:
         return
     agent.last_daily_promotion_tick = tick
 
@@ -111,6 +112,9 @@ def step_agent_sleep_wake(
     """
 
     if not agent.is_asleep and tick >= agent.next_sleep_tick:
+        # Make sure salient short-term episodes are ready for consolidation.
+        promote_daily_memory(agent, tick, config, force=True)
+
         agent.is_asleep = True
         agent.next_wake_tick = tick + config.sleep_duration_ticks
 
