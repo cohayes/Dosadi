@@ -19,6 +19,7 @@ from .admin_log import AdminEventLog
 from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
 from .simulation.snapshots import serialize_state
+from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -823,6 +824,8 @@ class WorldState:
     facility_belief_summaries: Dict[str, FacilityBeliefSummary] = field(default_factory=dict)
     facility_protocol_tuning: Dict[str, FacilityProtocolTuning] = field(default_factory=dict)
     metrics: MutableMapping[str, float] = field(default_factory=dict)
+    council_metrics: CouncilMetrics = field(default_factory=CouncilMetrics)
+    council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
     runtime_config: Any = None
     basic_suit_stock: int = 0
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
