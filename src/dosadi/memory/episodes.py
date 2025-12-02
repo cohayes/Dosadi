@@ -51,6 +51,42 @@ class EpisodeGoalRelation(Enum):
     MIXED = auto()
 
 
+class EpisodeVerb:
+    """Canonical episode verb names used throughout the simulation."""
+
+    # Scout & survey
+    SCOUT_PLACE = "SCOUT_PLACE"
+    CORRIDOR_CROWDING_OBSERVED = "CORRIDOR_CROWDING_OBSERVED"
+    HAZARD_FOUND = "HAZARD_FOUND"
+
+    # Inventory & stores
+    CRATE_OPENED = "CRATE_OPENED"
+    RESOURCE_STOCKED = "RESOURCE_STOCKED"
+    QUEUE_SERVED = "QUEUE_SERVED"
+    QUEUE_DENIED = "QUEUE_DENIED"
+    DISPUTE_AT_STORES = "DISPUTE_AT_STORES"
+
+    # Environment & suits
+    ENV_NODE_TUNED = "ENV_NODE_TUNED"
+    ENV_NODE_FAILURE = "ENV_NODE_FAILURE"
+    SUIT_TUNED = "SUIT_TUNED"
+    SUIT_FAILURE_NEAR_MISS = "SUIT_FAILURE_NEAR_MISS"
+
+    # Food & water
+    FOOD_SERVED = "FOOD_SERVED"
+    FOOD_SHORTAGE_EPISODE = "FOOD_SHORTAGE_EPISODE"
+    BARREL_MOVED = "BARREL_MOVED"
+    LEAK_FOUND = "LEAK_FOUND"
+    WATER_LOSS_INCIDENT = "WATER_LOSS_INCIDENT"
+
+    # Knowledge & coordination
+    REPORT_RECEIVED = "REPORT_RECEIVED"
+    MAP_UPDATED = "MAP_UPDATED"
+    LEDGER_UPDATED = "LEDGER_UPDATED"
+    ASSIGNMENT_GIVEN = "ASSIGNMENT_GIVEN"
+    ASSIGNMENT_DISPUTE = "ASSIGNMENT_DISPUTE"
+
+
 @dataclass
 class EmotionSnapshot:
     """
