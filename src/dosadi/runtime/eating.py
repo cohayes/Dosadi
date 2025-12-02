@@ -6,6 +6,8 @@ from typing import Optional, List
 import random
 
 from dosadi.agents.core import AgentState, Goal, GoalStatus, GoalType
+from dosadi.memory.episode_factory import EpisodeFactory
+from dosadi.world.environment import get_or_create_place_env
 
 # Hunger and meal tuning constants (MVP defaults)
 HUNGER_RATE_PER_TICK: float = 1.0 / 50_000.0
@@ -15,16 +17,43 @@ HUNGER_GOAL_THRESHOLD: float = 0.4
 MEAL_SATIATION_AMOUNT: float = 0.7
 GET_MEAL_GOAL_TIMEOUT_TICKS: int = 100_000
 
+ENV_UNCOMFORTABLE_THRESHOLD = 0.3
+ENV_COMFORTABLE_THRESHOLD = 0.7
 
-def update_agent_physical_state(world, agent: AgentState) -> None:
+
+def update_agent_physical_state(
+    world, agent: AgentState, rng: Optional[random.Random] = None
+) -> None:
     """Update per-tick physiological drift such as hunger."""
 
     if getattr(agent, "is_asleep", False):
         return
 
+    rng = rng or getattr(world, "rng", None) or random
     agent.physical.hunger_level += HUNGER_RATE_PER_TICK
     if agent.physical.hunger_level > HUNGER_MAX:
         agent.physical.hunger_level = HUNGER_MAX
+
+    env = get_or_create_place_env(world, agent.location_id)
+    factory = EpisodeFactory(world=world)
+    current_tick = getattr(world, "tick", 0)
+
+    if env.comfort < ENV_UNCOMFORTABLE_THRESHOLD and rng.random() < 0.02:
+        episode = factory.create_body_signal_episode(
+            owner_agent_id=agent.id,
+            tick=current_tick,
+            signal_type="ENV_UNCOMFORTABLE",
+            intensity=1.0 - env.comfort,
+        )
+        agent.record_episode(episode)
+    elif env.comfort > ENV_COMFORTABLE_THRESHOLD and rng.random() < 0.02:
+        episode = factory.create_body_signal_episode(
+            owner_agent_id=agent.id,
+            tick=current_tick,
+            signal_type="ENV_COMFORTABLE",
+            intensity=env.comfort,
+        )
+        agent.record_episode(episode)
 
 
 def has_active_or_pending_get_meal_goal(agent: AgentState) -> bool:

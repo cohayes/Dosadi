@@ -15,6 +15,7 @@ from dosadi.agents.groups import create_pod_group
 from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.work_details import WorkDetailType
 from ...state import FactionState, WorldState
+from ..environment import get_or_create_place_env
 
 
 @dataclass(frozen=True)
@@ -100,7 +101,7 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     world.desired_work_details[WorkDetailType.SCOUT_INTERIOR] = 8
     world.desired_work_details[WorkDetailType.SCOUT_EXTERIOR] = 4
     world.desired_work_details[WorkDetailType.INVENTORY_STORES] = 6
-    world.desired_work_details[WorkDetailType.ENV_CONTROL_DETAIL] = 4
+    world.desired_work_details[WorkDetailType.ENV_CONTROL] = 4
     world.desired_work_details[WorkDetailType.FOOD_PROCESSING_DETAIL] = 4
     world.desired_work_details[WorkDetailType.SCRIBE_DETAIL] = 2
     world.desired_work_details[WorkDetailType.DISPATCH_DETAIL] = 1
@@ -114,6 +115,7 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     world.nodes = {node.id: node for node in BASE_NODES}
     world.edges = {edge.id: edge for edge in BASE_EDGES}
     world.facilities = {node.id: node for node in BASE_NODES if getattr(node, "kind", None)}
+    world.places = world.nodes
 
     colonist_faction = FactionState(
         id="faction:colonists",
@@ -140,7 +142,26 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
         group = create_pod_group(pod_location_id=pod_id, member_ids=members, tick=world.tick)
         world.groups.append(group)
 
+    initialize_environment_for_founding_wakeup(world)
+
     return world
+
+
+def initialize_environment_for_founding_wakeup(world: WorldState) -> None:
+    for place_id, facility in world.places.items():
+        env = get_or_create_place_env(world, place_id)
+
+        kind = getattr(facility, "kind", None) or getattr(facility, "type", None)
+        if kind in {"pod", "bunk_pod"}:
+            env.comfort = 0.7
+        elif kind in {"mess_hall"}:
+            env.comfort = 0.65
+        elif kind in {"corridor", "junction"}:
+            env.comfort = 0.4
+        elif kind in {"store", "depot"}:
+            env.comfort = 0.45
+        else:
+            env.comfort = 0.5
 
 
 def _initialize_agent_sleep_schedule(agent: AgentState, world: WorldState, memory_config: MemoryConfig) -> None:

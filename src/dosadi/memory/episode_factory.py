@@ -404,6 +404,39 @@ class EpisodeFactory:
 
         return episode
 
+    def create_body_signal_episode(
+        self,
+        *,
+        owner_agent_id: str,
+        tick: int,
+        signal_type: str,
+        intensity: float,
+    ) -> Episode:
+        intensity = max(0.0, min(1.0, float(intensity)))
+        emotion = EmotionSnapshot(valence=0.0, arousal=intensity, threat=0.0)
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=None,
+            channel=EpisodeChannel.BODY_SIGNAL,
+            target_type=EpisodeTargetType.SELF,
+            target_id=owner_agent_id,
+            verb=EpisodeVerb.BODY_SIGNAL,
+            summary_tag="body_signal",
+            goal_relation=EpisodeGoalRelation.UNKNOWN,
+            goal_relevance=0.2,
+            outcome=EpisodeOutcome.NEUTRAL,
+            emotion=emotion,
+            importance=0.2 + 0.3 * intensity,
+            reliability=0.9,
+            tags={"body_signal"},
+            details={
+                "signal_type": signal_type,
+                "intensity": float(intensity),
+            },
+        )
+
     def create_scout_place_episode(
         self,
         owner_agent_id: str,
@@ -725,5 +758,36 @@ class EpisodeFactory:
             details={
                 "severity": float(severity),
                 "estimated_loss": float(estimated_loss),
+            },
+        )
+
+    def create_env_node_tuned_episode(
+        self,
+        owner_agent_id: str,
+        tick: int,
+        place_id: str,
+        comfort_before: float,
+        comfort_after: float,
+    ) -> Episode:
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=place_id,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.PLACE,
+            target_id=place_id,
+            verb=EpisodeVerb.ENV_NODE_TUNED,
+            summary_tag="env_node_tuned",
+            goal_relation=EpisodeGoalRelation.SUPPORTS,
+            goal_relevance=0.3,
+            outcome=EpisodeOutcome.SUCCESS,
+            emotion=EmotionSnapshot(valence=0.1, arousal=0.2, threat=0.0),
+            importance=0.2,
+            reliability=0.9,
+            tags={"environment", "comfort"},
+            details={
+                "comfort_before": float(comfort_before),
+                "comfort_after": float(comfort_after),
             },
         )

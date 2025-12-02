@@ -20,6 +20,7 @@ from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
 from .simulation.snapshots import serialize_state
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
+from .world.environment import PlaceEnvironmentState
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -804,6 +805,7 @@ class WorldState:
     events_outbox: List[str] = field(default_factory=list)
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
     facilities: MutableMapping[str, Any] = field(default_factory=dict)
+    places: MutableMapping[str, Any] = field(default_factory=dict)
     facility_queues: MutableMapping[str, "FacilityQueueState"] = field(default_factory=dict)
     protocols: "ProtocolRegistry" = field(default_factory=_protocol_registry_factory)
     nodes: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
@@ -827,6 +829,7 @@ class WorldState:
     metrics: MutableMapping[str, float] = field(default_factory=dict)
     council_metrics: CouncilMetrics = field(default_factory=CouncilMetrics)
     council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
+    place_environment: Dict[str, PlaceEnvironmentState] = field(default_factory=dict)
     runtime_config: Any = None
     basic_suit_stock: int = 0
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
