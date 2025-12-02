@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 import random
 
-from dosadi.memory.episode_factory import EpisodeFactory
+from dosadi.agents.physiology import compute_performance_multiplier
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
 from dosadi.runtime.work_details import WorkDetailType, WORK_DETAIL_CATALOG
 from dosadi.systems.protocols import (
@@ -18,7 +18,6 @@ from dosadi.systems.protocols import (
     activate_protocol,
     record_protocol_read,
 )
-from dosadi.world.environment import get_or_create_place_env
 
 
 class GoalType(str, Enum):
@@ -368,8 +367,8 @@ class PhysicalState:
     last_drink_tick: int = 0
     thirst: float = 0.0
     # Psychological load indicators
-    stress: float = 0.3  # 0.0 = relaxed, ~0.3–0.6 = normal Dosadi tension
-    morale: float = 0.6  # 0.0 = demoralized, 1.0 = highly motivated
+    stress_level: float = 0.0  # 0.0 = calm, 1.0 = max stressed
+    morale_level: float = 0.7  # 0.0 = hopeless, 1.0 = very optimistic
 
 
 @dataclass
@@ -1012,6 +1011,7 @@ def _attempt_drink_from_tap(
     goal: Goal,
     tap_id: str,
 ) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
     from dosadi.runtime.eating import DRINK_REPLENISH_AMOUNT, DRINK_WATER_UNIT
 
     depot_id = getattr(world, "water_tap_sources", {}).get(tap_id)
@@ -1055,6 +1055,7 @@ def _attempt_drink_from_mess_hall(
     goal: Goal,
     hall_id: str,
 ) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
     from dosadi.runtime.eating import DRINK_REPLENISH_AMOUNT, DRINK_WATER_UNIT
 
     hydration_before = agent.physical.hydration_level
@@ -1077,6 +1078,8 @@ def _attempt_drink_from_mess_hall(
 
 
 def _record_water_denied(world: "WorldState", agent: AgentState, place_id: str, reason: str) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
+
     factory = EpisodeFactory(world=world)
     ep = factory.create_water_denied_episode(
         owner_agent_id=agent.id,
@@ -1090,13 +1093,13 @@ def _ensure_ticks_remaining(
     goal: Goal,
     work_type: WorkDetailType,
     default_fraction: float = 0.5,
-) -> int:
+) -> float:
     meta = goal.metadata
     if "ticks_remaining" not in meta:
         cfg = WORK_DETAIL_CATALOG.get(work_type)
         base = cfg.typical_duration_ticks if cfg and cfg.typical_duration_ticks > 0 else 2000
-        meta["ticks_remaining"] = int(base * default_fraction)
-    return int(meta["ticks_remaining"])
+        meta["ticks_remaining"] = float(base) * float(default_fraction)
+    return float(meta["ticks_remaining"])
 
 
 def _handle_scout_interior(
@@ -1108,7 +1111,8 @@ def _handle_scout_interior(
     from dosadi.memory.episode_factory import EpisodeFactory
 
     ticks_remaining = _ensure_ticks_remaining(goal, WorkDetailType.SCOUT_INTERIOR, default_fraction=0.3)
-    ticks_remaining -= 1
+    perf = compute_performance_multiplier(agent.physical)
+    ticks_remaining -= perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
         goal.status = GoalStatus.COMPLETED
@@ -1165,7 +1169,8 @@ def _handle_inventory_stores(
     rng: random.Random,
 ) -> None:
     ticks_remaining = _ensure_ticks_remaining(goal, WorkDetailType.INVENTORY_STORES, default_fraction=0.3)
-    ticks_remaining -= 1
+    perf = compute_performance_multiplier(agent.physical)
+    ticks_remaining -= perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
         goal.status = GoalStatus.COMPLETED
@@ -1218,7 +1223,8 @@ def _handle_food_processing(
     ticks_remaining = _ensure_ticks_remaining(
         goal, WorkDetailType.FOOD_PROCESSING_DETAIL, default_fraction=0.3
     )
-    ticks_remaining -= 1
+    perf = compute_performance_multiplier(agent.physical)
+    ticks_remaining -= perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
         goal.status = GoalStatus.COMPLETED
@@ -1441,7 +1447,8 @@ def _handle_water_handling(
         WorkDetailType.WATER_HANDLING,
         default_fraction=0.3,
     )
-    ticks_remaining -= 1
+    perf = compute_performance_multiplier(agent.physical)
+    ticks_remaining -= perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
         goal.status = GoalStatus.COMPLETED
@@ -1541,6 +1548,8 @@ def _assign_env_control_places(
 def _choose_env_target_place(
     world: "WorldState", agent: AgentState, goal: Goal, rng: random.Random
 ) -> Optional[str]:
+    from dosadi.world.environment import get_or_create_place_env
+
     places = goal.metadata.get(ENV_CONTROL_PLACES_KEY) or []
     if not places:
         return None
@@ -1564,12 +1573,15 @@ def _handle_env_control(
     goal: Goal,
     rng: random.Random,
 ) -> None:
+    from dosadi.world.environment import get_or_create_place_env
+
     ticks_remaining = _ensure_ticks_remaining(
         goal,
         WorkDetailType.ENV_CONTROL,
         default_fraction=0.3,
     )
-    ticks_remaining -= 1
+    perf = compute_performance_multiplier(agent.physical)
+    ticks_remaining -= perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
         goal.status = GoalStatus.COMPLETED

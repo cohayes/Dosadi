@@ -172,8 +172,8 @@ def run_sleep_consolidation(
 
 def _apply_belief_driven_stress_and_morale(agent: AgentState) -> None:
     """
-    Use PlaceBeliefs for key service locations to nudge agent.physical.stress
-    and agent.physical.morale a little bit per sleep cycle.
+    Use PlaceBeliefs for key service locations to nudge agent.physical.stress_level
+    and agent.physical.morale_level a little bit per sleep cycle.
 
     Follows D-MEMORY-0207: small, EMA-like drifts based on fairness / safety /
     congestion / reliability / efficiency.
@@ -246,8 +246,12 @@ def _apply_belief_driven_stress_and_morale(agent: AgentState) -> None:
     physical = agent.physical
 
     # Apply drifts and clamp to [0, 1]
-    physical.stress = _clamp01(physical.stress + stress_step_scale * SP_net)
-    physical.morale = _clamp01(physical.morale + morale_step_scale * MP_net)
+    physical.stress_level = _clamp01(
+        physical.stress_level + stress_step_scale * SP_net
+    )
+    physical.morale_level = _clamp01(
+        physical.morale_level + morale_step_scale * MP_net
+    )
 
 
 def step_agent_memory_maintenance(
