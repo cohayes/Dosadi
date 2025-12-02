@@ -23,12 +23,14 @@ class CouncilMetrics:
     stores_reliability_index: float = 0.0
     food_hall_reliability_index: float = 0.0
     interior_comfort_index: float = 0.0
+    water_depot_fill_index: float = 0.0
 
     # Simple counts (for debugging / dashboards)
     corridor_count: int = 0
     store_count: int = 0
     food_hall_count: int = 0
     interior_place_count: int = 0
+    water_depot_count: int = 0
 
 
 @dataclass
@@ -46,11 +48,15 @@ class CouncilStaffingConfig:
     target_interior_comfort_low: float = 0.45
     target_interior_comfort_high: float = 0.70
 
+    target_water_fill_low: float = 0.40
+    target_water_fill_high: float = 0.80
+
     # Step sizes for changing desired staffing
     scout_adjust_step: int = 1
     inventory_adjust_step: int = 1
     food_adjust_step: int = 1
     env_control_adjust_step: int = 1
+    water_handling_adjust_step: int = 1
 
     # Min/max caps (safety rails)
     min_scouts: int = 0
@@ -64,6 +70,9 @@ class CouncilStaffingConfig:
 
     min_env_control: int = 0
     max_env_control: int = 32
+
+    min_water_handling: int = 0
+    max_water_handling: int = 32
 
 
 def iter_council_place_beliefs(world: "WorldState") -> Iterable[Tuple[str, PlaceBelief]]:
@@ -202,6 +211,7 @@ def update_council_metrics_and_staffing(world: "WorldState") -> None:
     store_scores: list[float] = []
     food_scores: list[float] = []
     comfort_scores: list[float] = []
+    water_fill: list[float] = []
 
     for place_id, pb in iter_council_place_beliefs(world):
         if is_corridor(world, place_id):
@@ -218,6 +228,12 @@ def update_council_metrics_and_staffing(world: "WorldState") -> None:
             food_scores.append(pb.reliability_score)
         if is_interior_place(world, place_id):
             comfort_scores.append(pb.comfort_score)
+        if kind == "water_depot":
+            facility = getattr(world, "facilities", {}).get(place_id)
+            if facility and getattr(facility, "water_capacity", 0.0) > 0:
+                fill_ratio = getattr(facility, "water_stock", 0.0) / float(getattr(facility, "water_capacity", 1.0))
+                fill_ratio = max(0.0, min(1.0, fill_ratio))
+                water_fill.append(fill_ratio)
 
     if corridor_scores:
         metrics.corridor_congestion_index = sum(corridor_scores) / len(corridor_scores)
@@ -247,6 +263,13 @@ def update_council_metrics_and_staffing(world: "WorldState") -> None:
         metrics.interior_comfort_index = 0.5
         metrics.interior_place_count = 0
 
+    if water_fill:
+        metrics.water_depot_fill_index = sum(water_fill) / len(water_fill)
+        metrics.water_depot_count = len(water_fill)
+    else:
+        metrics.water_depot_fill_index = 1.0
+        metrics.water_depot_count = 0
+
     _adjust_staffing_from_metrics(world)
 
 
@@ -260,6 +283,7 @@ def _adjust_staffing_from_metrics(world: "WorldState") -> None:
     desired.setdefault(WorkDetailType.INVENTORY_STORES, 0)
     desired.setdefault(WorkDetailType.FOOD_PROCESSING_DETAIL, 0)
     desired.setdefault(WorkDetailType.ENV_CONTROL, 0)
+    desired.setdefault(WorkDetailType.WATER_HANDLING, 0)
 
     cc = world.council_metrics.corridor_congestion_index
     if cc > cfg.target_corridor_congestion_high:
@@ -285,6 +309,12 @@ def _adjust_staffing_from_metrics(world: "WorldState") -> None:
     elif ic > cfg.target_interior_comfort_high:
         desired[WorkDetailType.ENV_CONTROL] -= cfg.env_control_adjust_step
 
+    wf = world.council_metrics.water_depot_fill_index
+    if wf < cfg.target_water_fill_low:
+        desired[WorkDetailType.WATER_HANDLING] += cfg.water_handling_adjust_step
+    elif wf > cfg.target_water_fill_high:
+        desired[WorkDetailType.WATER_HANDLING] -= cfg.water_handling_adjust_step
+
     desired[WorkDetailType.SCOUT_INTERIOR] = max(
         cfg.min_scouts,
         min(desired[WorkDetailType.SCOUT_INTERIOR], cfg.max_scouts),
@@ -300,4 +330,8 @@ def _adjust_staffing_from_metrics(world: "WorldState") -> None:
     desired[WorkDetailType.ENV_CONTROL] = max(
         cfg.min_env_control,
         min(desired[WorkDetailType.ENV_CONTROL], cfg.max_env_control),
+    )
+    desired[WorkDetailType.WATER_HANDLING] = max(
+        cfg.min_water_handling,
+        min(desired[WorkDetailType.WATER_HANDLING], cfg.max_water_handling),
     )

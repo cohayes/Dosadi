@@ -791,3 +791,69 @@ class EpisodeFactory:
                 "comfort_after": float(comfort_after),
             },
         )
+
+    def create_well_pumped_episode(
+        self,
+        owner_agent_id: str,
+        tick: int,
+        well_facility_id: str,
+        batch_amount: float,
+        pumped_today: float,
+        daily_capacity: float,
+    ) -> Episode:
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=well_facility_id,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.PLACE,
+            target_id=well_facility_id,
+            verb=EpisodeVerb.WELL_PUMPED,
+            summary_tag="well_pumped",
+            goal_relation=EpisodeGoalRelation.SUPPORTS,
+            goal_relevance=0.3,
+            outcome=EpisodeOutcome.SUCCESS,
+            emotion=EmotionSnapshot(valence=0.1, arousal=0.1, threat=0.0),
+            importance=0.2,
+            reliability=0.9,
+            tags={"water", "well"},
+            details={
+                "amount": float(batch_amount),
+                "pumped_today": float(pumped_today),
+                "daily_capacity": float(daily_capacity),
+            },
+        )
+
+    def create_water_delivered_episode(
+        self,
+        owner_agent_id: str,
+        tick: int,
+        depot_id: str,
+        amount: float,
+        new_stock: float,
+        capacity: float,
+    ) -> Episode:
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=depot_id,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.PLACE,
+            target_id=depot_id,
+            verb=EpisodeVerb.WATER_DELIVERED,
+            summary_tag="water_delivered",
+            goal_relation=EpisodeGoalRelation.SUPPORTS,
+            goal_relevance=0.3,
+            outcome=EpisodeOutcome.SUCCESS,
+            emotion=EmotionSnapshot(valence=0.2, arousal=0.2, threat=0.0),
+            importance=0.25,
+            reliability=0.9,
+            tags={"water", "depot"},
+            details={
+                "amount": float(amount),
+                "new_stock": float(new_stock),
+                "capacity": float(capacity),
+            },
+        )

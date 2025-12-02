@@ -898,6 +898,11 @@ def _handle_work_detail_goal(
         getattr(WorkDetailType, "FOOD_PROCESSING", WorkDetailType.FOOD_PROCESSING_DETAIL),
     ):
         _handle_food_processing(world, agent, goal, rng)
+    elif work_type in (
+        WorkDetailType.WATER_HANDLING,
+        getattr(WorkDetailType, "WATER_HANDLING_DETAIL", WorkDetailType.WATER_HANDLING),
+    ):
+        _handle_water_handling(world, agent, goal, rng)
     else:
         return
 
@@ -1145,6 +1150,173 @@ def _handle_food_processing(
         ):
             g.status = GoalStatus.COMPLETED
             break
+
+
+def _get_well_head_id(world: "WorldState") -> Optional[str]:
+    for fid, facility in getattr(world, "facilities", {}).items():
+        if getattr(facility, "kind", None) == "well_head":
+            return fid
+    return None
+
+
+def _choose_target_depot(world: "WorldState", rng: random.Random) -> Optional[str]:
+    candidates: List[Tuple[float, str]] = []
+    for fid, facility in getattr(world, "facilities", {}).items():
+        if getattr(facility, "kind", None) == "water_depot" and getattr(
+            facility, "water_capacity", 0.0
+        ) > 0:
+            fill_ratio = getattr(facility, "water_stock", 0.0) / float(
+                getattr(facility, "water_capacity", 1.0)
+            )
+            candidates.append((fill_ratio, fid))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda x: x[0])
+    best_fill, _ = candidates[0]
+    low_fill = [fid for (fill, fid) in candidates if fill <= best_fill + 0.1]
+    return rng.choice(low_fill) if low_fill else candidates[0][1]
+
+
+def _update_well_daily_reset(world: "WorldState") -> None:
+    from dosadi.world.constants import WATER_DAY_TICKS
+
+    tick = getattr(world, "tick", 0)
+    ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", WATER_DAY_TICKS)
+    ticks_per_day = max(1, int(ticks_per_day))
+    if tick % ticks_per_day == 0:
+        world.well.pumped_today = 0.0
+
+
+def _water_handling_phase_to_well(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+    carried: float,
+) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
+    from dosadi.world.constants import WATER_BATCH_SIZE
+
+    meta = goal.metadata
+    well_head_id = _get_well_head_id(world)
+    if not well_head_id:
+        return
+
+    if agent.location_id != well_head_id:
+        _move_one_step_toward(world, agent, well_head_id, rng)
+        return
+
+    remaining = world.well.daily_capacity - world.well.pumped_today
+    if remaining <= 0.0:
+        return
+
+    batch = min(WATER_BATCH_SIZE, max(0.0, remaining))
+    if batch <= 0.0:
+        return
+
+    world.well.pumped_today += batch
+    carried += batch
+
+    factory = EpisodeFactory(world=world)
+    ep = factory.create_well_pumped_episode(
+        owner_agent_id=agent.id,
+        tick=getattr(world, "tick", 0),
+        well_facility_id=well_head_id,
+        batch_amount=batch,
+        pumped_today=world.well.pumped_today,
+        daily_capacity=world.well.daily_capacity,
+    )
+    agent.record_episode(ep)
+
+    target_depot_id = _choose_target_depot(world, rng)
+    meta["carried_water"] = carried
+    meta["target_depot_id"] = target_depot_id
+    meta["phase"] = "TO_DEPOT"
+
+
+def _water_handling_phase_to_depot(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+    carried: float,
+    target_depot_id: Optional[str],
+) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
+
+    meta = goal.metadata
+    if not target_depot_id:
+        target_depot_id = _choose_target_depot(world, rng)
+        if not target_depot_id:
+            meta["phase"] = "TO_WELL"
+            return
+        meta["target_depot_id"] = target_depot_id
+
+    if agent.location_id != target_depot_id:
+        _move_one_step_toward(world, agent, target_depot_id, rng)
+        return
+
+    if carried <= 0.0:
+        meta["phase"] = "TO_WELL"
+        meta["carried_water"] = 0.0
+        return
+
+    depot = getattr(world, "facilities", {}).get(target_depot_id)
+    if depot is None or getattr(depot, "water_capacity", 0.0) <= 0.0:
+        meta["phase"] = "TO_WELL"
+        meta["carried_water"] = carried
+        return
+
+    available_capacity = max(0.0, float(depot.water_capacity) - float(depot.water_stock))
+    delivered = min(carried, available_capacity)
+    depot.water_stock += delivered
+    new_stock = depot.water_stock
+
+    factory = EpisodeFactory(world=world)
+    ep = factory.create_water_delivered_episode(
+        owner_agent_id=agent.id,
+        tick=getattr(world, "tick", 0),
+        depot_id=target_depot_id,
+        amount=delivered,
+        new_stock=new_stock,
+        capacity=float(depot.water_capacity),
+    )
+    agent.record_episode(ep)
+
+    meta["carried_water"] = max(0.0, carried - delivered)
+    meta["phase"] = "TO_WELL"
+
+
+def _handle_water_handling(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+) -> None:
+    ticks_remaining = _ensure_ticks_remaining(
+        goal,
+        WorkDetailType.WATER_HANDLING,
+        default_fraction=0.3,
+    )
+    ticks_remaining -= 1
+    goal.metadata["ticks_remaining"] = ticks_remaining
+    if ticks_remaining <= 0:
+        goal.status = GoalStatus.COMPLETED
+        return
+
+    meta = goal.metadata
+    phase = meta.get("phase") or "TO_WELL"
+    carried = float(meta.get("carried_water", 0.0))
+    target_depot_id = meta.get("target_depot_id")
+
+    _update_well_daily_reset(world)
+
+    if phase == "TO_WELL":
+        _water_handling_phase_to_well(world, agent, goal, rng, carried)
+    else:
+        _water_handling_phase_to_depot(world, agent, goal, rng, carried, target_depot_id)
 
 
 def _move_one_step_toward(

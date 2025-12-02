@@ -20,7 +20,8 @@ class WorkDetailType(Enum):
     ENV_CONTROL_DETAIL = ENV_CONTROL
     SUIT_INSPECTION_DETAIL = auto()
     FOOD_PROCESSING_DETAIL = auto()
-    WATER_HANDLING_DETAIL = auto()
+    WATER_HANDLING = auto()
+    WATER_HANDLING_DETAIL = WATER_HANDLING
     SCRIBE_DETAIL = auto()
     DISPATCH_DETAIL = auto()
     FOOD_PROCESSING = FOOD_PROCESSING_DETAIL
@@ -125,17 +126,17 @@ WORK_DETAIL_CATALOG: Dict[WorkDetailType, WorkDetailConfig] = {
         default_team_size=3,
         typical_duration_ticks=9_500,
     ),
-    WorkDetailType.WATER_HANDLING_DETAIL: WorkDetailConfig(
-        work_type=WorkDetailType.WATER_HANDLING_DETAIL,
+    WorkDetailType.WATER_HANDLING: WorkDetailConfig(
+        work_type=WorkDetailType.WATER_HANDLING,
         category="sustenance",
-        description="Monitor condensers, haul drums, and record flow rates.",
+        description="Pump water at the Well and deliver to depots.",
         preferred_attributes={"STR": 1, "INT": 1},
         preferred_traits=["steady", "careful"],
         risk_level="medium",
-        typical_verbs=["CONDENSER_CHECK", "WATER_DRUM_FILLED"],
+        typical_verbs=["WELL_PUMPED", "WATER_DELIVERED"],
         macro_goals=["MAINTAIN_WATER"],
         default_team_size=2,
-        typical_duration_ticks=9_000,
+        typical_duration_ticks=10_000,
     ),
     WorkDetailType.SCRIBE_DETAIL: WorkDetailConfig(
         work_type=WorkDetailType.SCRIBE_DETAIL,
