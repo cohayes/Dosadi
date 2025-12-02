@@ -42,32 +42,35 @@ class WakeupPrimeReport:
 
 
 def _initial_wakeup_goals(owner_id: str) -> List[Goal]:
-    return [
-        Goal(
-            goal_id=make_goal_id("goal"),
-            owner_id=owner_id,
-            goal_type=GoalType.ACQUIRE_RESOURCE,
-            description="Acquire suit from issue point",
-            target={"location_id": "fac:suit-issue-1"},
-            priority=0.75,
-            urgency=0.4,
-            horizon=GoalHorizon.SHORT,
-            status=GoalStatus.PENDING,
-            origin=GoalOrigin.INTERNAL_STATE,
-        ),
-        Goal(
-            goal_id=make_goal_id("goal"),
-            owner_id=owner_id,
-            goal_type=GoalType.ACQUIRE_RESOURCE,
-            description="Obtain assignment",
-            target={"location_id": "fac:assign-hall-1"},
-            priority=0.7,
-            urgency=0.35,
-            horizon=GoalHorizon.SHORT,
-            status=GoalStatus.PENDING,
-            origin=GoalOrigin.INTERNAL_STATE,
-        ),
-    ]
+    suit_goal = Goal(
+        goal_id=make_goal_id("goal"),
+        owner_id=owner_id,
+        goal_type=GoalType.ACQUIRE_RESOURCE,
+        description="Acquire suit from issue point",
+        target={"location_id": "fac:suit-issue-1"},
+        priority=0.75,
+        urgency=0.4,
+        horizon=GoalHorizon.SHORT,
+        status=GoalStatus.PENDING,
+        origin=GoalOrigin.INTERNAL_STATE,
+    )
+    suit_goal.kind = "get_suit"
+
+    assignment_goal = Goal(
+        goal_id=make_goal_id("goal"),
+        owner_id=owner_id,
+        goal_type=GoalType.ACQUIRE_RESOURCE,
+        description="Obtain assignment",
+        target={"location_id": "fac:assign-hall-1"},
+        priority=0.7,
+        urgency=0.35,
+        horizon=GoalHorizon.SHORT,
+        status=GoalStatus.PENDING,
+        origin=GoalOrigin.INTERNAL_STATE,
+    )
+    assignment_goal.kind = "get_assignment"
+
+    return [suit_goal, assignment_goal]
 
 
 def _register_wakeup_queues(world: WorldState) -> List[QueueState]:
@@ -135,6 +138,9 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
     world.policy["topology"] = layout.to_topology()
     world.nodes = layout.nodes
     world.edges = layout.edges
+
+    world.service_facilities.setdefault("suit_issue", []).append("fac:suit-issue-1")
+    world.service_facilities.setdefault("assignment_hall", []).append("fac:assign-hall-1")
 
     pods = [pid for pid in layout.nodes.keys() if pid.startswith("pod:")]
     agents = _create_agents(config.num_agents, pods, config.seed)

@@ -191,7 +191,9 @@ def _phase_B_agent_decisions(world: WorldState, tick: int) -> Dict[str, Action]:
         if getattr(agent, "is_asleep", False):
             continue
         focus_goal = agent.choose_focus_goal()
-        queue_id, queue_location_id = choose_queue_for_goal(agent, world, focus_goal)
+        queue_id, queue_location_id = choose_queue_for_goal(
+            agent, world, focus_goal, rng=rng
+        )
 
         if queue_location_id is not None:
             agent.navigation_target_id = queue_location_id

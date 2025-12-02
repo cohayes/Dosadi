@@ -1,16 +1,32 @@
 from __future__ import annotations
 
+import random
 from typing import Optional, Tuple
 
 from dosadi.agents.core import AgentState, Goal
 from dosadi.runtime.queues import QueueLifecycleState, QueueState
 from dosadi.state import WorldState
+from dosadi.runtime.facility_choice import choose_facility_for_service
+
+
+SERVICE_QUEUE_DEFAULTS = {
+    "suit_issue": ("queue:suit-issue", "queue:suit-issue:front"),
+    "assignment_hall": ("queue:assignment", "queue:assignment:front"),
+}
+
+
+def _find_queue_for_facility(world: WorldState, facility_id: str) -> Optional[QueueState]:
+    for queue in world.queues.values():
+        if queue.associated_facility == facility_id:
+            return queue
+    return None
 
 
 def choose_queue_for_goal(
     agent: AgentState,
     world: WorldState,
     focus_goal: Optional[Goal],
+    rng: Optional[random.Random] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Decide which queue (if any) is relevant for the agent's current focus goal.
@@ -25,11 +41,30 @@ def choose_queue_for_goal(
         return None, None
 
     kind = getattr(focus_goal, "kind", None)
-    if kind == "get_suit":
-        return "queue:suit-issue", "queue:suit-issue:front"
+    service_type: Optional[str] = None
 
-    if kind == "get_assignment":
-        return "queue:assignment", "queue:assignment:front"
+    if kind == "get_suit":
+        service_type = "suit_issue"
+    elif kind == "get_assignment":
+        service_type = "assignment_hall"
+
+    if service_type:
+        effective_rng = rng or getattr(world, "rng", None) or random.Random(getattr(world, "seed", 0))
+        target_facility_id = choose_facility_for_service(
+            agent=agent,
+            service_type=service_type,
+            world=world,
+            rng=effective_rng,
+        )
+
+        if target_facility_id is not None:
+            queue = _find_queue_for_facility(world, target_facility_id)
+            if queue is not None:
+                return queue.queue_id, queue.location_id
+
+        default_queue = SERVICE_QUEUE_DEFAULTS.get(service_type)
+        if default_queue:
+            return default_queue
 
     return None, None
 
