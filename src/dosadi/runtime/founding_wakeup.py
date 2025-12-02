@@ -32,6 +32,7 @@ from dosadi.runtime.agent_navigation import (
     choose_queue_for_goal,
     step_agent_movement_toward_target,
 )
+from dosadi.runtime.council_metrics import update_council_metrics_and_staffing
 from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.memory_runtime import (
     step_agent_memory_maintenance,
@@ -124,6 +125,7 @@ def step_world_once(world: WorldState) -> None:
         process_all_queues(world, tick, queue_emitter)
 
     _maybe_run_proto_council(world, tick)
+    update_council_metrics_and_staffing(world)
 
     world.tick += 1
 
