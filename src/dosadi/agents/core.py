@@ -183,6 +183,7 @@ class PlaceBelief:
     safety_score: float = 0.0
     congestion_score: float = 0.0
     reliability_score: float = 0.0
+    comfort_score: float = 0.0
 
     danger_score: float = 0.0
     enforcement_score: float = 0.0
