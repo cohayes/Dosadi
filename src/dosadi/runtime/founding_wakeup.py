@@ -32,7 +32,11 @@ from dosadi.runtime.agent_navigation import (
     choose_queue_for_goal,
     step_agent_movement_toward_target,
 )
-from dosadi.runtime.eating import maybe_create_get_meal_goal, update_agent_physical_state
+from dosadi.runtime.eating import (
+    maybe_create_get_meal_goal,
+    maybe_create_get_water_goal,
+    update_agent_physical_state,
+)
 from dosadi.runtime.council_metrics import update_council_metrics_and_staffing
 from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.memory_runtime import (
@@ -118,6 +122,7 @@ def step_world_once(world: WorldState) -> None:
         step_agent_memory_maintenance(world, agent, tick, memory_config)
         update_agent_physical_state(world, agent)
         maybe_create_get_meal_goal(world, agent)
+        maybe_create_get_water_goal(world, agent)
 
     _step_agent_movement(world)
     _phase_A_groups_and_council(world, tick, rng, cfg)

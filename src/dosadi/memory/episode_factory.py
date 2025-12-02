@@ -857,3 +857,66 @@ class EpisodeFactory:
                 "capacity": float(capacity),
             },
         )
+
+    def create_drank_water_episode(
+        self,
+        owner_agent_id: str,
+        tick: int,
+        place_id: str,
+        amount: float,
+        hydration_before: float,
+        hydration_after: float,
+    ) -> Episode:
+        delta = max(0.0, hydration_after - hydration_before)
+        importance = 0.2 + 0.2 * delta
+
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=place_id,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.PLACE,
+            target_id=place_id,
+            verb=EpisodeVerb.DRANK_WATER,
+            summary_tag="drank_water",
+            goal_relation=EpisodeGoalRelation.SUPPORTS,
+            goal_relevance=0.5,
+            outcome=EpisodeOutcome.SUCCESS,
+            emotion=EmotionSnapshot(valence=0.3 * delta, arousal=0.1, threat=0.0),
+            importance=importance,
+            reliability=0.9,
+            tags={"water", "drink"},
+            details={
+                "amount": float(amount),
+                "hydration_before": float(hydration_before),
+                "hydration_after": float(hydration_after),
+            },
+        )
+
+    def create_water_denied_episode(
+        self,
+        owner_agent_id: str,
+        tick: int,
+        place_id: str,
+        reason: str,
+    ) -> Episode:
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=place_id,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.PLACE,
+            target_id=place_id,
+            verb=EpisodeVerb.WATER_DENIED,
+            summary_tag="water_denied",
+            goal_relation=EpisodeGoalRelation.THWARTS,
+            goal_relevance=0.6,
+            outcome=EpisodeOutcome.FAILURE,
+            emotion=EmotionSnapshot(valence=-0.4, arousal=0.3, threat=0.1),
+            importance=0.3,
+            reliability=0.9,
+            tags={"water", "denied"},
+            details={"reason": reason},
+        )

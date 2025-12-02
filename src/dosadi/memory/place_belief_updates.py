@@ -49,6 +49,16 @@ def apply_episode_to_place_belief(pb: PlaceBelief, ep: Episode) -> None:
     elif verb == EpisodeVerb.WATER_DELIVERED:
         pb.reliability_score = min(1.0, pb.reliability_score + 0.03)
         pb.safety_score = min(1.0, pb.safety_score + 0.01)
+    elif verb == EpisodeVerb.DRANK_WATER:
+        before = float(ep.details.get("hydration_before", 0.5))
+        after = float(ep.details.get("hydration_after", 0.8))
+        delta = max(0.0, after - before)
+
+        pb.reliability_score = min(1.0, pb.reliability_score + 0.05 + 0.05 * delta)
+        pb.comfort_score = min(1.0, pb.comfort_score + 0.03 * delta)
+    elif verb == EpisodeVerb.WATER_DENIED:
+        pb.reliability_score = max(0.0, pb.reliability_score - 0.08)
+        pb.fairness_score = max(0.0, pb.fairness_score - 0.05)
 
     _clamp_belief_scores(pb)
 
