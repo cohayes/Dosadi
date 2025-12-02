@@ -16,6 +16,7 @@ from dosadi.agents.core import (
     create_agent,
     make_goal_id,
 )
+from dosadi.law import FacilityProtocolTuning
 from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
 from dosadi.state import WorldState
@@ -139,8 +140,19 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
     world.nodes = layout.nodes
     world.edges = layout.edges
 
+    world.facilities = {
+        node_id: node
+        for node_id, node in layout.nodes.items()
+        if getattr(node, "kind", None) == "facility"
+    }
+
     world.service_facilities.setdefault("suit_issue", []).append("fac:suit-issue-1")
     world.service_facilities.setdefault("assignment_hall", []).append("fac:assign-hall-1")
+
+    for fac_id in world.facilities.keys():
+        world.facility_protocol_tuning.setdefault(
+            fac_id, FacilityProtocolTuning(facility_id=fac_id)
+        )
 
     pods = [pid for pid in layout.nodes.keys() if pid.startswith("pod:")]
     agents = _create_agents(config.num_agents, pods, config.seed)

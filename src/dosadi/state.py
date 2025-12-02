@@ -16,6 +16,8 @@ import random
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 from .admin_log import AdminEventLog
+from .law import FacilityProtocolTuning
+from .memory.facility_summary import FacilityBeliefSummary
 from .simulation.snapshots import serialize_state
 from typing import TYPE_CHECKING
 
@@ -799,6 +801,7 @@ class WorldState:
     rumors: MutableMapping[str, RumorState] = field(default_factory=dict)
     events_outbox: List[str] = field(default_factory=list)
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
+    facilities: MutableMapping[str, Any] = field(default_factory=dict)
     protocols: "ProtocolRegistry" = field(default_factory=_protocol_registry_factory)
     nodes: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
     edges: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
@@ -814,10 +817,13 @@ class WorldState:
     security_reports: List[Dict[str, object]] = field(default_factory=list)
     suit_service_ledger: SuitServiceLedger = field(default_factory=SuitServiceLedger)
     admin_event_log: AdminEventLog = field(default_factory=AdminEventLog)
+    facility_belief_summaries: Dict[str, FacilityBeliefSummary] = field(default_factory=dict)
+    facility_protocol_tuning: Dict[str, FacilityProtocolTuning] = field(default_factory=dict)
     metrics: MutableMapping[str, float] = field(default_factory=dict)
     runtime_config: Any = None
     basic_suit_stock: int = 0
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
+    last_proto_council_tuning_day: int = -1
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

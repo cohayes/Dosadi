@@ -14,6 +14,7 @@ from dosadi.scenarios.wakeup_prime import (
     generate_wakeup_scenario_prime,
 )
 from dosadi.state import WorldState
+from dosadi.runtime.proto_council import run_proto_council_tuning
 
 
 @dataclass(slots=True)
@@ -22,6 +23,28 @@ class WakeupPrimeRuntimeConfig:
 
     max_ticks: int = 10_000
     queue_interval_ticks: int = 100
+
+
+def _maybe_run_proto_council(world: WorldState, tick: int) -> None:
+    ticks_per_day = getattr(world, "ticks_per_day", None)
+    if ticks_per_day is None:
+        ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", 144_000)
+
+    try:
+        ticks_per_day = int(ticks_per_day)
+    except Exception:
+        ticks_per_day = 144_000
+
+    ticks_per_day = max(1, ticks_per_day)
+    current_day = tick // ticks_per_day
+    last_day = getattr(world, "last_proto_council_tuning_day", -1)
+
+    if current_day <= last_day:
+        return
+
+    rng = getattr(world, "rng", None) or random.Random(getattr(world, "seed", 0))
+    run_proto_council_tuning(world=world, rng=rng, current_day=current_day)
+    world.last_proto_council_tuning_day = current_day
 
 
 def step_wakeup_prime_once(world: WorldState) -> None:
@@ -46,6 +69,8 @@ def step_wakeup_prime_once(world: WorldState) -> None:
 
     if tick % cfg.queue_interval_ticks == 0:
         process_all_queues(world, tick, queue_emitter)
+
+    _maybe_run_proto_council(world, tick)
 
     world.tick += 1
 
