@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+from dosadi.agents.core import PlaceBelief
+from dosadi.memory.episodes import Episode, EpisodeVerb
+
+
+def apply_episode_to_place_belief(pb: PlaceBelief, ep: Episode) -> None:
+    """
+    Extend PlaceBelief updates with verb-aware consolidation hooks.
+
+    Base tag-driven updates are still handled via PlaceBelief.update_from_episode;
+    this function adds lightweight adjustments for new standardized verbs used by
+    work details (D-MEMORY-0210).
+    """
+
+    pb.update_from_episode(ep)
+
+    verb = ep.verb
+
+    if verb == EpisodeVerb.SCOUT_PLACE:
+        _apply_scout_place_to_place(pb, ep)
+    elif verb == EpisodeVerb.CORRIDOR_CROWDING_OBSERVED:
+        _apply_corridor_crowding_to_place(pb, ep)
+    elif verb == EpisodeVerb.FOOD_SERVED:
+        _apply_food_served_to_place(pb, ep)
+    elif verb == EpisodeVerb.LEAK_FOUND:
+        _apply_leak_found_to_place(pb, ep)
+
+    _clamp_belief_scores(pb)
+
+
+def _apply_scout_place_to_place(pb: PlaceBelief, ep: Episode) -> None:
+    hazard = float(getattr(ep, "details", {}).get("hazard_level", 0.0))
+    hazard = max(0.0, min(1.0, hazard))
+    target = 1.0 - hazard
+    alpha = 0.15
+    pb.safety_score += alpha * (target - pb.safety_score)
+
+
+def _apply_corridor_crowding_to_place(pb: PlaceBelief, ep: Episode) -> None:
+    density = float(getattr(ep, "details", {}).get("estimated_density", 0.0))
+    density = max(0.0, min(1.0, density))
+    alpha = 0.2
+    pb.congestion_score += alpha * (density - pb.congestion_score)
+
+    if getattr(ep, "emotion", None) and ep.emotion.valence < 0:
+        pb.comfort_score += 0.1 * (-abs(ep.emotion.valence))
+
+
+def _apply_food_served_to_place(pb: PlaceBelief, ep: Episode) -> None:
+    wait_ticks = float(getattr(ep, "details", {}).get("wait_ticks", 0))
+    normalized_wait = min(1.0, max(0.0, wait_ticks / 10_000.0))
+
+    pb.reliability_score += 0.1 * (1.0 - pb.reliability_score)
+    pb.congestion_score += 0.1 * (normalized_wait - pb.congestion_score)
+
+    if getattr(ep, "emotion", None) and ep.emotion.valence > 0:
+        pb.comfort_score += 0.05 * ep.emotion.valence
+
+
+def _apply_leak_found_to_place(pb: PlaceBelief, ep: Episode) -> None:
+    severity = float(getattr(ep, "details", {}).get("severity", 0.5))
+    severity = max(0.0, min(1.0, severity))
+    pb.safety_score -= 0.15 * severity
+    pb.reliability_score -= 0.1 * severity
+
+
+def _clamp_belief_scores(pb: PlaceBelief) -> None:
+    pb.safety_score = _clamp_range(pb.safety_score)
+    pb.congestion_score = _clamp_range(pb.congestion_score)
+    pb.reliability_score = _clamp_range(pb.reliability_score)
+    pb.comfort_score = _clamp_range(pb.comfort_score)
+
+
+def _clamp_range(x: float, low: float = -1.0, high: float = 1.0) -> float:
+    return max(low, min(high, x))

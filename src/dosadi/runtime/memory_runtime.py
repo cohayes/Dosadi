@@ -3,6 +3,7 @@ from __future__ import annotations
 from dosadi.agents.core import AgentState, PlaceBelief
 from dosadi.memory.config import MemoryConfig
 from dosadi.memory.episodes import EpisodeBuffers, Episode, EpisodeGoalRelation
+from dosadi.memory.place_belief_updates import apply_episode_to_place_belief
 from dosadi.state import WorldState
 
 
@@ -160,7 +161,7 @@ def run_sleep_consolidation(
         place_id = ep.location_id or ep.target_id
         if place_id:
             pb: PlaceBelief = agent.get_or_create_place_belief(place_id)
-            pb.update_from_episode(ep)
+            apply_episode_to_place_belief(pb, ep)
 
     buffers.daily.clear()
 
