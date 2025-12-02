@@ -807,6 +807,7 @@ class WorldState:
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
     facilities: MutableMapping[str, Any] = field(default_factory=dict)
     places: MutableMapping[str, Any] = field(default_factory=dict)
+    water_tap_sources: Dict[str, str] = field(default_factory=dict)
     facility_queues: MutableMapping[str, "FacilityQueueState"] = field(default_factory=dict)
     protocols: "ProtocolRegistry" = field(default_factory=_protocol_registry_factory)
     nodes: MutableMapping[str, Dict[str, Any]] = field(default_factory=dict)
