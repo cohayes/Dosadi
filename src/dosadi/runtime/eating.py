@@ -6,6 +6,7 @@ from typing import Optional, List
 import random
 
 from dosadi.agents.core import AgentState, Goal, GoalStatus, GoalType
+from dosadi.agents.physiology import compute_needs_pressure, update_stress_and_morale
 from dosadi.memory.episode_factory import EpisodeFactory
 from dosadi.world.environment import get_or_create_place_env
 
@@ -37,15 +38,19 @@ def update_agent_physical_state(
         return
 
     rng = rng or getattr(world, "rng", None) or random
-    agent.physical.hunger_level += HUNGER_RATE_PER_TICK
-    if agent.physical.hunger_level > HUNGER_MAX:
-        agent.physical.hunger_level = HUNGER_MAX
+    physical = agent.physical
+    physical.hunger_level += HUNGER_RATE_PER_TICK
+    if physical.hunger_level > HUNGER_MAX:
+        physical.hunger_level = HUNGER_MAX
 
-    agent.physical.hydration_level -= HYDRATION_DECAY_PER_TICK
-    if agent.physical.hydration_level < 0.0:
-        agent.physical.hydration_level = 0.0
-    elif agent.physical.hydration_level > 1.0:
-        agent.physical.hydration_level = 1.0
+    physical.hydration_level -= HYDRATION_DECAY_PER_TICK
+    if physical.hydration_level < 0.0:
+        physical.hydration_level = 0.0
+    elif physical.hydration_level > 1.0:
+        physical.hydration_level = 1.0
+
+    needs_pressure = compute_needs_pressure(physical)
+    update_stress_and_morale(physical, needs_pressure)
 
     env = get_or_create_place_env(world, agent.location_id)
     factory = EpisodeFactory(world=world)
@@ -70,6 +75,23 @@ def update_agent_physical_state(
             tick=current_tick,
             signal_type=signal_type,
             intensity=intensity,
+        )
+        agent.record_episode(episode)
+
+    if needs_pressure > 0.9 and rng.random() < 0.02:
+        episode = factory.create_body_signal_episode(
+            owner_agent_id=agent.id,
+            tick=current_tick,
+            signal_type="NEEDS_OVERWHELMING",
+            intensity=needs_pressure,
+        )
+        agent.record_episode(episode)
+    elif needs_pressure > 0.6 and rng.random() < 0.02:
+        episode = factory.create_body_signal_episode(
+            owner_agent_id=agent.id,
+            tick=current_tick,
+            signal_type="WEAK_FROM_HUNGER_AND_THIRST",
+            intensity=needs_pressure,
         )
         agent.record_episode(episode)
 
