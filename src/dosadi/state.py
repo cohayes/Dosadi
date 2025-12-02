@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .systems.protocols import ProtocolRegistry
     from .runtime.queues import QueueState
+    from .runtime.work_details import WorkDetailType
 
 
 
@@ -811,6 +812,8 @@ class WorldState:
     trades: List[Dict[str, object]] = field(default_factory=list)
     labor_postings: List[Dict[str, object]] = field(default_factory=list)
     labor_assignments: List[Dict[str, object]] = field(default_factory=list)
+    desired_work_details: Dict["WorkDetailType", int] = field(default_factory=dict)
+    active_work_details: Dict["WorkDetailType", int] = field(default_factory=dict)
     maintenance_tasks: List[Dict[str, object]] = field(default_factory=list)
     clinic_records: List[Dict[str, object]] = field(default_factory=list)
     law_cases: List[Dict[str, object]] = field(default_factory=list)

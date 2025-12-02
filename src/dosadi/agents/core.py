@@ -9,6 +9,7 @@ import uuid
 import random
 
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
+from dosadi.runtime.work_details import WorkDetailType
 from dosadi.systems.protocols import (
     ProtocolRegistry,
     compute_effective_hazard_prob,
@@ -29,6 +30,7 @@ class GoalType(str, Enum):
     GATHER_INFORMATION = "GATHER_INFORMATION"
     AUTHOR_PROTOCOL = "AUTHOR_PROTOCOL"
     ORGANIZE_GROUP = "ORGANIZE_GROUP"
+    WORK_DETAIL = "WORK_DETAIL"
 
 
 class GoalStatus(str, Enum):
@@ -83,6 +85,7 @@ class Goal:
 
     assigned_to: List[str] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def score_for_selection(self) -> float:
         """Simple scalar score for goal selection."""
@@ -94,6 +97,19 @@ class Goal:
 
 def make_goal_id(prefix: str = "goal") -> str:
     return f"{prefix}:{uuid.uuid4().hex}"
+
+
+def create_work_detail_goal(agent_id: str, work_type: "WorkDetailType", priority: float = 1.0) -> "Goal":
+    """Create a WORK_DETAIL goal referencing a specific WorkDetailType."""
+
+    return Goal(
+        goal_id=make_goal_id("goal"),
+        owner_id=agent_id,
+        goal_type=GoalType.WORK_DETAIL,
+        description=f"Work detail: {getattr(work_type, 'name', str(work_type))}",
+        priority=priority,
+        metadata={"work_detail_type": getattr(work_type, "name", str(work_type))},
+    )
 
 
 class EpisodeSourceType(str, Enum):
@@ -739,6 +755,29 @@ def decide_next_action(
         scored.sort(key=lambda pair: pair[0])
         return scored[0][1]
 
+    if focus_goal and focus_goal.goal_type == GoalType.WORK_DETAIL:
+        work_type_name = focus_goal.metadata.get("work_detail_type") if hasattr(focus_goal, "metadata") else None
+        work_type = None
+        try:
+            if work_type_name:
+                from dosadi.runtime.work_details import WorkDetailType
+
+                work_type = WorkDetailType[work_type_name]
+        except Exception:
+            work_type = None
+
+        action = _handle_work_detail_goal(
+            world=world,
+            agent=agent,
+            goal=focus_goal,
+            work_type=work_type,
+            neighbors=neighbors,
+            well_core_id=well_core_id,
+            rng=rng,
+        )
+        if action:
+            return action
+
     if focus_goal and focus_goal.goal_type == GoalType.GATHER_INFORMATION:
         options = neighbors.get(agent.location_id, [])
         target_loc = rng.choice(options) if options else None
@@ -820,6 +859,98 @@ def decide_next_action(
         verb="REST_IN_POD",
         target_location_id=agent.location_id,
         related_goal_id=focus_goal.goal_id if focus_goal else None,
+    )
+
+
+def _handle_work_detail_goal(
+    *,
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    work_type: Optional["WorkDetailType"],
+    neighbors: Dict[str, List[str]],
+    well_core_id: str,
+    rng: Any,
+) -> Action:
+    """
+    Minimal handler so WORK_DETAIL goals can flow through the decision loop.
+    """
+
+    print(
+        f"[work-detail] handling {getattr(work_type, 'name', 'UNKNOWN')} for agent {agent.agent_id}"
+    )
+
+    if work_type is None:
+        return Action(
+            actor_id=agent.agent_id,
+            verb="REST_IN_POD",
+            target_location_id=agent.location_id,
+            related_goal_id=goal.goal_id,
+        )
+
+    if work_type == WorkDetailType.SCOUT_INTERIOR:
+        return _perform_simple_interior_scout_step(agent, goal, neighbors, rng)
+
+    if work_type == WorkDetailType.INVENTORY_STORES:
+        return _perform_simple_inventory_step(agent, goal, neighbors, well_core_id, rng)
+
+    return Action(
+        actor_id=agent.agent_id,
+        verb="REST_IN_POD",
+        target_location_id=agent.location_id,
+        related_goal_id=goal.goal_id,
+    )
+
+
+def _perform_simple_interior_scout_step(
+    agent: AgentState,
+    goal: Goal,
+    neighbors: Dict[str, List[str]],
+    rng: Any,
+) -> Action:
+    options = neighbors.get(agent.location_id, [])
+    if options:
+        target_loc = rng.choice(options)
+        return Action(
+            actor_id=agent.agent_id,
+            verb="MOVE",
+            target_location_id=target_loc,
+            related_goal_id=goal.goal_id,
+        )
+
+    return Action(
+        actor_id=agent.agent_id,
+        verb="REST_IN_POD",
+        target_location_id=agent.location_id,
+        related_goal_id=goal.goal_id,
+    )
+
+
+def _perform_simple_inventory_step(
+    agent: AgentState,
+    goal: Goal,
+    neighbors: Dict[str, List[str]],
+    well_core_id: str,
+    rng: Any,
+) -> Action:
+    if agent.location_id != well_core_id:
+        options = neighbors.get(agent.location_id, [])
+        if well_core_id in options:
+            target_loc = well_core_id
+        else:
+            target_loc = rng.choice(options) if options else agent.location_id
+        return Action(
+            actor_id=agent.agent_id,
+            verb="MOVE",
+            target_location_id=target_loc,
+            related_goal_id=goal.goal_id,
+        )
+
+    return Action(
+        actor_id=agent.agent_id,
+        verb="REST_IN_POD",
+        target_location_id=agent.location_id,
+        related_goal_id=goal.goal_id,
     )
 
 

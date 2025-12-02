@@ -13,6 +13,7 @@ import random
 from dosadi.agents.core import AgentState, initialize_agents_for_founding_wakeup
 from dosadi.agents.groups import create_pod_group
 from dosadi.memory.config import MemoryConfig
+from dosadi.runtime.work_details import WorkDetailType
 from ...state import FactionState, WorldState
 
 
@@ -87,6 +88,13 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     world.rng.seed(seed)
     memory_config = MemoryConfig()
     world.memory_config = memory_config
+    world.desired_work_details[WorkDetailType.SCOUT_INTERIOR] = 8
+    world.desired_work_details[WorkDetailType.SCOUT_EXTERIOR] = 4
+    world.desired_work_details[WorkDetailType.INVENTORY_STORES] = 6
+    world.desired_work_details[WorkDetailType.ENV_CONTROL_DETAIL] = 4
+    world.desired_work_details[WorkDetailType.FOOD_PROCESSING_DETAIL] = 4
+    world.desired_work_details[WorkDetailType.SCRIBE_DETAIL] = 2
+    world.desired_work_details[WorkDetailType.DISPATCH_DETAIL] = 1
     topology_nodes = [asdict(node) for node in BASE_NODES]
     topology_edges = [asdict(edge) for edge in BASE_EDGES]
     world.policy["topology"] = {
