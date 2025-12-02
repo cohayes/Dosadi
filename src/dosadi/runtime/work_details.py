@@ -22,6 +22,7 @@ class WorkDetailType(Enum):
     WATER_HANDLING_DETAIL = auto()
     SCRIBE_DETAIL = auto()
     DISPATCH_DETAIL = auto()
+    FOOD_PROCESSING = FOOD_PROCESSING_DETAIL
 
 
 @dataclass

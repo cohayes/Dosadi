@@ -31,6 +31,7 @@ class GoalType(str, Enum):
     AUTHOR_PROTOCOL = "AUTHOR_PROTOCOL"
     ORGANIZE_GROUP = "ORGANIZE_GROUP"
     WORK_DETAIL = "WORK_DETAIL"
+    GET_MEAL_TODAY = "GET_MEAL_TODAY"
 
 
 class GoalStatus(str, Enum):
@@ -358,7 +359,8 @@ class PhysicalState:
 
     health: float = 1.0
     fatigue: float = 0.0
-    hunger: float = 0.0
+    hunger_level: float = 0.0  # 0.0 = satiated, 1.0+ = very hungry
+    last_meal_tick: int = 0
     thirst: float = 0.0
     # Psychological load indicators
     stress: float = 0.3  # 0.0 = relaxed, ~0.3–0.6 = normal Dosadi tension
@@ -756,6 +758,15 @@ def decide_next_action(
         scored.sort(key=lambda pair: pair[0])
         return scored[0][1]
 
+    if focus_goal and focus_goal.goal_type == GoalType.GET_MEAL_TODAY:
+        _handle_get_meal_goal(world, agent, focus_goal, rng)
+        return Action(
+            actor_id=agent.agent_id,
+            verb="REST_IN_POD",
+            target_location_id=agent.location_id,
+            related_goal_id=focus_goal.goal_id,
+        )
+
     if focus_goal and focus_goal.goal_type == GoalType.WORK_DETAIL:
         work_type_name = focus_goal.metadata.get("work_detail_type") if hasattr(focus_goal, "metadata") else None
         work_type = None
@@ -878,8 +889,51 @@ def _handle_work_detail_goal(
         _handle_scout_interior(world, agent, goal, rng)
     elif work_type == WorkDetailType.INVENTORY_STORES:
         _handle_inventory_stores(world, agent, goal, rng)
+    elif work_type in (
+        WorkDetailType.FOOD_PROCESSING_DETAIL,
+        getattr(WorkDetailType, "FOOD_PROCESSING", WorkDetailType.FOOD_PROCESSING_DETAIL),
+    ):
+        _handle_food_processing(world, agent, goal, rng)
     else:
         return
+
+
+def _handle_get_meal_goal(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+) -> None:
+    from dosadi.runtime.eating import GET_MEAL_GOAL_TIMEOUT_TICKS, choose_mess_hall_for_agent
+    from dosadi.runtime.queues import join_facility_queue
+
+    current_tick = getattr(world, "tick", 0)
+    created_tick = getattr(goal, "created_at_tick", None)
+    if created_tick is None:
+        created_tick = goal.metadata.get("created_tick", current_tick)
+        goal.created_at_tick = created_tick
+
+    if current_tick - created_tick > GET_MEAL_GOAL_TIMEOUT_TICKS:
+        goal.status = GoalStatus.FAILED
+        return
+
+    meta = goal.metadata
+    target_hall_id = meta.get("target_mess_hall_id")
+
+    if not target_hall_id:
+        target_hall_id = choose_mess_hall_for_agent(world, agent, rng)
+        if not target_hall_id:
+            return
+        meta["target_mess_hall_id"] = target_hall_id
+
+    if agent.location_id != target_hall_id:
+        _move_one_step_toward(world, agent, target_hall_id, rng)
+        return
+
+    join_facility_queue(world, target_hall_id, agent.id)
+    if agent.current_queue_id != target_hall_id:
+        agent.queue_join_tick = current_tick
+    agent.current_queue_id = target_hall_id
 
 
 def _ensure_ticks_remaining(
@@ -999,6 +1053,94 @@ def _choose_inventory_store_for_agent(
     if not store_ids:
         return None
     return rng.choice(store_ids)
+
+
+def _handle_food_processing(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
+    from dosadi.runtime.eating import MEAL_SATIATION_AMOUNT
+    from dosadi.runtime.queues import get_or_create_facility_queue
+
+    ticks_remaining = _ensure_ticks_remaining(
+        goal, WorkDetailType.FOOD_PROCESSING_DETAIL, default_fraction=0.3
+    )
+    ticks_remaining -= 1
+    goal.metadata["ticks_remaining"] = ticks_remaining
+    if ticks_remaining <= 0:
+        goal.status = GoalStatus.COMPLETED
+        return
+
+    meta = goal.metadata
+    hall_id = meta.get("mess_hall_id")
+    if not hall_id:
+        mess_halls = [
+            fid
+            for fid, facility in getattr(world, "facilities", {}).items()
+            if getattr(facility, "kind", None) == "mess_hall"
+        ]
+        if not mess_halls:
+            return
+        hall_id = mess_halls[0]
+        meta["mess_hall_id"] = hall_id
+
+    if agent.location_id != hall_id:
+        _move_one_step_toward(world, agent, hall_id, rng)
+        return
+
+    q_state = get_or_create_facility_queue(world, hall_id)
+    if not q_state.queue:
+        return
+
+    consumer_id = q_state.queue.popleft()
+    consumer = world.agents.get(consumer_id)
+    if consumer is None:
+        return
+
+    factory = EpisodeFactory(world=world)
+    current_tick = getattr(world, "tick", 0)
+
+    wait_ticks = 0
+    if consumer.queue_join_tick is not None:
+        wait_ticks = max(0, current_tick - consumer.queue_join_tick)
+    elif getattr(consumer, "last_decision_tick", None) is not None:
+        wait_ticks = max(0, current_tick - int(consumer.last_decision_tick))
+
+    ep_food = factory.create_food_served_episode(
+        owner_agent_id=consumer.id,
+        tick=current_tick,
+        hall_id=hall_id,
+        wait_ticks=wait_ticks,
+        calories_estimate=500.0,
+    )
+    consumer.record_episode(ep_food)
+
+    ep_queue = factory.create_queue_served_episode(
+        owner_agent_id=consumer.id,
+        tick=current_tick,
+        place_id=hall_id,
+        wait_ticks=wait_ticks,
+        resource_type="food",
+    )
+    consumer.record_episode(ep_queue)
+
+    consumer.physical.hunger_level = max(
+        0.0, consumer.physical.hunger_level - MEAL_SATIATION_AMOUNT
+    )
+    consumer.physical.last_meal_tick = current_tick
+    consumer.current_queue_id = None
+    consumer.queue_join_tick = None
+
+    for g in consumer.goals:
+        if g.goal_type == GoalType.GET_MEAL_TODAY and g.status in (
+            GoalStatus.PENDING,
+            GoalStatus.ACTIVE,
+        ):
+            g.status = GoalStatus.COMPLETED
+            break
 
 
 def _move_one_step_toward(

@@ -7,7 +7,7 @@ Constructs the minimal topology and initial colonist population described in
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import random
 
 from dosadi.agents.core import AgentState, initialize_agents_for_founding_wakeup
@@ -24,6 +24,7 @@ class LocationNode:
     id: str
     name: str
     type: str
+    kind: Optional[str] = None
     tags: Tuple[str, ...] = ()
     is_well_core: bool = False
 
@@ -67,6 +68,13 @@ BASE_NODES: Tuple[LocationNode, ...] = (
     LocationNode(id="loc:corridor-7A", name="Corridor 7A", type="corridor"),
     LocationNode(id=JUNCTION_ID, name="Junction 7A-7B", type="junction"),
     LocationNode(id=WELL_CORE_ID, name="Well Core", type="hub", is_well_core=True),
+    LocationNode(
+        id="loc:mess-hall-1",
+        name="Mess Hall 1",
+        type="facility",
+        kind="mess_hall",
+        tags=("mess_hall",),
+    ),
 )
 
 BASE_EDGES: Tuple[LocationEdge, ...] = (
@@ -78,6 +86,7 @@ BASE_EDGES: Tuple[LocationEdge, ...] = (
     LocationEdge(id="edge:pod-4:corridor-7A", a="loc:pod-4", b="loc:corridor-7A", base_hazard_prob=0.20),
     LocationEdge(id="edge:corridor-7A:junction-7A-7B", a="loc:corridor-7A", b=JUNCTION_ID, base_hazard_prob=0.20),
     LocationEdge(id="edge:junction-7A-7B:well", a=JUNCTION_ID, b=WELL_CORE_ID, base_hazard_prob=0.05),
+    LocationEdge(id="edge:mess-hall-1:well", a="loc:mess-hall-1", b=WELL_CORE_ID, base_hazard_prob=0.01),
 )
 
 
@@ -104,6 +113,7 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     }
     world.nodes = {node.id: node for node in BASE_NODES}
     world.edges = {edge.id: edge for edge in BASE_EDGES}
+    world.facilities = {node.id: node for node in BASE_NODES if getattr(node, "kind", None)}
 
     colonist_faction = FactionState(
         id="faction:colonists",

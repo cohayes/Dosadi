@@ -21,10 +21,12 @@ class CouncilMetrics:
     # Mean scores (0–1)
     corridor_congestion_index: float = 0.0
     stores_reliability_index: float = 0.0
+    food_hall_reliability_index: float = 0.0
 
     # Simple counts (for debugging / dashboards)
     corridor_count: int = 0
     store_count: int = 0
+    food_hall_count: int = 0
 
 
 @dataclass
@@ -36,9 +38,13 @@ class CouncilStaffingConfig:
     target_store_reliability_low: float = 0.40
     target_store_reliability_high: float = 0.75
 
+    target_food_reliability_low: float = 0.45
+    target_food_reliability_high: float = 0.85
+
     # Step sizes for changing desired staffing
     scout_adjust_step: int = 1
     inventory_adjust_step: int = 1
+    food_adjust_step: int = 1
 
     # Min/max caps (safety rails)
     min_scouts: int = 0
@@ -46,6 +52,9 @@ class CouncilStaffingConfig:
 
     min_inventory: int = 0
     max_inventory: int = 32
+
+    min_food_processing: int = 0
+    max_food_processing: int = 32
 
 
 def iter_council_place_beliefs(world: "WorldState") -> Iterable[Tuple[str, PlaceBelief]]:
@@ -168,12 +177,21 @@ def update_council_metrics_and_staffing(world: "WorldState") -> None:
 
     corridor_scores: list[float] = []
     store_scores: list[float] = []
+    food_scores: list[float] = []
 
     for place_id, pb in iter_council_place_beliefs(world):
         if is_corridor(world, place_id):
             corridor_scores.append(pb.congestion_score)
         if is_store(world, place_id):
             store_scores.append(pb.reliability_score)
+        place = None
+        if hasattr(world, "places"):
+            place = getattr(world, "places").get(place_id)  # type: ignore[assignment]
+        if place is None:
+            place = getattr(world, "facilities", {}).get(place_id)
+        kind = getattr(place, "kind", None) if place is not None else None
+        if kind == "mess_hall":
+            food_scores.append(pb.reliability_score)
 
     if corridor_scores:
         metrics.corridor_congestion_index = sum(corridor_scores) / len(corridor_scores)
@@ -189,6 +207,13 @@ def update_council_metrics_and_staffing(world: "WorldState") -> None:
         metrics.stores_reliability_index = 1.0
         metrics.store_count = 0
 
+    if food_scores:
+        metrics.food_hall_reliability_index = sum(food_scores) / len(food_scores)
+        metrics.food_hall_count = len(food_scores)
+    else:
+        metrics.food_hall_reliability_index = 1.0
+        metrics.food_hall_count = 0
+
     _adjust_staffing_from_metrics(world)
 
 
@@ -200,6 +225,7 @@ def _adjust_staffing_from_metrics(world: "WorldState") -> None:
 
     desired.setdefault(WorkDetailType.SCOUT_INTERIOR, 0)
     desired.setdefault(WorkDetailType.INVENTORY_STORES, 0)
+    desired.setdefault(WorkDetailType.FOOD_PROCESSING_DETAIL, 0)
 
     cc = world.council_metrics.corridor_congestion_index
     if cc > cfg.target_corridor_congestion_high:
@@ -213,6 +239,12 @@ def _adjust_staffing_from_metrics(world: "WorldState") -> None:
     elif sr > cfg.target_store_reliability_high:
         desired[WorkDetailType.INVENTORY_STORES] -= cfg.inventory_adjust_step
 
+    fr = world.council_metrics.food_hall_reliability_index
+    if fr < cfg.target_food_reliability_low:
+        desired[WorkDetailType.FOOD_PROCESSING_DETAIL] += cfg.food_adjust_step
+    elif fr > cfg.target_food_reliability_high:
+        desired[WorkDetailType.FOOD_PROCESSING_DETAIL] -= cfg.food_adjust_step
+
     desired[WorkDetailType.SCOUT_INTERIOR] = max(
         cfg.min_scouts,
         min(desired[WorkDetailType.SCOUT_INTERIOR], cfg.max_scouts),
@@ -220,4 +252,8 @@ def _adjust_staffing_from_metrics(world: "WorldState") -> None:
     desired[WorkDetailType.INVENTORY_STORES] = max(
         cfg.min_inventory,
         min(desired[WorkDetailType.INVENTORY_STORES], cfg.max_inventory),
+    )
+    desired[WorkDetailType.FOOD_PROCESSING_DETAIL] = max(
+        cfg.min_food_processing,
+        min(desired[WorkDetailType.FOOD_PROCESSING_DETAIL], cfg.max_food_processing),
     )
