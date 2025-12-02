@@ -44,6 +44,11 @@ def apply_episode_to_place_belief(pb: PlaceBelief, ep: Episode) -> None:
         intensity = float(ep.details.get("intensity", 0.5))
         pb.comfort_score = max(0.0, pb.comfort_score - 0.05 * intensity)
         pb.safety_score = max(0.0, pb.safety_score - 0.02 * intensity)
+    elif verb == EpisodeVerb.WELL_PUMPED:
+        pb.reliability_score = min(1.0, pb.reliability_score + 0.02)
+    elif verb == EpisodeVerb.WATER_DELIVERED:
+        pb.reliability_score = min(1.0, pb.reliability_score + 0.03)
+        pb.safety_score = min(1.0, pb.safety_score + 0.01)
 
     _clamp_belief_scores(pb)
 

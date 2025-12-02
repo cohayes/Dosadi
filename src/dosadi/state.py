@@ -21,6 +21,7 @@ from .memory.facility_summary import FacilityBeliefSummary
 from .simulation.snapshots import serialize_state
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from .world.environment import PlaceEnvironmentState
+from .world.water import WellState
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -829,6 +830,7 @@ class WorldState:
     metrics: MutableMapping[str, float] = field(default_factory=dict)
     council_metrics: CouncilMetrics = field(default_factory=CouncilMetrics)
     council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
+    well: WellState = field(default_factory=WellState)
     place_environment: Dict[str, PlaceEnvironmentState] = field(default_factory=dict)
     runtime_config: Any = None
     basic_suit_stock: int = 0

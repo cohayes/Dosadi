@@ -16,6 +16,7 @@ from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.work_details import WorkDetailType
 from ...state import FactionState, WorldState
 from ..environment import get_or_create_place_env
+from ..constants import WATER_DAILY_CAPACITY
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,8 @@ class LocationNode:
     kind: Optional[str] = None
     tags: Tuple[str, ...] = ()
     is_well_core: bool = False
+    water_stock: float = 0.0
+    water_capacity: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,21 @@ class LocationEdge:
     a: str
     b: str
     base_hazard_prob: float
+
+
+@dataclass
+class FacilityState:
+    """Mutable facility representation with water storage fields."""
+
+    id: str
+    name: str
+    type: str
+    kind: Optional[str] = None
+    location_id: Optional[str] = None
+    ward: str = "ward:core"
+    tags: Tuple[str, ...] = ()
+    water_stock: float = 0.0
+    water_capacity: float = 0.0
 
 
 POD_IDS: Tuple[str, ...] = (
@@ -70,6 +88,24 @@ BASE_NODES: Tuple[LocationNode, ...] = (
     LocationNode(id=JUNCTION_ID, name="Junction 7A-7B", type="junction"),
     LocationNode(id=WELL_CORE_ID, name="Well Core", type="hub", is_well_core=True),
     LocationNode(
+        id="loc:well-head-core",
+        name="Well Head",
+        type="facility",
+        kind="well_head",
+        tags=("well_head",),
+        water_stock=0.0,
+        water_capacity=0.0,
+    ),
+    LocationNode(
+        id="loc:depot-water-1",
+        name="Water Depot 1",
+        type="facility",
+        kind="water_depot",
+        tags=("water_depot",),
+        water_stock=2_000.0,
+        water_capacity=5_000.0,
+    ),
+    LocationNode(
         id="loc:mess-hall-1",
         name="Mess Hall 1",
         type="facility",
@@ -87,6 +123,8 @@ BASE_EDGES: Tuple[LocationEdge, ...] = (
     LocationEdge(id="edge:pod-4:corridor-7A", a="loc:pod-4", b="loc:corridor-7A", base_hazard_prob=0.20),
     LocationEdge(id="edge:corridor-7A:junction-7A-7B", a="loc:corridor-7A", b=JUNCTION_ID, base_hazard_prob=0.20),
     LocationEdge(id="edge:junction-7A-7B:well", a=JUNCTION_ID, b=WELL_CORE_ID, base_hazard_prob=0.05),
+    LocationEdge(id="edge:well:well-head", a=WELL_CORE_ID, b="loc:well-head-core", base_hazard_prob=0.01),
+    LocationEdge(id="edge:well:water-depot-1", a=WELL_CORE_ID, b="loc:depot-water-1", base_hazard_prob=0.01),
     LocationEdge(id="edge:mess-hall-1:well", a="loc:mess-hall-1", b=WELL_CORE_ID, base_hazard_prob=0.01),
 )
 
@@ -98,6 +136,8 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     world.rng.seed(seed)
     memory_config = MemoryConfig()
     world.memory_config = memory_config
+    world.well.daily_capacity = WATER_DAILY_CAPACITY
+    world.well.well_id = "loc:well-head-core"
     world.desired_work_details[WorkDetailType.SCOUT_INTERIOR] = 8
     world.desired_work_details[WorkDetailType.SCOUT_EXTERIOR] = 4
     world.desired_work_details[WorkDetailType.INVENTORY_STORES] = 6
@@ -105,6 +145,7 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     world.desired_work_details[WorkDetailType.FOOD_PROCESSING_DETAIL] = 4
     world.desired_work_details[WorkDetailType.SCRIBE_DETAIL] = 2
     world.desired_work_details[WorkDetailType.DISPATCH_DETAIL] = 1
+    world.desired_work_details[WorkDetailType.WATER_HANDLING] = 2
     topology_nodes = [asdict(node) for node in BASE_NODES]
     topology_edges = [asdict(edge) for edge in BASE_EDGES]
     world.policy["topology"] = {
@@ -114,7 +155,19 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     }
     world.nodes = {node.id: node for node in BASE_NODES}
     world.edges = {edge.id: edge for edge in BASE_EDGES}
-    world.facilities = {node.id: node for node in BASE_NODES if getattr(node, "kind", None)}
+    world.facilities = {}
+    for node in BASE_NODES:
+        if getattr(node, "kind", None):
+            world.facilities[node.id] = FacilityState(
+                id=node.id,
+                name=node.name,
+                type=node.type,
+                kind=node.kind,
+                location_id=node.id,
+                tags=node.tags,
+                water_stock=node.water_stock,
+                water_capacity=node.water_capacity,
+            )
     world.places = world.nodes
 
     colonist_faction = FactionState(
@@ -158,8 +211,10 @@ def initialize_environment_for_founding_wakeup(world: WorldState) -> None:
             env.comfort = 0.65
         elif kind in {"corridor", "junction"}:
             env.comfort = 0.4
-        elif kind in {"store", "depot"}:
+        elif kind in {"store", "depot", "water_depot"}:
             env.comfort = 0.45
+        elif kind in {"well_head"}:
+            env.comfort = 0.4
         else:
             env.comfort = 0.5
 
@@ -178,4 +233,9 @@ def _initialize_agent_sleep_schedule(agent: AgentState, world: WorldState, memor
     agent.last_consolidation_tick = -memory_config.min_consolidation_interval_ticks
 
 
-__all__ = ["generate_founding_wakeup_mvp", "LocationNode", "LocationEdge"]
+__all__ = [
+    "generate_founding_wakeup_mvp",
+    "LocationNode",
+    "LocationEdge",
+    "FacilityState",
+]
