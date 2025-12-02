@@ -4,9 +4,10 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import List, Optional, Sequence, TYPE_CHECKING
 
-from dosadi.agents.core import AgentState
+from dosadi.agents.core import AgentState, create_work_detail_goal
 from dosadi.runtime.agent_goals import complete_goals_by_kind
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
+from dosadi.runtime.work_details import choose_work_detail_for_agent
 
 if TYPE_CHECKING:
     from dosadi.state import WorldState
@@ -265,6 +266,16 @@ def _handle_assignment_service(
 
     complete_goals_by_kind(agent, "get_assignment")
     complete_goals_by_kind(agent, "secure_bunk")
+
+    work_type = choose_work_detail_for_agent(world, agent)
+    if work_type is not None:
+        goal = create_work_detail_goal(agent_id=agent.id, work_type=work_type, priority=1.0)
+        agent.goals.append(goal)
+        world.active_work_details[work_type] = world.active_work_details.get(work_type, 0) + 1
+        print(
+            f"[assignment-hall] Assigned {work_type.name} to {agent.agent_id}; "
+            f"active now {world.active_work_details[work_type]}"
+        )
 
 
 def _handle_queue_denial(
