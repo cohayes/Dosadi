@@ -9,7 +9,7 @@ import uuid
 import random
 
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
-from dosadi.runtime.work_details import WorkDetailType
+from dosadi.runtime.work_details import WorkDetailType, WORK_DETAIL_CATALOG
 from dosadi.systems.protocols import (
     ProtocolRegistry,
     compute_effective_hazard_prob,
@@ -767,17 +767,19 @@ def decide_next_action(
         except Exception:
             work_type = None
 
-        action = _handle_work_detail_goal(
+        _handle_work_detail_goal(
             world=world,
             agent=agent,
             goal=focus_goal,
             work_type=work_type,
-            neighbors=neighbors,
-            well_core_id=well_core_id,
             rng=rng,
         )
-        if action:
-            return action
+        return Action(
+            actor_id=agent.agent_id,
+            verb="REST_IN_POD",
+            target_location_id=agent.location_id,
+            related_goal_id=focus_goal.goal_id,
+        )
 
     if focus_goal and focus_goal.goal_type == GoalType.GATHER_INFORMATION:
         options = neighbors.get(agent.location_id, [])
@@ -864,95 +866,206 @@ def decide_next_action(
 
 
 def _handle_work_detail_goal(
-    *,
     world: "WorldState",
     agent: AgentState,
     goal: Goal,
     work_type: Optional["WorkDetailType"],
-    neighbors: Dict[str, List[str]],
-    well_core_id: str,
-    rng: Any,
-) -> Action:
-    """
-    Minimal handler so WORK_DETAIL goals can flow through the decision loop.
-    """
-
-    print(
-        f"[work-detail] handling {getattr(work_type, 'name', 'UNKNOWN')} for agent {agent.agent_id}"
-    )
-
+    rng: random.Random,
+) -> None:
     if work_type is None:
-        return Action(
-            actor_id=agent.agent_id,
-            verb="REST_IN_POD",
-            target_location_id=agent.location_id,
-            related_goal_id=goal.goal_id,
-        )
-
+        return
     if work_type == WorkDetailType.SCOUT_INTERIOR:
-        return _perform_simple_interior_scout_step(agent, goal, neighbors, rng)
-
-    if work_type == WorkDetailType.INVENTORY_STORES:
-        return _perform_simple_inventory_step(agent, goal, neighbors, well_core_id, rng)
-
-    return Action(
-        actor_id=agent.agent_id,
-        verb="REST_IN_POD",
-        target_location_id=agent.location_id,
-        related_goal_id=goal.goal_id,
-    )
+        _handle_scout_interior(world, agent, goal, rng)
+    elif work_type == WorkDetailType.INVENTORY_STORES:
+        _handle_inventory_stores(world, agent, goal, rng)
+    else:
+        return
 
 
-def _perform_simple_interior_scout_step(
+def _ensure_ticks_remaining(
+    goal: Goal,
+    work_type: WorkDetailType,
+    default_fraction: float = 0.5,
+) -> int:
+    meta = goal.metadata
+    if "ticks_remaining" not in meta:
+        cfg = WORK_DETAIL_CATALOG.get(work_type)
+        base = cfg.typical_duration_ticks if cfg and cfg.typical_duration_ticks > 0 else 2000
+        meta["ticks_remaining"] = int(base * default_fraction)
+    return int(meta["ticks_remaining"])
+
+
+def _handle_scout_interior(
+    world: "WorldState",
     agent: AgentState,
     goal: Goal,
-    neighbors: Dict[str, List[str]],
-    rng: Any,
-) -> Action:
-    options = neighbors.get(agent.location_id, [])
-    if options:
-        target_loc = rng.choice(options)
-        return Action(
-            actor_id=agent.agent_id,
-            verb="MOVE",
-            target_location_id=target_loc,
-            related_goal_id=goal.goal_id,
+    rng: random.Random,
+) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
+
+    ticks_remaining = _ensure_ticks_remaining(goal, WorkDetailType.SCOUT_INTERIOR, default_fraction=0.3)
+    ticks_remaining -= 1
+    goal.metadata["ticks_remaining"] = ticks_remaining
+    if ticks_remaining <= 0:
+        goal.status = GoalStatus.COMPLETED
+        return
+
+    _move_one_step_random_interior(world, agent, rng)
+
+    if rng.random() < 0.10:
+        factory = EpisodeFactory(world=world)
+        current_tick = getattr(world, "tick", 0)
+        episode = factory.create_scout_place_episode(
+            owner_agent_id=agent.id,
+            tick=current_tick,
+            place_id=agent.location_id,
+            interior=True,
+            hazard_level=0.0,
+            visibility=1.0,
+            distance_from_pod=0.0,
+            note="interior_scout",
         )
+        agent.record_episode(episode)
 
-    return Action(
-        actor_id=agent.agent_id,
-        verb="REST_IN_POD",
-        target_location_id=agent.location_id,
-        related_goal_id=goal.goal_id,
-    )
+    co_located = _agents_at_location(world, agent.location_id)
+    if len(co_located) > 8:
+        density = min(1.0, (len(co_located) - 8) / 8.0)
+        factory = EpisodeFactory(world=world)
+        current_tick = getattr(world, "tick", 0)
+        episode = factory.create_corridor_crowding_episode(
+            owner_agent_id=agent.id,
+            tick=current_tick,
+            corridor_id=agent.location_id,
+            estimated_density=density,
+            estimated_wait_ticks=0,
+        )
+        agent.record_episode(episode)
 
 
-def _perform_simple_inventory_step(
+def _move_one_step_random_interior(
+    world: "WorldState",
+    agent: AgentState,
+    rng: random.Random,
+) -> None:
+    neighbors = _neighbors_for_location(world, agent.location_id)
+    if not neighbors:
+        return
+    next_loc = rng.choice(neighbors)
+    agent.location_id = next_loc
+
+
+def _handle_inventory_stores(
+    world: "WorldState",
     agent: AgentState,
     goal: Goal,
-    neighbors: Dict[str, List[str]],
-    well_core_id: str,
-    rng: Any,
-) -> Action:
-    if agent.location_id != well_core_id:
-        options = neighbors.get(agent.location_id, [])
-        if well_core_id in options:
-            target_loc = well_core_id
-        else:
-            target_loc = rng.choice(options) if options else agent.location_id
-        return Action(
-            actor_id=agent.agent_id,
-            verb="MOVE",
-            target_location_id=target_loc,
-            related_goal_id=goal.goal_id,
-        )
+    rng: random.Random,
+) -> None:
+    ticks_remaining = _ensure_ticks_remaining(goal, WorkDetailType.INVENTORY_STORES, default_fraction=0.3)
+    ticks_remaining -= 1
+    goal.metadata["ticks_remaining"] = ticks_remaining
+    if ticks_remaining <= 0:
+        goal.status = GoalStatus.COMPLETED
+        return
 
-    return Action(
-        actor_id=agent.agent_id,
-        verb="REST_IN_POD",
-        target_location_id=agent.location_id,
-        related_goal_id=goal.goal_id,
+    meta = goal.metadata
+    target_store_id = meta.get("target_store_id")
+    if target_store_id is None:
+        target_store_id = _choose_inventory_store_for_agent(world, agent, rng)
+        if target_store_id is None:
+            return
+        meta["target_store_id"] = target_store_id
+
+    if agent.location_id != target_store_id:
+        _move_one_step_toward(world, agent, target_store_id, rng)
+        return
+
+    if rng.random() < 0.05:
+        _perform_inventory_actions_at_store(world, agent, target_store_id, rng)
+
+
+def _choose_inventory_store_for_agent(
+    world: "WorldState",
+    agent: AgentState,
+    rng: random.Random,
+) -> Optional[str]:
+    facilities = getattr(world, "facilities", {}) or {}
+    store_ids = [
+        fac_id
+        for fac_id, facility in facilities.items()
+        if getattr(facility, "kind", None) in {"facility", "store"}
+        or "store" in getattr(facility, "tags", ())
+        or "inventory" in getattr(facility, "tags", ())
+    ]
+    if not store_ids:
+        return None
+    return rng.choice(store_ids)
+
+
+def _move_one_step_toward(
+    world: "WorldState",
+    agent: AgentState,
+    target_location_id: str,
+    rng: random.Random,
+) -> None:
+    neighbors = _neighbors_for_location(world, agent.location_id)
+    if not neighbors:
+        return
+    if target_location_id in neighbors:
+        agent.location_id = target_location_id
+        return
+    next_loc = rng.choice(neighbors)
+    agent.location_id = next_loc
+
+
+_RESOURCE_TYPES = ["food", "water", "suit_parts", "materials"]
+
+
+def _perform_inventory_actions_at_store(
+    world: "WorldState",
+    agent: AgentState,
+    store_id: str,
+    rng: random.Random,
+) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
+
+    factory = EpisodeFactory(world=world)
+    current_tick = getattr(world, "tick", 0)
+
+    resource_type = rng.choice(_RESOURCE_TYPES)
+    quantity = rng.uniform(1.0, 10.0)
+
+    crate_id = f"crate:{resource_type}:{current_tick}:{agent.id}"
+    episode_opened = factory.create_crate_opened_episode(
+        owner_agent_id=agent.id,
+        tick=current_tick,
+        crate_id=crate_id,
+        resource_type=resource_type,
+        quantity=quantity,
+        location_id=store_id,
     )
+    agent.record_episode(episode_opened)
+
+    episode_stocked = factory.create_resource_stocked_episode(
+        owner_agent_id=agent.id,
+        tick=current_tick,
+        place_id=store_id,
+        resource_type=resource_type,
+        quantity=quantity,
+    )
+    agent.record_episode(episode_stocked)
+
+
+def _neighbors_for_location(world: "WorldState", location_id: str) -> List[str]:
+    neighbors = _build_neighbors(_topology_from_world(world))
+    return neighbors.get(location_id, [])
+
+
+def _agents_at_location(world: "WorldState", location_id: str) -> List[AgentState]:
+    return [
+        agent
+        for agent in getattr(world, "agents", {}).values()
+        if getattr(agent, "location_id", None) == location_id
+    ]
 
 
 

@@ -519,6 +519,37 @@ class EpisodeFactory:
             },
         )
 
+    def create_resource_stocked_episode(
+        self,
+        owner_agent_id: str,
+        tick: int,
+        place_id: str,
+        resource_type: str,
+        quantity: float,
+    ) -> Episode:
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=place_id,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.PLACE,
+            target_id=place_id,
+            verb=EpisodeVerb.RESOURCE_STOCKED,
+            summary_tag="resource_stocked",
+            goal_relation=EpisodeGoalRelation.SUPPORTS,
+            goal_relevance=0.3,
+            outcome=EpisodeOutcome.SUCCESS,
+            emotion=EmotionSnapshot(valence=0.1, arousal=0.2, threat=0.0),
+            importance=0.3,
+            reliability=0.8,
+            tags={"inventory", "stocking"},
+            details={
+                "resource_type": resource_type,
+                "quantity": float(quantity),
+            },
+        )
+
     def create_queue_served_episode(
         self,
         owner_agent_id: str,
