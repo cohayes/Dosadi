@@ -31,6 +31,19 @@ def apply_episode_to_place_belief(pb: PlaceBelief, ep: Episode) -> None:
         _apply_food_shortage_to_place(pb, ep)
     elif verb == EpisodeVerb.LEAK_FOUND:
         _apply_leak_found_to_place(pb, ep)
+    elif verb == EpisodeVerb.ENV_NODE_TUNED:
+        after = float(getattr(ep, "details", {}).get("comfort_after", pb.comfort_score))
+        alpha = 0.3
+        pb.comfort_score = (1 - alpha) * pb.comfort_score + alpha * after
+        pb.reliability_score = min(1.0, pb.reliability_score + 0.05)
+    elif verb == EpisodeVerb.BODY_SIGNAL and ep.details.get("signal_type") == "ENV_COMFORTABLE":
+        intensity = float(ep.details.get("intensity", 0.5))
+        pb.comfort_score = min(1.0, pb.comfort_score + 0.05 * intensity)
+        pb.safety_score = min(1.0, pb.safety_score + 0.02 * intensity)
+    elif verb == EpisodeVerb.BODY_SIGNAL and ep.details.get("signal_type") == "ENV_UNCOMFORTABLE":
+        intensity = float(ep.details.get("intensity", 0.5))
+        pb.comfort_score = max(0.0, pb.comfort_score - 0.05 * intensity)
+        pb.safety_score = max(0.0, pb.safety_score - 0.02 * intensity)
 
     _clamp_belief_scores(pb)
 

@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 import random
 
+from dosadi.memory.episode_factory import EpisodeFactory
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
 from dosadi.runtime.work_details import WorkDetailType, WORK_DETAIL_CATALOG
 from dosadi.systems.protocols import (
@@ -17,6 +18,7 @@ from dosadi.systems.protocols import (
     activate_protocol,
     record_protocol_read,
 )
+from dosadi.world.environment import get_or_create_place_env
 
 
 class GoalType(str, Enum):
@@ -889,6 +891,8 @@ def _handle_work_detail_goal(
         _handle_scout_interior(world, agent, goal, rng)
     elif work_type == WorkDetailType.INVENTORY_STORES:
         _handle_inventory_stores(world, agent, goal, rng)
+    elif work_type == WorkDetailType.ENV_CONTROL:
+        _handle_env_control(world, agent, goal, rng)
     elif work_type in (
         WorkDetailType.FOOD_PROCESSING_DETAIL,
         getattr(WorkDetailType, "FOOD_PROCESSING", WorkDetailType.FOOD_PROCESSING_DETAIL),
@@ -1195,6 +1199,97 @@ def _perform_inventory_actions_at_store(
         quantity=quantity,
     )
     agent.record_episode(episode_stocked)
+
+
+ENV_TARGET_COMFORT = 0.6
+ENV_ADJUST_STEP = 0.02
+ENV_CONTROL_PLACES_KEY = "env_control_places"
+
+
+def _assign_env_control_places(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+    max_places: int = 5,
+) -> None:
+    if ENV_CONTROL_PLACES_KEY in goal.metadata:
+        return
+
+    candidate_ids = list(getattr(world, "places", {}).keys())
+    if not candidate_ids:
+        goal.metadata[ENV_CONTROL_PLACES_KEY] = []
+        return
+
+    rng.shuffle(candidate_ids)
+    goal.metadata[ENV_CONTROL_PLACES_KEY] = candidate_ids[:max_places]
+
+
+def _choose_env_target_place(
+    world: "WorldState", agent: AgentState, goal: Goal, rng: random.Random
+) -> Optional[str]:
+    places = goal.metadata.get(ENV_CONTROL_PLACES_KEY) or []
+    if not places:
+        return None
+
+    worst_place_id = None
+    worst_delta = 0.0
+
+    for pid in places:
+        env = get_or_create_place_env(world, pid)
+        delta = abs(env.comfort - ENV_TARGET_COMFORT)
+        if delta > worst_delta:
+            worst_delta = delta
+            worst_place_id = pid
+
+    return worst_place_id
+
+
+def _handle_env_control(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+) -> None:
+    ticks_remaining = _ensure_ticks_remaining(
+        goal,
+        WorkDetailType.ENV_CONTROL,
+        default_fraction=0.3,
+    )
+    ticks_remaining -= 1
+    goal.metadata["ticks_remaining"] = ticks_remaining
+    if ticks_remaining <= 0:
+        goal.status = GoalStatus.COMPLETED
+        return
+
+    _assign_env_control_places(world, agent, goal, rng)
+    target_place_id = _choose_env_target_place(world, agent, goal, rng)
+    if not target_place_id:
+        return
+
+    if agent.location_id != target_place_id:
+        _move_one_step_toward(world, agent, target_place_id, rng)
+        return
+
+    env = get_or_create_place_env(world, target_place_id)
+    comfort_before = env.comfort
+
+    if env.comfort < ENV_TARGET_COMFORT:
+        env.comfort = min(ENV_TARGET_COMFORT, env.comfort + ENV_ADJUST_STEP)
+    elif env.comfort > ENV_TARGET_COMFORT:
+        env.comfort = max(ENV_TARGET_COMFORT, env.comfort - ENV_ADJUST_STEP)
+
+    comfort_after = env.comfort
+    if comfort_after != comfort_before:
+        factory = EpisodeFactory(world=world)
+        episode = factory.create_env_node_tuned_episode(
+            owner_agent_id=agent.id,
+            tick=getattr(world, "tick", 0),
+            place_id=target_place_id,
+            comfort_before=comfort_before,
+            comfort_after=comfort_after,
+        )
+        agent.record_episode(episode)
 
 
 def _neighbors_for_location(world: "WorldState", location_id: str) -> List[str]:

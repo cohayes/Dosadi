@@ -16,7 +16,8 @@ class WorkDetailType(Enum):
     SCOUT_EXTERIOR = auto()
     INVENTORY_STORES = auto()
     STORES_STEWARD = auto()
-    ENV_CONTROL_DETAIL = auto()
+    ENV_CONTROL = auto()
+    ENV_CONTROL_DETAIL = ENV_CONTROL
     SUIT_INSPECTION_DETAIL = auto()
     FOOD_PROCESSING_DETAIL = auto()
     WATER_HANDLING_DETAIL = auto()
@@ -88,17 +89,17 @@ WORK_DETAIL_CATALOG: Dict[WorkDetailType, WorkDetailConfig] = {
         default_team_size=1,
         typical_duration_ticks=8_000,
     ),
-    WorkDetailType.ENV_CONTROL_DETAIL: WorkDetailConfig(
-        work_type=WorkDetailType.ENV_CONTROL_DETAIL,
+    WorkDetailType.ENV_CONTROL: WorkDetailConfig(
+        work_type=WorkDetailType.ENV_CONTROL,
         category="infrastructure",
-        description="Check condensers, vents, and thermal control surfaces.",
+        description="Maintain interior comfort for a small set of places.",
         preferred_attributes={"INT": 1, "END": 1},
         preferred_traits=["careful", "mechanically_inclined"],
         risk_level="medium",
-        typical_verbs=["VENT_CHECK", "FILTER_REPLACED"],
+        typical_verbs=["ENV_NODE_TUNED"],
         macro_goals=["STABILIZE_ENVIRONMENT"],
         default_team_size=2,
-        typical_duration_ticks=11_000,
+        typical_duration_ticks=10_000,
     ),
     WorkDetailType.SUIT_INSPECTION_DETAIL: WorkDetailConfig(
         work_type=WorkDetailType.SUIT_INSPECTION_DETAIL,
