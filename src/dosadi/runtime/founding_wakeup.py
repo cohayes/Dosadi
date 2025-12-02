@@ -37,6 +37,7 @@ from dosadi.runtime.memory_runtime import (
     step_agent_memory_maintenance,
     step_agent_sleep_wake,
 )
+from dosadi.runtime.proto_council import run_proto_council_tuning
 from dosadi.systems.protocols import ProtocolRegistry, activate_protocol, create_movement_protocol_from_goal
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
@@ -75,6 +76,28 @@ def _step_agent_movement(world: WorldState) -> None:
         step_agent_movement_toward_target(agent, world)
 
 
+def _maybe_run_proto_council(world: WorldState, tick: int) -> None:
+    ticks_per_day = getattr(world, "ticks_per_day", None)
+    if ticks_per_day is None:
+        ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", 144_000)
+
+    try:
+        ticks_per_day = int(ticks_per_day)
+    except Exception:
+        ticks_per_day = 144_000
+
+    ticks_per_day = max(1, ticks_per_day)
+    current_day = tick // ticks_per_day
+    last_day = getattr(world, "last_proto_council_tuning_day", -1)
+
+    if current_day <= last_day:
+        return
+
+    rng = getattr(world, "rng", None) or random.Random(getattr(world, "seed", 0))
+    run_proto_council_tuning(world=world, rng=rng, current_day=current_day)
+    world.last_proto_council_tuning_day = current_day
+
+
 def step_world_once(world: WorldState) -> None:
     """Advance the world by a single tick for the Founding Wakeup MVP."""
 
@@ -99,6 +122,8 @@ def step_world_once(world: WorldState) -> None:
 
     if tick % cfg.queue_interval_ticks == 0:
         process_all_queues(world, tick, queue_emitter)
+
+    _maybe_run_proto_council(world, tick)
 
     world.tick += 1
 
