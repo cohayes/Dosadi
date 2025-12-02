@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Optional, Sequence, TYPE_CHECKING
+from typing import Deque, List, Optional, Sequence, TYPE_CHECKING
 
 from dosadi.agents.core import AgentState, create_work_detail_goal
 from dosadi.runtime.agent_goals import complete_goals_by_kind
@@ -13,6 +14,31 @@ if TYPE_CHECKING:
     from dosadi.state import WorldState
 
 AgentID = str
+
+
+@dataclass
+class FacilityQueueState:
+    facility_id: str
+    queue: Deque[str] = field(default_factory=deque)
+
+
+def get_or_create_facility_queue(world: "WorldState", facility_id: str) -> FacilityQueueState:
+    if facility_id not in world.facility_queues:
+        world.facility_queues[facility_id] = FacilityQueueState(facility_id=facility_id)
+    return world.facility_queues[facility_id]
+
+
+def join_facility_queue(world: "WorldState", facility_id: str, agent_id: str) -> None:
+    q = get_or_create_facility_queue(world, facility_id)
+    if agent_id not in q.queue:
+        q.queue.append(agent_id)
+
+
+def leave_facility_queue(world: "WorldState", facility_id: str, agent_id: str) -> None:
+    q = world.facility_queues.get(facility_id)
+    if not q:
+        return
+    q.queue = deque(aid for aid in q.queue if aid != agent_id)
 
 
 class QueuePriorityRule(Enum):

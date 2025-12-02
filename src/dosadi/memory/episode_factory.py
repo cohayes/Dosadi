@@ -550,6 +550,42 @@ class EpisodeFactory:
             },
         )
 
+    def create_food_served_episode(
+        self,
+        owner_agent_id: str,
+        tick: int,
+        hall_id: str,
+        wait_ticks: int,
+        calories_estimate: float,
+    ) -> Episode:
+        wait_ticks = max(0, wait_ticks)
+        normalized_wait = min(1.0, wait_ticks / 10_000.0)
+        valence = 0.5 - 0.2 * normalized_wait
+
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=hall_id,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.PLACE,
+            target_id=hall_id,
+            verb=EpisodeVerb.FOOD_SERVED,
+            summary_tag="food_served",
+            goal_relation=EpisodeGoalRelation.SUPPORTS,
+            goal_relevance=0.7,
+            outcome=EpisodeOutcome.SUCCESS,
+            emotion=EmotionSnapshot(valence=valence, arousal=0.3, threat=0.0),
+            importance=0.5,
+            reliability=0.9,
+            tags={"food", "served", "meal"},
+            details={
+                "wait_ticks": int(wait_ticks),
+                "calories_estimate": float(calories_estimate),
+                "hall_id": hall_id,
+            },
+        )
+
     def create_queue_served_episode(
         self,
         owner_agent_id: str,

@@ -23,6 +23,12 @@ def apply_episode_to_place_belief(pb: PlaceBelief, ep: Episode) -> None:
         _apply_corridor_crowding_to_place(pb, ep)
     elif verb == EpisodeVerb.FOOD_SERVED:
         _apply_food_served_to_place(pb, ep)
+    elif verb == EpisodeVerb.QUEUE_SERVED:
+        _apply_queue_served_to_place(pb, ep)
+    elif verb == EpisodeVerb.QUEUE_DENIED:
+        _apply_queue_denied_to_place(pb, ep)
+    elif verb == EpisodeVerb.FOOD_SHORTAGE_EPISODE:
+        _apply_food_shortage_to_place(pb, ep)
     elif verb == EpisodeVerb.LEAK_FOUND:
         _apply_leak_found_to_place(pb, ep)
 
@@ -56,6 +62,39 @@ def _apply_food_served_to_place(pb: PlaceBelief, ep: Episode) -> None:
 
     if getattr(ep, "emotion", None) and ep.emotion.valence > 0:
         pb.comfort_score += 0.05 * ep.emotion.valence
+
+
+def _apply_queue_served_to_place(pb: PlaceBelief, ep: Episode) -> None:
+    wait_ticks = float(getattr(ep, "details", {}).get("wait_ticks", 0))
+    normalized_wait = min(1.0, max(0.0, wait_ticks / 10_000.0))
+
+    pb.reliability_score += 0.05 * (1.0 - pb.reliability_score)
+    pb.fairness_score += 0.05 * (1.0 - normalized_wait - pb.fairness_score)
+    pb.congestion_score += 0.1 * (normalized_wait - pb.congestion_score)
+
+    if getattr(ep, "emotion", None):
+        pb.comfort_score += 0.05 * ep.emotion.valence
+
+
+def _apply_queue_denied_to_place(pb: PlaceBelief, ep: Episode) -> None:
+    wait_ticks = float(getattr(ep, "details", {}).get("wait_ticks", 0))
+    normalized_wait = min(1.0, max(0.0, wait_ticks / 10_000.0))
+
+    pb.reliability_score -= 0.1 * (1.0 - normalized_wait)
+    pb.fairness_score -= 0.1
+    pb.congestion_score += 0.05 * normalized_wait
+
+    if getattr(ep, "emotion", None):
+        pb.comfort_score -= 0.05 * (1.0 + max(0.0, -ep.emotion.valence))
+
+
+def _apply_food_shortage_to_place(pb: PlaceBelief, ep: Episode) -> None:
+    severity = float(getattr(ep, "details", {}).get("severity", 0.5))
+    severity = max(0.0, min(1.0, severity))
+    pb.reliability_score -= 0.15 * severity
+    pb.fairness_score -= 0.1 * severity
+    pb.congestion_score += 0.05 * severity
+    pb.comfort_score -= 0.05 * severity
 
 
 def _apply_leak_found_to_place(pb: PlaceBelief, ep: Episode) -> None:
