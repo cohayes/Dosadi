@@ -34,6 +34,7 @@ class GoalType(str, Enum):
     ORGANIZE_GROUP = "ORGANIZE_GROUP"
     WORK_DETAIL = "WORK_DETAIL"
     GET_MEAL_TODAY = "GET_MEAL_TODAY"
+    GET_WATER_TODAY = "GET_WATER_TODAY"
 
 
 class GoalStatus(str, Enum):
@@ -363,6 +364,8 @@ class PhysicalState:
     fatigue: float = 0.0
     hunger_level: float = 0.0  # 0.0 = satiated, 1.0+ = very hungry
     last_meal_tick: int = 0
+    hydration_level: float = 1.0  # 1.0 = fully hydrated, 0.0 = severely dehydrated
+    last_drink_tick: int = 0
     thirst: float = 0.0
     # Psychological load indicators
     stress: float = 0.3  # 0.0 = relaxed, ~0.3–0.6 = normal Dosadi tension
@@ -769,6 +772,15 @@ def decide_next_action(
             related_goal_id=focus_goal.goal_id,
         )
 
+    if focus_goal and focus_goal.goal_type == GoalType.GET_WATER_TODAY:
+        _handle_get_water_goal(world, agent, focus_goal, rng)
+        return Action(
+            actor_id=agent.agent_id,
+            verb="REST_IN_POD",
+            target_location_id=agent.location_id,
+            related_goal_id=focus_goal.goal_id,
+        )
+
     if focus_goal and focus_goal.goal_type == GoalType.WORK_DETAIL:
         work_type_name = focus_goal.metadata.get("work_detail_type") if hasattr(focus_goal, "metadata") else None
         work_type = None
@@ -944,6 +956,135 @@ def _handle_get_meal_goal(
         agent.queue_join_tick = current_tick
     agent.current_queue_id = target_hall_id
 
+
+def _handle_get_water_goal(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+) -> None:
+    from dosadi.runtime.eating import (
+        GET_WATER_GOAL_TIMEOUT_TICKS,
+        choose_water_source_for_agent,
+    )
+
+    current_tick = getattr(world, "tick", 0)
+    created_tick = getattr(goal, "created_at_tick", None)
+    if created_tick is None:
+        created_tick = goal.metadata.get("created_tick", current_tick)
+        goal.created_at_tick = created_tick
+
+    if current_tick - created_tick > GET_WATER_GOAL_TIMEOUT_TICKS:
+        goal.status = GoalStatus.FAILED
+        return
+
+    meta = goal.metadata
+    target_place_id = meta.get("target_water_place_id")
+
+    if not target_place_id:
+        target_place_id = choose_water_source_for_agent(world, agent, rng)
+        if not target_place_id:
+            return
+        meta["target_water_place_id"] = target_place_id
+
+    if agent.location_id != target_place_id:
+        _move_one_step_toward(world, agent, target_place_id, rng)
+        return
+
+    facility = world.facilities.get(target_place_id)
+    if facility is None:
+        goal.status = GoalStatus.FAILED
+        return
+
+    kind = getattr(facility, "kind", None)
+
+    if kind == "water_tap":
+        _attempt_drink_from_tap(world, agent, goal, target_place_id)
+    elif kind == "mess_hall":
+        _attempt_drink_from_mess_hall(world, agent, goal, target_place_id)
+    else:
+        goal.status = GoalStatus.FAILED
+
+
+def _attempt_drink_from_tap(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    tap_id: str,
+) -> None:
+    from dosadi.runtime.eating import DRINK_REPLENISH_AMOUNT, DRINK_WATER_UNIT
+
+    depot_id = getattr(world, "water_tap_sources", {}).get(tap_id)
+    if not depot_id:
+        _record_water_denied(world, agent, tap_id, reason="no_source")
+        return
+
+    depot = world.facilities.get(depot_id)
+    if depot is None or getattr(depot, "water_capacity", 0.0) <= 0.0:
+        _record_water_denied(world, agent, tap_id, reason="invalid_depot")
+        return
+
+    if getattr(depot, "water_stock", 0.0) < DRINK_WATER_UNIT:
+        _record_water_denied(world, agent, tap_id, reason="empty")
+        return
+
+    depot.water_stock -= DRINK_WATER_UNIT
+
+    hydration_before = agent.physical.hydration_level
+    hydration_after = min(1.0, hydration_before + DRINK_REPLENISH_AMOUNT)
+    agent.physical.hydration_level = hydration_after
+    agent.physical.last_drink_tick = getattr(world, "tick", 0)
+
+    factory = EpisodeFactory(world=world)
+    ep = factory.create_drank_water_episode(
+        owner_agent_id=agent.id,
+        tick=getattr(world, "tick", 0),
+        place_id=tap_id,
+        amount=DRINK_WATER_UNIT,
+        hydration_before=hydration_before,
+        hydration_after=hydration_after,
+    )
+    agent.record_episode(ep)
+
+    goal.status = GoalStatus.COMPLETED
+
+
+def _attempt_drink_from_mess_hall(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    hall_id: str,
+) -> None:
+    from dosadi.runtime.eating import DRINK_REPLENISH_AMOUNT, DRINK_WATER_UNIT
+
+    hydration_before = agent.physical.hydration_level
+    hydration_after = min(1.0, hydration_before + DRINK_REPLENISH_AMOUNT)
+    agent.physical.hydration_level = hydration_after
+    agent.physical.last_drink_tick = getattr(world, "tick", 0)
+
+    factory = EpisodeFactory(world=world)
+    ep = factory.create_drank_water_episode(
+        owner_agent_id=agent.id,
+        tick=getattr(world, "tick", 0),
+        place_id=hall_id,
+        amount=DRINK_WATER_UNIT,
+        hydration_before=hydration_before,
+        hydration_after=hydration_after,
+    )
+    agent.record_episode(ep)
+
+    goal.status = GoalStatus.COMPLETED
+
+
+def _record_water_denied(world: "WorldState", agent: AgentState, place_id: str, reason: str) -> None:
+    factory = EpisodeFactory(world=world)
+    ep = factory.create_water_denied_episode(
+        owner_agent_id=agent.id,
+        tick=getattr(world, "tick", 0),
+        place_id=place_id,
+        reason=reason,
+    )
+    agent.record_episode(ep)
 
 def _ensure_ticks_remaining(
     goal: Goal,

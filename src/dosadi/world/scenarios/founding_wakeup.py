@@ -106,6 +106,13 @@ BASE_NODES: Tuple[LocationNode, ...] = (
         water_capacity=5_000.0,
     ),
     LocationNode(
+        id="loc:tap-1",
+        name="Water Tap 1",
+        type="facility",
+        kind="water_tap",
+        tags=("water_tap",),
+    ),
+    LocationNode(
         id="loc:mess-hall-1",
         name="Mess Hall 1",
         type="facility",
@@ -125,6 +132,7 @@ BASE_EDGES: Tuple[LocationEdge, ...] = (
     LocationEdge(id="edge:junction-7A-7B:well", a=JUNCTION_ID, b=WELL_CORE_ID, base_hazard_prob=0.05),
     LocationEdge(id="edge:well:well-head", a=WELL_CORE_ID, b="loc:well-head-core", base_hazard_prob=0.01),
     LocationEdge(id="edge:well:water-depot-1", a=WELL_CORE_ID, b="loc:depot-water-1", base_hazard_prob=0.01),
+    LocationEdge(id="edge:well:tap-1", a=WELL_CORE_ID, b="loc:tap-1", base_hazard_prob=0.01),
     LocationEdge(id="edge:mess-hall-1:well", a="loc:mess-hall-1", b=WELL_CORE_ID, base_hazard_prob=0.01),
 )
 
@@ -169,6 +177,7 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
                 water_capacity=node.water_capacity,
             )
     world.places = world.nodes
+    world.water_tap_sources["loc:tap-1"] = "loc:depot-water-1"
 
     colonist_faction = FactionState(
         id="faction:colonists",

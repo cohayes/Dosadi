@@ -17,6 +17,13 @@ HUNGER_GOAL_THRESHOLD: float = 0.4
 MEAL_SATIATION_AMOUNT: float = 0.7
 GET_MEAL_GOAL_TIMEOUT_TICKS: int = 100_000
 
+HYDRATION_DECAY_PER_TICK: float = 1.0 / 80_000.0
+HYDRATION_GOAL_THRESHOLD: float = 0.6
+GET_WATER_GOAL_TIMEOUT_TICKS: int = 80_000
+
+DRINK_REPLENISH_AMOUNT: float = 0.7
+DRINK_WATER_UNIT: float = 1.0
+
 ENV_UNCOMFORTABLE_THRESHOLD = 0.3
 ENV_COMFORTABLE_THRESHOLD = 0.7
 
@@ -34,9 +41,37 @@ def update_agent_physical_state(
     if agent.physical.hunger_level > HUNGER_MAX:
         agent.physical.hunger_level = HUNGER_MAX
 
+    agent.physical.hydration_level -= HYDRATION_DECAY_PER_TICK
+    if agent.physical.hydration_level < 0.0:
+        agent.physical.hydration_level = 0.0
+    elif agent.physical.hydration_level > 1.0:
+        agent.physical.hydration_level = 1.0
+
     env = get_or_create_place_env(world, agent.location_id)
     factory = EpisodeFactory(world=world)
     current_tick = getattr(world, "tick", 0)
+
+    signal_type = None
+    intensity = 0.0
+
+    if agent.physical.hydration_level < 0.2 and rng.random() < 0.05:
+        signal_type = "EXTREMELY_THIRSTY"
+        intensity = 1.0
+    elif agent.physical.hydration_level < 0.4 and rng.random() < 0.03:
+        signal_type = "VERY_THIRSTY"
+        intensity = 0.7
+    elif agent.physical.hydration_level < 0.7 and rng.random() < 0.02:
+        signal_type = "THIRSTY"
+        intensity = 0.4
+
+    if signal_type is not None:
+        episode = factory.create_body_signal_episode(
+            owner_agent_id=agent.id,
+            tick=current_tick,
+            signal_type=signal_type,
+            intensity=intensity,
+        )
+        agent.record_episode(episode)
 
     if env.comfort < ENV_UNCOMFORTABLE_THRESHOLD and rng.random() < 0.02:
         episode = factory.create_body_signal_episode(
@@ -88,6 +123,38 @@ def maybe_create_get_meal_goal(world, agent: AgentState) -> None:
     create_get_meal_goal(world, agent)
 
 
+def has_active_or_pending_get_water_goal(agent: AgentState) -> bool:
+    for g in agent.goals:
+        if g.goal_type == GoalType.GET_WATER_TODAY and g.status in (
+            GoalStatus.PENDING,
+            GoalStatus.ACTIVE,
+        ):
+            return True
+    return False
+
+
+def create_get_water_goal(world, agent: AgentState) -> Goal:
+    current_tick = getattr(world, "tick", 0)
+    g = Goal(
+        goal_id=f"goal:get_water:{agent.id}:{current_tick}",
+        owner_id=agent.id,
+        goal_type=GoalType.GET_WATER_TODAY,
+        status=GoalStatus.PENDING,
+        created_at_tick=current_tick,
+        metadata={},
+    )
+    agent.goals.append(g)
+    return g
+
+
+def maybe_create_get_water_goal(world, agent: AgentState) -> None:
+    if agent.physical.hydration_level > HYDRATION_GOAL_THRESHOLD:
+        return
+    if has_active_or_pending_get_water_goal(agent):
+        return
+    create_get_water_goal(world, agent)
+
+
 def choose_mess_hall_for_agent(
     world,
     agent: AgentState,
@@ -133,5 +200,44 @@ def choose_mess_hall_for_agent(
         if score > best_score:
             best_score = score
             best_id = hid
+    return best_id
+
+
+def choose_water_source_for_agent(
+    world,
+    agent: AgentState,
+    rng: random.Random,
+) -> Optional[str]:
+    candidate_ids: List[str] = []
+    for fid, facility in getattr(world, "facilities", {}).items():
+        kind = getattr(facility, "kind", None)
+        if kind in {"water_tap", "mess_hall"}:
+            candidate_ids.append(fid)
+
+    if not candidate_ids:
+        return None
+
+    def utility(place_id: str) -> float:
+        pb = agent.get_or_create_place_belief(place_id)
+        w_rel = 0.5
+        w_fair = 0.2
+        w_cong = 0.1
+        return (
+            w_rel * pb.reliability_score
+            + w_fair * pb.fairness_score
+            - w_cong * pb.congestion_score
+        )
+
+    if rng.random() < 0.1:
+        return rng.choice(candidate_ids)
+
+    best_id = None
+    best_score = float("-inf")
+    for pid in candidate_ids:
+        score = utility(pid)
+        if score > best_score:
+            best_score = score
+            best_id = pid
+
     return best_id
 
