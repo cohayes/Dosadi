@@ -82,6 +82,11 @@ The environment is a simple, high-level map (D-WORLD-0100 will define details):
 - **Central corridors** (unsealed, hostile air outside pods):
   - Main radial corridor: `corr:main-core`.
   - Branch corridors leading to facilities (`corr:med`, `corr:suit`, `corr:assign`).
+  - Additional side corridors for reconnaissance and maintenance drills (`corr:survey-a`
+    → `corr:survey-b`, `corr:maintenance-a` → `corr:maintenance-b`). Half of these
+    spur edges are marked **hazardous** (e.g. `edge:corr:main-core:corr:survey-a`,
+    `edge:corr:main-core:corr:maintenance-a`) and are deliberately **non-essential**
+    so early hazards don’t block access to suits, assignments, or medical.
 - **Shared facilities** (unsealed, but with local environmental conditioning):
   - Medical bay: `fac:med-bay-1`.
   - Suit issue depot: `fac:suit-issue-1`.
@@ -92,6 +97,17 @@ The environment is a simple, high-level map (D-WORLD-0100 will define details):
 
 Movement between pods and facilities requires basic suits.
 Outside pods, conditions are harsh but survivable with **basic personal suits**.
+
+Governance scaffolding is baked in from the former MVP runtime:
+
+- Each pod designates an initial representative, enabling a **proto-council** to form
+  at the hub without waiting for long migrations.
+- Corridor risk metrics seed the **hazard → protocol** loop so council meetings can
+  author movement/safety protocols once incident thresholds are crossed (defaults:
+  ≥1 incident with ≥0.15 risk on an edge).
+- Runtime ticks monitor these seeded metrics and immediately draft movement
+  protocols for uncovered hazardous spurs, keeping governance visible even before
+  organic incident data accrues.
 
 ### 2.4 Initial Resources
 

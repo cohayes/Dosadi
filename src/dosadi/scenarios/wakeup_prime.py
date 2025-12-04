@@ -16,6 +16,7 @@ from dosadi.agents.core import (
     create_agent,
     make_goal_id,
 )
+from dosadi.agents.groups import Group, GroupRole, create_pod_group, maybe_form_proto_council
 from dosadi.law import FacilityProtocolTuning
 from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
@@ -28,6 +29,7 @@ class WakeupPrimeScenarioConfig:
     num_agents: int = 240
     seed: int = 1337
     include_canteen: bool = True
+    include_hazard_spurs: bool = True
     max_ticks: int = 10_000
     basic_suit_stock: int | None = None
 
@@ -126,10 +128,62 @@ def _create_agents(num_agents: int, pods: Iterable[str], seed: int) -> List[Agen
     return agents
 
 
+def _initialize_pod_groups(world: WorldState, pod_ids: Iterable[str]) -> List[Group]:
+    groups: List[Group] = []
+    pod_members: dict[str, list[str]] = {pid: [] for pid in pod_ids}
+
+    for agent in world.agents.values():
+        pod_members.setdefault(agent.location_id, []).append(agent.agent_id)
+
+    for pod_id, members in pod_members.items():
+        group = create_pod_group(pod_location_id=pod_id, member_ids=members, tick=world.tick)
+        if members:
+            rep_id = members[0]
+            roles = group.roles_by_agent.setdefault(rep_id, [])
+            if GroupRole.POD_REPRESENTATIVE not in roles:
+                roles.append(GroupRole.POD_REPRESENTATIVE)
+        groups.append(group)
+        world.groups.append(group)
+
+    council = maybe_form_proto_council(
+        groups=world.groups,
+        agents_by_id=world.agents,
+        tick=world.tick,
+        hub_location_id="corr:main-core",
+    )
+
+    if council is not None:
+        world.council_agent_ids = list(council.member_ids)
+
+    return groups
+
+
+def _seed_risk_metrics(world: WorldState) -> None:
+    metrics = getattr(world, "metrics", None)
+    if metrics is None or not isinstance(metrics, dict):
+        metrics = {}
+
+    hazard_edges = [
+        edge for edge in world.edges.values() if getattr(edge, "base_hazard_prob", 0.0) >= 0.15
+    ]
+
+    for edge in hazard_edges:
+        traversals_key = f"traversals:{edge.id}"
+        incidents_key = f"incidents:{edge.id}"
+        traversals = float(metrics.get(traversals_key, 12.0))
+        incidents_default = max(1.0, round(traversals * max(0.15, edge.base_hazard_prob)))
+        metrics.setdefault(traversals_key, traversals)
+        metrics.setdefault(incidents_key, incidents_default)
+
+    world.metrics = metrics
+
+
 def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupPrimeReport:
     """Build the initial world + agents for Wakeup Scenario Prime."""
 
-    layout = build_habitat_layout_prime(include_canteen=config.include_canteen)
+    layout = build_habitat_layout_prime(
+        include_canteen=config.include_canteen, include_hazard_spurs=config.include_hazard_spurs
+    )
     world = WorldState(seed=config.seed)
     world.rng.seed(config.seed)
 
@@ -166,12 +220,24 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
     default_suits = getattr(config, "basic_suit_stock", None)
     world.basic_suit_stock = num_agents if default_suits is None else default_suits
 
+    _initialize_pod_groups(world, pods)
+    _seed_risk_metrics(world)
+
+    metadata = {
+        "scenario_id": "wakeup_prime",
+        "objectives": (
+            "queue_discipline",
+            "proto_council_readiness",
+            "risk_protocol_feedback",
+        ),
+    }
+
     return WakeupPrimeReport(
         world=world,
         agents=agents,
         queues=queues,
         config=config,
-        metadata={"scenario_id": "wakeup_prime"},
+        metadata=metadata,
     )
 
 
