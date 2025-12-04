@@ -39,8 +39,8 @@ def verify_scenario(name: str, report: object) -> ScenarioValidationResult:
     return verifier(report)
 
 
-def _verify_founding_wakeup(report: object) -> ScenarioValidationResult:
-    entry = get_scenario_entry("founding_wakeup_mvp")
+def _verify_wakeup_prime(report: object) -> ScenarioValidationResult:
+    entry = get_scenario_entry("wakeup_prime")
     return ScenarioValidationResult(
         scenario=entry.name,
         doc_path=entry.doc_path,
@@ -51,7 +51,8 @@ def _verify_founding_wakeup(report: object) -> ScenarioValidationResult:
 
 
 _SCENARIO_VERIFIERS: Dict[str, Verifier] = {
-    "founding_wakeup_mvp": _verify_founding_wakeup,
+    "wakeup_prime": _verify_wakeup_prime,
+    "founding_wakeup_mvp": _verify_wakeup_prime,
 }
 
 

@@ -1,4 +1,4 @@
-"""Runtime orchestration for the Founding Wakeup MVP scenario."""
+"""Legacy runtime alias for the consolidated Wakeup Prime scenario."""
 
 from __future__ import annotations
 
@@ -6,19 +6,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import random
 
-from dosadi.agents.core import (
-    Action,
-    AgentState,
-    Goal,
-    GoalHorizon,
-    GoalOrigin,
-    GoalStatus,
-    GoalType,
-    apply_action,
-    decide_next_action,
-    make_goal_id,
-    prepare_navigation_context,
-)
+from dosadi.agents.core import Action, Goal, GoalHorizon, GoalOrigin, GoalStatus, GoalType, apply_action, decide_next_action, make_goal_id, prepare_navigation_context
 from dosadi.agents.groups import (
     Group,
     GroupType,
@@ -44,10 +32,10 @@ from dosadi.runtime.memory_runtime import (
     step_agent_sleep_wake,
 )
 from dosadi.runtime.proto_council import run_proto_council_tuning
-from dosadi.systems.protocols import ProtocolRegistry, activate_protocol, create_movement_protocol_from_goal
+from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
-from dosadi.world.scenarios.founding_wakeup import generate_founding_wakeup_mvp
+from dosadi.runtime.wakeup_prime import run_wakeup_prime
 from dosadi.state import WorldState
 
 
@@ -190,31 +178,9 @@ def _phase_A_groups_and_council(world: WorldState, tick: int, rng: random.Random
                 agent.last_decision_tick = tick
 
     if dangerous_edge_ids:
-        registry = world.protocols if isinstance(world.protocols, ProtocolRegistry) else None
-        covered = set()
-        if registry is not None:
-            for proto in registry.protocols_by_id.values():
-                covered.update(proto.covered_location_ids)
-
-        uncovered_edges = [edge for edge in dangerous_edge_ids if edge not in covered]
-        if uncovered_edges:
-            scribe = next(iter(world.agents.values()), None)
-            if scribe is not None:
-                author_goal = Goal(
-                    goal_id=make_goal_id(),
-                    owner_id=scribe.agent_id,
-                    goal_type=GoalType.AUTHOR_PROTOCOL,
-                    description=f"Draft movement/safety protocol for: {', '.join(uncovered_edges)}",
-                    target={"corridor_ids": uncovered_edges, "edge_ids": uncovered_edges},
-                    priority=0.95,
-                    urgency=0.95,
-                    horizon=GoalHorizon.MEDIUM,
-                    status=GoalStatus.ACTIVE,
-                    created_at_tick=tick,
-                    last_updated_tick=tick,
-                    origin=GoalOrigin.OPPORTUNITY,
-                )
-                handle_protocol_authoring(world, scribe, author_goal, uncovered_edges)
+        maybe_author_movement_protocols(
+            world=world, dangerous_edge_ids=dangerous_edge_ids, tick=tick
+        )
 
 
 def _phase_B_agent_decisions(world: WorldState, tick: int) -> Dict[str, Action]:
@@ -261,16 +227,22 @@ def _phase_C_apply_actions_and_hazards(world: WorldState, tick: int, actions_by_
 
 
 def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> FoundingWakeupReport:
-    """Run the Founding Wakeup MVP scenario from scratch."""
+    """Legacy alias: route MVP runs through the Wakeup Prime scenario."""
 
-    world = generate_founding_wakeup_mvp(num_agents=num_agents, seed=seed)
-    world.runtime_config = RuntimeConfig(max_ticks=max_ticks)
-    world.rng.seed(seed)
+    prime_report = run_wakeup_prime(
+        num_agents=num_agents,
+        max_ticks=max_ticks,
+        seed=seed,
+        include_canteen=True,
+        include_hazard_spurs=True,
+    )
 
-    while world.tick < world.runtime_config.max_ticks:
-        step_world_once(world)
+    if isinstance(prime_report, FoundingWakeupReport):
+        return prime_report
 
-    return build_founding_wakeup_report(world)
+    world = getattr(prime_report, "world", None)
+    metrics = getattr(world, "metrics", {}) if world is not None else {}
+    return FoundingWakeupReport(world=world, metrics=metrics, summary=getattr(prime_report, "summary", {}))
 
 
 def build_founding_wakeup_report(world: WorldState) -> FoundingWakeupReport:
@@ -281,22 +253,6 @@ def build_founding_wakeup_report(world: WorldState) -> FoundingWakeupReport:
         "protocols": len(world.protocols.protocols_by_id),
     }
     return FoundingWakeupReport(world=world, metrics=dict(world.metrics), summary=summary)
-
-
-def handle_protocol_authoring(world: WorldState, scribe: AgentState, authoring_goal: Goal, corridors: List[str]) -> None:
-    council_group_id = authoring_goal.target.get("council_group_id", "group:council:alpha")
-    registry = world.protocols if isinstance(world.protocols, ProtocolRegistry) else ProtocolRegistry()
-    if not isinstance(world.protocols, ProtocolRegistry):
-        world.protocols = registry
-    protocol = create_movement_protocol_from_goal(
-        council_group_id=council_group_id,
-        scribe_agent_id=scribe.agent_id,
-        group_goal=authoring_goal,
-        corridors=corridors,
-        tick=world.tick,
-        registry=registry,
-    )
-    activate_protocol(protocol, tick=world.tick)
 
 
 @dataclass(slots=True)
@@ -322,5 +278,4 @@ __all__ = [
     "run_founding_wakeup_mvp",
     "run_founding_wakeup_from_config",
     "build_founding_wakeup_report",
-    "handle_protocol_authoring",
 ]
