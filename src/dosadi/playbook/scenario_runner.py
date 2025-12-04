@@ -80,19 +80,21 @@ class WakeupPrimeScenarioConfig:
     num_agents: int = 240
     seed: int = 1337
     include_canteen: bool = True
+    include_hazard_spurs: bool = True
     max_ticks: int = 10_000
     basic_suit_stock: int | None = None
 
 
 def _run_founding_wakeup(config: FoundingWakeupScenarioConfig):
-    from ..runtime import founding_wakeup as fw
-
-    if isinstance(config, dict):
-        config = FoundingWakeupScenarioConfig(**config)
-    return fw.run_founding_wakeup_mvp(
-        num_agents=config.num_agents,
-        max_ticks=config.max_ticks,
-        seed=config.seed,
+    # Legacy alias: route MVP runs through the consolidated Wakeup Prime scenario
+    return _run_wakeup_prime(
+        WakeupPrimeScenarioConfig(
+            num_agents=config.num_agents,
+            seed=config.seed,
+            max_ticks=config.max_ticks,
+            include_canteen=True,
+            include_hazard_spurs=True,
+        )
     )
 
 
@@ -106,6 +108,7 @@ def _run_wakeup_prime(config: WakeupPrimeScenarioConfig):
         max_ticks=config.max_ticks,
         seed=config.seed,
         include_canteen=config.include_canteen,
+        include_hazard_spurs=config.include_hazard_spurs,
         basic_suit_stock=config.basic_suit_stock,
     )
 
@@ -113,8 +116,8 @@ def _run_wakeup_prime(config: WakeupPrimeScenarioConfig):
 register_scenario(
     ScenarioEntry(
         name="founding_wakeup_mvp",
-        description="Founding wakeup MVP runtime wiring",
-        doc_path="docs/latest/02_runtime/D-RUNTIME-0200_Founding_Wakeup_MVP_Runtime_v1-1-0.md",
+        description="Legacy alias: runs the consolidated Wakeup Prime scenario",
+        doc_path="docs/latest/11_scenarios/D-SCEN-0001_Wakeup_Scenario_Prime_v0.md",
         config_type=FoundingWakeupScenarioConfig,
         runner=lambda config: _run_founding_wakeup(config),
     )
