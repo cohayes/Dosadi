@@ -8,6 +8,13 @@ from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.memory_runtime import step_agent_memory_maintenance, step_agent_sleep_wake
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
+from dosadi.agents.groups import (
+    GroupType,
+    _find_dangerous_corridors_from_metrics,
+    maybe_form_proto_council,
+    maybe_run_council_meeting,
+    maybe_run_pod_meeting,
+)
 from dosadi.scenarios.wakeup_prime import (
     WakeupPrimeReport,
     WakeupPrimeScenarioConfig,
@@ -15,6 +22,7 @@ from dosadi.scenarios.wakeup_prime import (
 )
 from dosadi.state import WorldState
 from dosadi.runtime.proto_council import run_proto_council_tuning
+from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 
 
 @dataclass(slots=True)
@@ -23,6 +31,14 @@ class WakeupPrimeRuntimeConfig:
 
     max_ticks: int = 10_000
     queue_interval_ticks: int = 100
+    pod_meeting_interval_ticks: int = 120
+    council_meeting_cooldown_ticks: int = 80
+    rep_vote_fraction_threshold: float = 0.4
+    min_leadership_threshold: float = 0.6
+    max_pod_representatives: int = 2
+    max_council_size: int = 8
+    min_incidents_for_protocol: int = 1
+    risk_threshold_for_protocol: float = 0.15
 
 
 def _maybe_run_proto_council(world: WorldState, tick: int) -> None:
@@ -45,6 +61,64 @@ def _maybe_run_proto_council(world: WorldState, tick: int) -> None:
     rng = getattr(world, "rng", None) or random.Random(getattr(world, "seed", 0))
     run_proto_council_tuning(world=world, rng=rng, current_day=current_day)
     world.last_proto_council_tuning_day = current_day
+
+
+def _step_governance(world: WorldState, tick: int, cfg: WakeupPrimeRuntimeConfig) -> None:
+    rng = getattr(world, "rng", None) or random.Random(getattr(world, "seed", 0))
+
+    groups = getattr(world, "groups", None)
+    if groups is None:
+        world.groups = []
+        groups = world.groups
+
+    metrics = getattr(world, "metrics", None)
+    dangerous_edge_ids = []
+    if isinstance(metrics, dict):
+        dangerous_edge_ids = _find_dangerous_corridors_from_metrics(
+            metrics=metrics,
+            min_incidents_for_protocol=cfg.min_incidents_for_protocol,
+            risk_threshold_for_protocol=cfg.risk_threshold_for_protocol,
+        )
+
+    for group in groups:
+        if group.group_type != GroupType.POD:
+            continue
+        maybe_run_pod_meeting(
+            pod_group=group,
+            agents_by_id=world.agents,
+            tick=tick,
+            rng=rng,
+            meeting_interval_ticks=cfg.pod_meeting_interval_ticks,
+            rep_vote_fraction_threshold=cfg.rep_vote_fraction_threshold,
+            min_leadership_threshold=cfg.min_leadership_threshold,
+            max_representatives=cfg.max_pod_representatives,
+        )
+
+    council = maybe_form_proto_council(
+        groups=groups,
+        agents_by_id=world.agents,
+        tick=tick,
+        hub_location_id="corr:main-core",
+        max_council_size=cfg.max_council_size,
+    )
+
+    if council is not None:
+        world.council_agent_ids = list(council.member_ids)
+        maybe_run_council_meeting(
+            council_group=council,
+            agents_by_id=world.agents,
+            tick=tick,
+            rng=rng,
+            cooldown_ticks=cfg.council_meeting_cooldown_ticks,
+            hub_location_id="corr:main-core",
+            metrics=getattr(world, "metrics", {}),
+            cfg=cfg,
+        )
+
+    if dangerous_edge_ids:
+        maybe_author_movement_protocols(
+            world=world, dangerous_edge_ids=dangerous_edge_ids, tick=tick
+        )
 
 
 def step_wakeup_prime_once(world: WorldState) -> None:
@@ -70,6 +144,7 @@ def step_wakeup_prime_once(world: WorldState) -> None:
     if tick % cfg.queue_interval_ticks == 0:
         process_all_queues(world, tick, queue_emitter)
 
+    _step_governance(world, tick, cfg)
     _maybe_run_proto_council(world, tick)
 
     world.tick += 1
@@ -81,6 +156,7 @@ def run_wakeup_prime(
     max_ticks: int = 10_000,
     seed: int = 1337,
     include_canteen: bool = True,
+    include_hazard_spurs: bool = True,
     basic_suit_stock: int | None = None,
 ) -> WakeupPrimeReport:
     """Generate and run Wakeup Scenario Prime."""
@@ -89,6 +165,7 @@ def run_wakeup_prime(
         num_agents=num_agents,
         seed=seed,
         include_canteen=include_canteen,
+        include_hazard_spurs=include_hazard_spurs,
         max_ticks=max_ticks,
         basic_suit_stock=basic_suit_stock,
     )
@@ -106,6 +183,7 @@ def run_wakeup_prime(
         "ticks": world.tick,
         "agents": len(world.agents),
         "queues": len(world.queues),
+        "protocols": len(getattr(getattr(world, "protocols", None), "protocols_by_id", {}) or {}),
     }
     return report
 

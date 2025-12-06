@@ -74,7 +74,10 @@ def _make_location(
 
 
 def build_habitat_layout_prime(
-    *, pods: Iterable[str] = DEFAULT_PODS, include_canteen: bool = True
+    *,
+    pods: Iterable[str] = DEFAULT_PODS,
+    include_canteen: bool = True,
+    include_hazard_spurs: bool = True,
 ) -> HabitatLayoutPrime:
     """Build the Habitat Layout Prime graph described in D-WORLD-0100."""
 
@@ -93,6 +96,8 @@ def build_habitat_layout_prime(
                 "corr:assign",
                 "corr:canteen",
                 "corr:holding",
+                "corr:survey-a",
+                "corr:maintenance-a",
             },
             "corr:med": {"corr:main-core", "fac:med-bay-1", "queue:med-triage:front"},
             "corr:suit": {"corr:main-core", "fac:suit-issue-1", "queue:suit-issue:front"},
@@ -107,6 +112,10 @@ def build_habitat_layout_prime(
             "queue:med-triage:front": {"corr:med"},
             "queue:suit-issue:front": {"corr:suit"},
             "queue:assignment:front": {"corr:assign"},
+            "corr:survey-a": {"corr:main-core", "corr:survey-b"},
+            "corr:survey-b": {"corr:survey-a"},
+            "corr:maintenance-a": {"corr:main-core", "corr:maintenance-b"},
+            "corr:maintenance-b": {"corr:maintenance-a"},
         }
     )
 
@@ -114,6 +123,11 @@ def build_habitat_layout_prime(
         adjacency.pop("corr:canteen", None)
         adjacency.pop("fac:canteen-1", None)
         adjacency["corr:main-core"].discard("corr:canteen")
+
+    if not include_hazard_spurs:
+        for spur in ["corr:survey-a", "corr:survey-b", "corr:maintenance-a", "corr:maintenance-b"]:
+            adjacency.pop(spur, None)
+            adjacency["corr:main-core"].discard(spur)
 
     nodes: Dict[str, Location] = {}
 
@@ -147,8 +161,16 @@ def build_habitat_layout_prime(
         "corr:assign",
         "corr:canteen",
         "corr:holding",
+        "corr:survey-a",
+        "corr:survey-b",
+        "corr:maintenance-a",
+        "corr:maintenance-b",
     ]:
         if corridor == "corr:canteen" and not include_canteen:
+            continue
+        if not include_hazard_spurs and corridor.startswith("corr:survey"):
+            continue
+        if not include_hazard_spurs and corridor.startswith("corr:maintenance"):
             continue
         nodes[corridor] = _make_location(loc_id=corridor, name=corridor, **corridor_defaults)
 
@@ -182,6 +204,13 @@ def build_habitat_layout_prime(
     edge_pairs: Set[frozenset] = set()
     edges: Dict[str, LayoutEdge] = {}
 
+    hazard_overrides: Dict[frozenset, float] = {
+        frozenset({"corr:main-core", "corr:survey-a"}): 0.25,
+        frozenset({"corr:survey-a", "corr:survey-b"}): 0.06,
+        frozenset({"corr:main-core", "corr:maintenance-a"}): 0.18,
+        frozenset({"corr:maintenance-a", "corr:maintenance-b"}): 0.04,
+    }
+
     for src, targets in adjacency.items():
         for tgt in targets:
             pair = frozenset({src, tgt})
@@ -190,7 +219,8 @@ def build_habitat_layout_prime(
             edge_pairs.add(pair)
             a, b = sorted(pair)
             edge_id = f"edge:{a}:{b}"
-            edges[edge_id] = LayoutEdge(id=edge_id, a=a, b=b, base_hazard_prob=0.02)
+            hazard = hazard_overrides.get(pair, 0.02)
+            edges[edge_id] = LayoutEdge(id=edge_id, a=a, b=b, base_hazard_prob=hazard)
 
     return HabitatLayoutPrime(nodes=nodes, edges=edges, adjacency=adjacency)
 
