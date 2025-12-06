@@ -140,6 +140,8 @@ def step_wakeup_prime_once(world: WorldState) -> None:
     for agent in world.agents.values():
         step_agent_sleep_wake(world, agent, tick, memory_config)
         step_agent_memory_maintenance(world, agent, tick, memory_config)
+        if not agent.physical.is_sleeping:
+            agent.total_ticks_employed += 1.0
 
     if tick % cfg.queue_interval_ticks == 0:
         process_all_queues(world, tick, queue_emitter)

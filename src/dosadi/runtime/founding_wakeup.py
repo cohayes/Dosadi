@@ -110,6 +110,8 @@ def step_world_once(world: WorldState) -> None:
         step_agent_sleep_wake(world, agent, tick, memory_config)
         step_agent_memory_maintenance(world, agent, tick, memory_config)
         update_agent_physical_state(world, agent)
+        if not agent.physical.is_sleeping:
+            agent.total_ticks_employed += 1.0
         maybe_create_get_meal_goal(world, agent)
         maybe_create_get_water_goal(world, agent)
         maybe_create_rest_goal(world, agent)

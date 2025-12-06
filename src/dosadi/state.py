@@ -776,6 +776,7 @@ class CrewState:
     crew_id: str
     work_type: WorkDetailType
     member_ids: List[str] = field(default_factory=list)
+    leader_id: Optional[str] = None
 
 
 @dataclass(slots=True)
@@ -846,6 +847,7 @@ class WorldState:
     basic_suit_stock: int = 0
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
     last_proto_council_tuning_day: int = -1
+    last_promotion_check_tick: int = 0
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

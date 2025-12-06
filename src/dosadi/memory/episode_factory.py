@@ -16,6 +16,7 @@ from dosadi.memory.episodes import (
     EpisodeVerb,
 )
 from dosadi.state import WorldState
+from dosadi.runtime.work_details import WorkDetailType
 
 
 @dataclass(frozen=True)
@@ -919,4 +920,40 @@ class EpisodeFactory:
             reliability=0.9,
             tags={"water", "denied"},
             details={"reason": reason},
+        )
+
+    def create_promotion_episode(
+        self,
+        owner_agent_id: str,
+        tick: int,
+        work_type: WorkDetailType,
+        new_tier: int,
+        crew_id: Optional[str],
+    ) -> Episode:
+        tags = {"promotion", "work", work_type.name.lower()}
+        if crew_id:
+            tags.add("crew")
+
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=None,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.SELF,
+            target_id=owner_agent_id,
+            verb=EpisodeVerb.PROMOTED_TO_TIER,
+            summary_tag="promotion",
+            goal_relation=EpisodeGoalRelation.SUPPORTS,
+            goal_relevance=0.4,
+            outcome=EpisodeOutcome.SUCCESS,
+            emotion=EmotionSnapshot(valence=0.6, arousal=0.4, threat=0.0),
+            importance=0.4,
+            reliability=0.9,
+            tags=tags,
+            details={
+                "work_type": work_type.name,
+                "new_tier": int(new_tier),
+                "crew_id": crew_id or "",
+            },
         )
