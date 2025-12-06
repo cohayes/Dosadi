@@ -21,6 +21,12 @@ MORALE_RELAX_RATE: float = 1.0 / 100_000.0
 STRESS_NEEDS_RATE: float = 1.0 / 20_000.0
 MORALE_NEEDS_RATE: float = 1.0 / 20_000.0
 
+SLEEP_BASE_ACCUM_PER_TICK: float = 1.0 / 120_000.0
+SLEEP_HUNGER_MODIFIER: float = 0.2
+SLEEP_STRESS_MODIFIER: float = 0.3
+
+SLEEP_RECOVERY_RATE: float = 1.0 / 40_000.0
+
 
 def compute_needs_pressure(physical: PhysicalState) -> float:
     """Compute combined pressure from hunger and hydration shortfalls."""
@@ -81,3 +87,26 @@ def compute_performance_multiplier(physical: PhysicalState) -> float:
         multiplier = 1.2
 
     return multiplier
+
+
+def accumulate_sleep_pressure(physical: PhysicalState) -> None:
+    if physical.is_sleeping:
+        return
+
+    base = SLEEP_BASE_ACCUM_PER_TICK
+    extra = (
+        SLEEP_HUNGER_MODIFIER * max(0.0, physical.hunger_level)
+        + SLEEP_STRESS_MODIFIER * max(0.0, physical.stress_level)
+    )
+    physical.sleep_pressure += base + extra * SLEEP_BASE_ACCUM_PER_TICK
+    if physical.sleep_pressure > 1.0:
+        physical.sleep_pressure = 1.0
+
+
+def recover_sleep_pressure(physical: PhysicalState) -> None:
+    if not physical.is_sleeping:
+        return
+
+    physical.sleep_pressure -= SLEEP_RECOVERY_RATE
+    if physical.sleep_pressure < 0.0:
+        physical.sleep_pressure = 0.0

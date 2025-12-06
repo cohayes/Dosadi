@@ -6,7 +6,11 @@ from typing import Optional, List
 import random
 
 from dosadi.agents.core import AgentState, Goal, GoalStatus, GoalType
-from dosadi.agents.physiology import compute_needs_pressure, update_stress_and_morale
+from dosadi.agents.physiology import (
+    accumulate_sleep_pressure,
+    compute_needs_pressure,
+    update_stress_and_morale,
+)
 from dosadi.memory.episode_factory import EpisodeFactory
 from dosadi.world.environment import get_or_create_place_env
 
@@ -25,6 +29,9 @@ GET_WATER_GOAL_TIMEOUT_TICKS: int = 80_000
 DRINK_REPLENISH_AMOUNT: float = 0.7
 DRINK_WATER_UNIT: float = 1.0
 
+SLEEP_PRESSURE_GOAL_THRESHOLD: float = 0.6
+MIN_TICKS_BETWEEN_SLEEP_GOALS: int = 40_000
+
 ENV_UNCOMFORTABLE_THRESHOLD = 0.3
 ENV_COMFORTABLE_THRESHOLD = 0.7
 
@@ -34,11 +41,14 @@ def update_agent_physical_state(
 ) -> None:
     """Update per-tick physiological drift such as hunger."""
 
-    if getattr(agent, "is_asleep", False):
+    physical = agent.physical
+
+    if getattr(agent, "is_asleep", False) and not physical.is_sleeping:
+        return
+    if physical.is_sleeping:
         return
 
     rng = rng or getattr(world, "rng", None) or random
-    physical = agent.physical
     physical.hunger_level += HUNGER_RATE_PER_TICK
     if physical.hunger_level > HUNGER_MAX:
         physical.hunger_level = HUNGER_MAX
@@ -51,6 +61,9 @@ def update_agent_physical_state(
 
     needs_pressure = compute_needs_pressure(physical)
     update_stress_and_morale(physical, needs_pressure)
+
+    if not physical.is_sleeping:
+        accumulate_sleep_pressure(physical)
 
     env = get_or_create_place_env(world, agent.location_id)
     factory = EpisodeFactory(world=world)
@@ -175,6 +188,45 @@ def maybe_create_get_water_goal(world, agent: AgentState) -> None:
     if has_active_or_pending_get_water_goal(agent):
         return
     create_get_water_goal(world, agent)
+
+
+def has_active_or_pending_rest_goal(agent: AgentState) -> bool:
+    for g in agent.goals:
+        if g.goal_type == GoalType.REST_TONIGHT and g.status in (
+            GoalStatus.PENDING,
+            GoalStatus.ACTIVE,
+        ):
+            return True
+    return False
+
+
+def maybe_create_rest_goal(world, agent: AgentState) -> None:
+    physical = agent.physical
+    current_tick = getattr(world, "tick", getattr(world, "current_tick", 0))
+
+    if physical.is_sleeping:
+        return
+    if physical.sleep_pressure < SLEEP_PRESSURE_GOAL_THRESHOLD:
+        return
+    if has_active_or_pending_rest_goal(agent):
+        return
+    if current_tick - physical.last_sleep_tick < MIN_TICKS_BETWEEN_SLEEP_GOALS:
+        return
+
+    if physical.hunger_level > 1.0 or physical.hydration_level < 0.3:
+        return
+
+    goal = Goal(
+        goal_id=f"goal:rest:{agent.id}:{current_tick}",
+        owner_id=agent.id,
+        goal_type=GoalType.REST_TONIGHT,
+        status=GoalStatus.PENDING,
+        created_at_tick=current_tick,
+        priority=max(physical.sleep_pressure, 0.6),
+        urgency=max(0.0, min(1.0, physical.sleep_pressure)),
+        metadata={},
+    )
+    agent.goals.append(goal)
 
 
 def choose_mess_hall_for_agent(
