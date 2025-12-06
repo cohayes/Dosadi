@@ -8,8 +8,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 import random
 
-from dosadi.agents.physiology import compute_performance_multiplier
+from dosadi.agents.physiology import compute_performance_multiplier, recover_sleep_pressure
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
+from dosadi.memory.sleep_consolidation import consolidate_sleep_for_agent
 from dosadi.runtime.work_details import WorkDetailType, WORK_DETAIL_CATALOG
 from dosadi.systems.protocols import (
     ProtocolRegistry,
@@ -34,6 +35,7 @@ class GoalType(str, Enum):
     WORK_DETAIL = "WORK_DETAIL"
     GET_MEAL_TODAY = "GET_MEAL_TODAY"
     GET_WATER_TODAY = "GET_WATER_TODAY"
+    REST_TONIGHT = "REST_TONIGHT"
 
 
 class GoalStatus(str, Enum):
@@ -369,6 +371,10 @@ class PhysicalState:
     # Psychological load indicators
     stress_level: float = 0.0  # 0.0 = calm, 1.0 = max stressed
     morale_level: float = 0.7  # 0.0 = hopeless, 1.0 = very optimistic
+    # Sleep state
+    is_sleeping: bool = False
+    sleep_pressure: float = 0.0
+    last_sleep_tick: int = 0
 
 
 @dataclass
@@ -780,6 +786,15 @@ def decide_next_action(
             related_goal_id=focus_goal.goal_id,
         )
 
+    if focus_goal and focus_goal.goal_type == GoalType.REST_TONIGHT:
+        _handle_rest_goal(world, agent, focus_goal, rng)
+        return Action(
+            actor_id=agent.agent_id,
+            verb="REST_IN_POD",
+            target_location_id=agent.location_id,
+            related_goal_id=focus_goal.goal_id,
+        )
+
     if focus_goal and focus_goal.goal_type == GoalType.WORK_DETAIL:
         work_type_name = focus_goal.metadata.get("work_detail_type") if hasattr(focus_goal, "metadata") else None
         work_type = None
@@ -1003,6 +1018,126 @@ def _handle_get_water_goal(
         _attempt_drink_from_mess_hall(world, agent, goal, target_place_id)
     else:
         goal.status = GoalStatus.FAILED
+
+
+MIN_SLEEP_BLOCK_TICKS: int = 40_000
+MAX_SLEEP_BLOCK_TICKS: int = 120_000
+
+SLEEP_STRESS_RECOVERY_RATE: float = 1.0 / 10_000.0
+SLEEP_MORALE_RECOVERY_RATE: float = 1.0 / 10_000.0
+
+SLEEP_HUNGER_INCREASE_PER_TICK: float = 1.0 / 120_000.0
+SLEEP_HYDRATION_DECAY_PER_TICK: float = 1.0 / 120_000.0
+
+
+def _choose_sleep_place(
+    world: "WorldState",
+    agent: AgentState,
+    rng: random.Random,
+) -> Optional[str]:
+    candidates: List[str] = []
+
+    for fid, facility in world.facilities.items():
+        if getattr(facility, "kind", None) == "bunk_pod":
+            candidates.append(fid)
+
+    if not candidates:
+        return None
+
+    if agent.home and agent.home in candidates and rng.random() < 0.8:
+        return agent.home
+
+    def utility(place_id: str) -> float:
+        pb = agent.get_or_create_place_belief(place_id)
+        return (
+            0.5 * pb.safety_score
+            + 0.4 * pb.comfort_score
+            - 0.1 * pb.congestion_score
+        )
+
+    if rng.random() < 0.1:
+        return rng.choice(candidates)
+
+    best_id = None
+    best_score = float("-inf")
+    for fid in candidates:
+        score = utility(fid)
+        if score > best_score:
+            best_score = score
+            best_id = fid
+
+    return best_id
+
+
+def _apply_sleep_recovery_effects(world: "WorldState", agent: AgentState) -> None:
+    physical = agent.physical
+    if not physical.is_sleeping:
+        return
+
+    physical.stress_level -= SLEEP_STRESS_RECOVERY_RATE
+    if physical.stress_level < 0.0:
+        physical.stress_level = 0.0
+
+    physical.morale_level += SLEEP_MORALE_RECOVERY_RATE
+    if physical.morale_level > 1.0:
+        physical.morale_level = 1.0
+
+    physical.hunger_level += SLEEP_HUNGER_INCREASE_PER_TICK
+    if physical.hunger_level < 0.0:
+        physical.hunger_level = 0.0
+
+    physical.hydration_level -= SLEEP_HYDRATION_DECAY_PER_TICK
+    if physical.hydration_level < 0.0:
+        physical.hydration_level = 0.0
+
+
+def _handle_rest_goal(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+) -> None:
+    physical = agent.physical
+    meta = goal.metadata
+
+    if "sleep_ticks_remaining" not in meta:
+        sleep_ticks = rng.randint(MIN_SLEEP_BLOCK_TICKS, MAX_SLEEP_BLOCK_TICKS)
+        meta["sleep_ticks_remaining"] = float(sleep_ticks)
+
+        sleep_place_id = _choose_sleep_place(world, agent, rng)
+        if sleep_place_id is None:
+            goal.status = GoalStatus.FAILED
+            return
+        meta["target_sleep_place_id"] = sleep_place_id
+
+    target_sleep_place_id = meta.get("target_sleep_place_id")
+    if not target_sleep_place_id:
+        goal.status = GoalStatus.FAILED
+        return
+
+    if agent.location_id != target_sleep_place_id:
+        physical.is_sleeping = False
+        agent.is_asleep = False
+        _move_one_step_toward(world, agent, target_sleep_place_id, rng)
+        return
+
+    physical.is_sleeping = True
+    agent.is_asleep = True
+
+    sleep_ticks_remaining = float(meta.get("sleep_ticks_remaining", 0.0))
+    sleep_ticks_remaining -= 1.0
+    meta["sleep_ticks_remaining"] = sleep_ticks_remaining
+
+    recover_sleep_pressure(physical)
+
+    _apply_sleep_recovery_effects(world, agent)
+
+    if sleep_ticks_remaining <= 0.0:
+        consolidate_sleep_for_agent(world, agent)
+        physical.is_sleeping = False
+        agent.is_asleep = False
+        physical.last_sleep_tick = getattr(world, "tick", getattr(world, "current_tick", 0))
+        goal.status = GoalStatus.COMPLETED
 
 
 def _attempt_drink_from_tap(

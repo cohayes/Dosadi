@@ -23,6 +23,7 @@ from dosadi.runtime.agent_navigation import (
 from dosadi.runtime.eating import (
     maybe_create_get_meal_goal,
     maybe_create_get_water_goal,
+    maybe_create_rest_goal,
     update_agent_physical_state,
 )
 from dosadi.runtime.council_metrics import update_council_metrics_and_staffing
@@ -111,6 +112,7 @@ def step_world_once(world: WorldState) -> None:
         update_agent_physical_state(world, agent)
         maybe_create_get_meal_goal(world, agent)
         maybe_create_get_water_goal(world, agent)
+        maybe_create_rest_goal(world, agent)
 
     _step_agent_movement(world)
     _phase_A_groups_and_council(world, tick, rng, cfg)
@@ -189,7 +191,7 @@ def _phase_B_agent_decisions(world: WorldState, tick: int) -> Dict[str, Action]:
     topology, neighbors, well_core_id, rng = prepare_navigation_context(world)
 
     for agent_id, agent in world.agents.items():
-        if getattr(agent, "is_asleep", False):
+        if getattr(agent, "is_asleep", False) and not agent.physical.is_sleeping:
             continue
         focus_goal = agent.choose_focus_goal()
         queue_id, queue_location_id = choose_queue_for_goal(

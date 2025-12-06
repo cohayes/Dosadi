@@ -119,19 +119,11 @@ def step_agent_sleep_wake(
     Toggle agent sleep/wake based on next_sleep_tick / next_wake_tick,
     and trigger consolidation when entering sleep.
     """
-
-    if not agent.is_asleep and tick >= agent.next_sleep_tick:
-        # Make sure salient short-term episodes are ready for consolidation.
-        promote_daily_memory(agent, tick, config, force=True)
-
+    if agent.physical.is_sleeping:
         agent.is_asleep = True
-        agent.next_wake_tick = tick + config.sleep_duration_ticks
+        return
 
-        run_sleep_consolidation(agent, tick, config)
-
-    elif agent.is_asleep and tick >= agent.next_wake_tick:
-        agent.is_asleep = False
-        agent.next_sleep_tick = tick + config.wake_duration_ticks
+    agent.is_asleep = False
 
 
 def run_sleep_consolidation(
