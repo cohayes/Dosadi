@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, Iterable, Tuple, TYPE_CHECKING
+from typing import Dict, Iterable, List, Set, Tuple, TYPE_CHECKING
 
 from dosadi.agents.core import AgentState, PlaceBelief
 from dosadi.runtime.work_details import WorkDetailType
@@ -271,6 +271,7 @@ def update_council_metrics_and_staffing(world: "WorldState") -> None:
         metrics.water_depot_count = 0
 
     _adjust_staffing_from_metrics(world)
+    assign_work_crews(world, getattr(world, "desired_work_details", {}))
 
 
 def _adjust_staffing_from_metrics(world: "WorldState") -> None:
@@ -335,3 +336,71 @@ def _adjust_staffing_from_metrics(world: "WorldState") -> None:
         cfg.min_water_handling,
         min(desired[WorkDetailType.WATER_HANDLING], cfg.max_water_handling),
     )
+
+
+def _ensure_default_crew_for_type(world: "WorldState", work_type: WorkDetailType) -> str:
+    prefix = f"crew:{work_type.name.lower()}"
+    for crew_id, crew in world.crews.items():
+        if crew.work_type == work_type and crew_id.startswith(prefix):
+            return crew_id
+
+    from dosadi.state import CrewState
+
+    crew_id = f"{prefix}:0"
+    world.crews[crew_id] = CrewState(
+        crew_id=crew_id,
+        work_type=work_type,
+        member_ids=[],
+    )
+    return crew_id
+
+
+def assign_work_crews(
+    world: "WorldState",
+    desired_counts: Dict[WorkDetailType, int],
+) -> None:
+    agents: List[AgentState] = list(world.agents.values())
+
+    for work_type, target_count in desired_counts.items():
+        if target_count <= 0:
+            crew_id = _ensure_default_crew_for_type(world, work_type)
+            crew = world.crews[crew_id]
+            removed_members: Set[str] = set(crew.member_ids)
+            crew.member_ids = []
+            for agent_id in removed_members:
+                other = world.agents.get(agent_id)
+                if other is not None and other.current_crew_id == crew_id:
+                    other.current_crew_id = None
+            continue
+
+        scored: List[Tuple[float, AgentState]] = []
+
+        for agent in agents:
+            if agent.physical.is_sleeping:
+                continue
+
+            wh = agent.work_history.get_or_create(work_type)
+            prof = wh.proficiency
+            stress = agent.physical.stress_level
+            morale = agent.physical.morale_level
+
+            score = 0.6 * prof + 0.2 * morale - 0.2 * stress
+            scored.append((score, agent))
+
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+
+        selected_agents = [a for (_s, a) in scored[:target_count]]
+
+        crew_id = _ensure_default_crew_for_type(world, work_type)
+        crew = world.crews[crew_id]
+        previous_members: Set[str] = set(crew.member_ids)
+        crew.member_ids = [a.id for a in selected_agents]
+
+        for agent in selected_agents:
+            agent.current_crew_id = crew_id
+
+        removed_members = previous_members.difference(crew.member_ids)
+        for agent_id in removed_members:
+            other = world.agents.get(agent_id)
+            if other is not None and other.current_crew_id == crew_id:
+                other.current_crew_id = None

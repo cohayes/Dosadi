@@ -20,6 +20,7 @@ from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
 from .simulation.snapshots import serialize_state
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
+from .runtime.work_details import WorkDetailType
 from .world.environment import PlaceEnvironmentState
 from .world.water import WellState
 from typing import TYPE_CHECKING
@@ -770,6 +771,13 @@ class WardState:
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class CrewState:
+    crew_id: str
+    work_type: WorkDetailType
+    member_ids: List[str] = field(default_factory=list)
+
+
 @dataclass(slots=True)
 class WorldConfig:
     tick_seconds: float = 0.6
@@ -807,6 +815,7 @@ class WorldState:
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
     facilities: MutableMapping[str, Any] = field(default_factory=dict)
     places: MutableMapping[str, Any] = field(default_factory=dict)
+    crews: Dict[str, CrewState] = field(default_factory=dict)
     water_tap_sources: Dict[str, str] = field(default_factory=dict)
     facility_queues: MutableMapping[str, "FacilityQueueState"] = field(default_factory=dict)
     protocols: "ProtocolRegistry" = field(default_factory=_protocol_registry_factory)

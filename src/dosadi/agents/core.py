@@ -8,7 +8,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
 import random
 
-from dosadi.agents.physiology import compute_performance_multiplier, recover_sleep_pressure
+from dosadi.agents.physiology import (
+    compute_performance_multiplier,
+    compute_specialization_multiplier,
+    recover_sleep_pressure,
+)
+from dosadi.agents.work_history import WorkHistory, ticks_to_proficiency
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
 from dosadi.memory.sleep_consolidation import consolidate_sleep_for_agent
 from dosadi.runtime.work_details import WorkDetailType, WORK_DETAIL_CATALOG
@@ -393,11 +398,15 @@ class AgentState:
     attributes: Attributes = field(default_factory=Attributes)
     personality: Personality = field(default_factory=Personality)
     physical: PhysicalState = field(default_factory=PhysicalState)
+    work_history: WorkHistory = field(default_factory=WorkHistory)
 
     location_id: str = "loc:pod-1"
     navigation_target_id: Optional[str] = None
     current_queue_id: Optional[str] = None
     queue_join_tick: Optional[int] = None
+
+    # Persistent crew affiliation for current primary work
+    current_crew_id: Optional[str] = None
 
     # Sleep and memory scheduling
     is_asleep: bool = False
@@ -1245,11 +1254,21 @@ def _handle_scout_interior(
 ) -> None:
     from dosadi.memory.episode_factory import EpisodeFactory
 
-    ticks_remaining = _ensure_ticks_remaining(goal, WorkDetailType.SCOUT_INTERIOR, default_fraction=0.3)
-    perf = compute_performance_multiplier(agent.physical)
+    work_type = WorkDetailType.SCOUT_INTERIOR
+
+    ticks_remaining = _ensure_ticks_remaining(goal, work_type, default_fraction=0.3)
+    base_perf = compute_performance_multiplier(agent.physical)
+    spec_mult = compute_specialization_multiplier(agent, work_type)
+    perf = base_perf * spec_mult
     ticks_remaining -= perf
+
+    wh = agent.work_history.get_or_create(work_type)
+    wh.ticks += perf
+
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
+        wh.shifts += 1
+        wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
         goal.status = GoalStatus.COMPLETED
         return
 
@@ -1303,11 +1322,19 @@ def _handle_inventory_stores(
     goal: Goal,
     rng: random.Random,
 ) -> None:
-    ticks_remaining = _ensure_ticks_remaining(goal, WorkDetailType.INVENTORY_STORES, default_fraction=0.3)
-    perf = compute_performance_multiplier(agent.physical)
+    work_type = WorkDetailType.INVENTORY_STORES
+
+    ticks_remaining = _ensure_ticks_remaining(goal, work_type, default_fraction=0.3)
+    base_perf = compute_performance_multiplier(agent.physical)
+    spec_mult = compute_specialization_multiplier(agent, work_type)
+    perf = base_perf * spec_mult
     ticks_remaining -= perf
+    wh = agent.work_history.get_or_create(work_type)
+    wh.ticks += perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
+        wh.shifts += 1
+        wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
         goal.status = GoalStatus.COMPLETED
         return
 
@@ -1355,13 +1382,19 @@ def _handle_food_processing(
     from dosadi.runtime.eating import MEAL_SATIATION_AMOUNT
     from dosadi.runtime.queues import get_or_create_facility_queue
 
-    ticks_remaining = _ensure_ticks_remaining(
-        goal, WorkDetailType.FOOD_PROCESSING_DETAIL, default_fraction=0.3
-    )
-    perf = compute_performance_multiplier(agent.physical)
+    work_type = WorkDetailType.FOOD_PROCESSING_DETAIL
+
+    ticks_remaining = _ensure_ticks_remaining(goal, work_type, default_fraction=0.3)
+    base_perf = compute_performance_multiplier(agent.physical)
+    spec_mult = compute_specialization_multiplier(agent, work_type)
+    perf = base_perf * spec_mult
     ticks_remaining -= perf
+    wh = agent.work_history.get_or_create(work_type)
+    wh.ticks += perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
+        wh.shifts += 1
+        wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
         goal.status = GoalStatus.COMPLETED
         return
 
@@ -1577,15 +1610,23 @@ def _handle_water_handling(
     goal: Goal,
     rng: random.Random,
 ) -> None:
+    work_type = WorkDetailType.WATER_HANDLING
+
     ticks_remaining = _ensure_ticks_remaining(
         goal,
-        WorkDetailType.WATER_HANDLING,
+        work_type,
         default_fraction=0.3,
     )
-    perf = compute_performance_multiplier(agent.physical)
+    base_perf = compute_performance_multiplier(agent.physical)
+    spec_mult = compute_specialization_multiplier(agent, work_type)
+    perf = base_perf * spec_mult
     ticks_remaining -= perf
+    wh = agent.work_history.get_or_create(work_type)
+    wh.ticks += perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
+        wh.shifts += 1
+        wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
         goal.status = GoalStatus.COMPLETED
         return
 
@@ -1710,15 +1751,23 @@ def _handle_env_control(
 ) -> None:
     from dosadi.world.environment import get_or_create_place_env
 
+    work_type = WorkDetailType.ENV_CONTROL
+
     ticks_remaining = _ensure_ticks_remaining(
         goal,
-        WorkDetailType.ENV_CONTROL,
+        work_type,
         default_fraction=0.3,
     )
-    perf = compute_performance_multiplier(agent.physical)
+    base_perf = compute_performance_multiplier(agent.physical)
+    spec_mult = compute_specialization_multiplier(agent, work_type)
+    perf = base_perf * spec_mult
     ticks_remaining -= perf
+    wh = agent.work_history.get_or_create(work_type)
+    wh.ticks += perf
     goal.metadata["ticks_remaining"] = ticks_remaining
     if ticks_remaining <= 0:
+        wh.shifts += 1
+        wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
         goal.status = GoalStatus.COMPLETED
         return
 
