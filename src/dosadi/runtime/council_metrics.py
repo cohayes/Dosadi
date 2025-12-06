@@ -5,10 +5,20 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Set, Tuple, TYPE_CHECKING
 
 from dosadi.agents.core import AgentState, PlaceBelief
+from dosadi.memory.episode_factory import EpisodeFactory
+from dosadi.runtime.config import (
+    MAX_SUPERVISORS_PER_WORK_TYPE,
+    MIN_PROFICIENCY_FOR_SUPERVISOR,
+    MIN_SHIFTS_FOR_SUPERVISOR,
+    MIN_TICKS_BEFORE_PROMOTION,
+    PROMOTION_CHECK_INTERVAL_TICKS,
+    SENIORITY_HORIZON,
+)
 from dosadi.runtime.work_details import WorkDetailType
 
 if TYPE_CHECKING:
     from dosadi.state import WorldState
+    from dosadi.agents.work_history import WorkHistory  # type: ignore
 
 
 COUNCIL_UPDATE_INTERVAL_TICKS = 5_000
@@ -272,6 +282,7 @@ def update_council_metrics_and_staffing(world: "WorldState") -> None:
 
     _adjust_staffing_from_metrics(world)
     assign_work_crews(world, getattr(world, "desired_work_details", {}))
+    maybe_run_promotion_cycle(world)
 
 
 def _adjust_staffing_from_metrics(world: "WorldState") -> None:
@@ -384,7 +395,11 @@ def assign_work_crews(
             stress = agent.physical.stress_level
             morale = agent.physical.morale_level
 
-            score = 0.6 * prof + 0.2 * morale - 0.2 * stress
+            sup_bonus = 0.0
+            if agent.supervisor_work_type == work_type:
+                sup_bonus = 0.1
+
+            score = 0.6 * prof + 0.2 * morale - 0.2 * stress + sup_bonus
             scored.append((score, agent))
 
         scored.sort(key=lambda pair: pair[0], reverse=True)
@@ -404,3 +419,107 @@ def assign_work_crews(
             other = world.agents.get(agent_id)
             if other is not None and other.current_crew_id == crew_id:
                 other.current_crew_id = None
+
+
+def maybe_run_promotion_cycle(world: "WorldState") -> None:
+    current_tick = getattr(world, "tick", getattr(world, "current_tick", 0))
+    last_check = getattr(world, "last_promotion_check_tick", 0)
+    if current_tick - last_check < PROMOTION_CHECK_INTERVAL_TICKS:
+        return
+    world.last_promotion_check_tick = current_tick
+    _run_promotion_cycle(world)
+
+
+def _is_eligible_supervisor_candidate(agent: AgentState, work_type: WorkDetailType) -> bool:
+    if agent.tier != 1:
+        return False
+    if agent.supervisor_work_type is not None:
+        return False
+    if agent.total_ticks_employed < MIN_TICKS_BEFORE_PROMOTION:
+        return False
+
+    wh = agent.work_history.get_or_create(work_type)
+    if wh.proficiency < MIN_PROFICIENCY_FOR_SUPERVISOR:
+        return False
+    if wh.shifts < MIN_SHIFTS_FOR_SUPERVISOR:
+        return False
+
+    if agent.physical.stress_level > 0.7:
+        return False
+    if agent.physical.morale_level < 0.3:
+        return False
+
+    return True
+
+
+def _run_promotion_cycle(world: "WorldState") -> None:
+    agents: List[AgentState] = list(world.agents.values())
+
+    sup_counts: Dict[WorkDetailType, int] = {}
+    for agent in agents:
+        if agent.supervisor_work_type is not None:
+            wt = agent.supervisor_work_type
+            sup_counts[wt] = sup_counts.get(wt, 0) + 1
+
+    for work_type in WorkDetailType:
+        current_sup = sup_counts.get(work_type, 0)
+        if current_sup >= MAX_SUPERVISORS_PER_WORK_TYPE:
+            continue
+
+        candidate_scores: List[Tuple[float, AgentState]] = []
+
+        for agent in agents:
+            if not _is_eligible_supervisor_candidate(agent, work_type):
+                continue
+
+            wh = agent.work_history.get_or_create(work_type)
+            prof = wh.proficiency
+            seniority = min(1.0, agent.total_ticks_employed / SENIORITY_HORIZON)
+            morale = agent.physical.morale_level
+            stress = agent.physical.stress_level
+
+            score = (
+                0.5 * prof
+                + 0.2 * seniority
+                + 0.2 * morale
+                - 0.1 * stress
+            )
+            candidate_scores.append((score, agent))
+
+        if not candidate_scores:
+            continue
+
+        candidate_scores.sort(key=lambda pair: pair[0], reverse=True)
+
+        best_score, best_agent = candidate_scores[0]
+        _promote_to_supervisor(world, best_agent, work_type)
+
+
+def _promote_to_supervisor(
+    world: "WorldState",
+    agent: AgentState,
+    work_type: WorkDetailType,
+) -> None:
+    agent.tier = 2
+    agent.supervisor_work_type = work_type
+    agent.times_promoted += 1
+
+    crew_id = _ensure_default_crew_for_type(world, work_type)
+    crew = world.crews[crew_id]
+    agent.supervisor_crew_id = crew_id
+
+    if agent.id not in crew.member_ids:
+        crew.member_ids.append(agent.id)
+
+    if getattr(crew, "leader_id", None) is None:
+        crew.leader_id = agent.id
+
+    factory = EpisodeFactory(world=world)
+    ep = factory.create_promotion_episode(
+        owner_agent_id=agent.id,
+        tick=getattr(world, "tick", getattr(world, "current_tick", 0)),
+        work_type=work_type,
+        new_tier=2,
+        crew_id=crew_id,
+    )
+    agent.record_episode(ep)

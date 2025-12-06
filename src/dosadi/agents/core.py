@@ -400,6 +400,18 @@ class AgentState:
     physical: PhysicalState = field(default_factory=PhysicalState)
     work_history: WorkHistory = field(default_factory=WorkHistory)
 
+    # If non-None, this agent is a Tier-2 supervisor for this work type.
+    supervisor_work_type: Optional[WorkDetailType] = None
+
+    # Crew this supervisor leads, if any.
+    supervisor_crew_id: Optional[str] = None
+
+    # Simple seniority tracking for promotion ranking
+    total_ticks_employed: float = 0.0
+
+    # How many times this agent has been promoted (for future use)
+    times_promoted: int = 0
+
     location_id: str = "loc:pod-1"
     navigation_target_id: Optional[str] = None
     current_queue_id: Optional[str] = None
