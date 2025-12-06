@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from dosadi.runtime.work_details import WorkDetailType
+
 if TYPE_CHECKING:  # pragma: no cover - for type hints only to avoid circular import
     from dosadi.agents.core import PhysicalState
+    from dosadi.agents.core import AgentState
 
 # Hunger and hydration comfort bounds
 HUNGER_COMFORT_THRESHOLD: float = 0.3
@@ -110,3 +113,21 @@ def recover_sleep_pressure(physical: PhysicalState) -> None:
     physical.sleep_pressure -= SLEEP_RECOVERY_RATE
     if physical.sleep_pressure < 0.0:
         physical.sleep_pressure = 0.0
+
+
+def compute_specialization_multiplier(
+    agent: "AgentState",
+    work_type: WorkDetailType,
+) -> float:
+    wh = agent.work_history.get_or_create(work_type)
+    prof = wh.proficiency  # 0..1
+
+    # Up to +20% speed at full proficiency
+    multiplier = 1.0 + 0.2 * prof
+
+    if multiplier < 0.8:
+        multiplier = 0.8
+    elif multiplier > 1.2:
+        multiplier = 1.2
+
+    return multiplier
