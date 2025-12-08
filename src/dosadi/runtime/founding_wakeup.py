@@ -1,14 +1,15 @@
-"""Legacy runtime alias for the consolidated Wakeup Prime scenario."""
+"""Runtime loop for the Founding Wakeup MVP scenario."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import random
 
 from dosadi.agents.core import Action, Goal, GoalHorizon, GoalOrigin, GoalStatus, GoalType, apply_action, decide_next_action, make_goal_id, prepare_navigation_context
 from dosadi.agents.groups import (
     Group,
+    GroupRole,
     GroupType,
     maybe_form_proto_council,
     _find_dangerous_corridors_from_metrics,
@@ -38,16 +39,17 @@ from dosadi.runtime.agent_preferences import maybe_update_desired_work_type
 from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
-from dosadi.runtime.wakeup_prime import run_wakeup_prime
 from dosadi.state import WorldState
+from dosadi.world.scenarios.founding_wakeup import generate_founding_wakeup_mvp
+from dosadi.systems.protocols import ProtocolStatus, ProtocolType
 
 
 @dataclass
 class RuntimeConfig:
     """Tunable configuration for the Founding Wakeup MVP runtime."""
 
-    pod_meeting_interval_ticks: int = 600
-    council_meeting_cooldown_ticks: int = 300
+    pod_meeting_interval_ticks: int = 120
+    council_meeting_cooldown_ticks: int = 80
     min_council_members_for_meeting: int = 2
     rep_vote_fraction_threshold: float = 0.4
     min_leadership_threshold: float = 0.6
@@ -64,6 +66,7 @@ class FoundingWakeupReport:
     world: WorldState
     metrics: Dict[str, float]
     summary: Dict[str, object] = field(default_factory=dict)
+    success: Dict[str, bool] = field(default_factory=dict)
 
 
 def _step_agent_movement(world: WorldState) -> None:
@@ -234,33 +237,167 @@ def _phase_C_apply_actions_and_hazards(world: WorldState, tick: int, actions_by_
         apply_action(agent, action, world, tick)
 
 
+def _gather_information_goal_exists(world: WorldState) -> bool:
+    from dosadi.agents import groups as groups_module
+
+    for group in getattr(world, "groups", []):
+        if group.group_type != GroupType.COUNCIL:
+            continue
+
+        for goal_id in getattr(group, "goal_ids", []):
+            goal = groups_module._GOAL_REGISTRY.get(goal_id)  # noqa: SLF001
+            if goal and goal.goal_type == GoalType.GATHER_INFORMATION:
+                return True
+
+    for agent in world.agents.values():
+        for goal in getattr(agent, "goals", []):
+            if goal.goal_type == GoalType.GATHER_INFORMATION and goal.origin == GoalOrigin.GROUP_DECISION:
+                return True
+    return False
+
+
+def _count_protocol_reads(world: WorldState, protocol_id: str) -> int:
+    readers: set[str] = set()
+    for agent in world.agents.values():
+        buffers = getattr(agent, "episodes", None)
+        if not buffers:
+            continue
+        for ep in list(getattr(buffers, "short_term", [])) + list(getattr(buffers, "daily", [])):
+            if getattr(ep, "verb", "") != "READ_PROTOCOL":
+                continue
+            if getattr(ep, "metadata", {}).get("protocol_id") == protocol_id:
+                readers.add(agent.agent_id)
+    return len(readers)
+
+
+def _pod_representatives(world: WorldState) -> Dict[str, List[str]]:
+    reps: Dict[str, List[str]] = {}
+    for group in getattr(world, "groups", []):
+        if group.group_type != GroupType.POD:
+            continue
+        pod_id = group.parent_location_id or group.group_id
+        reps[pod_id] = [aid for aid, roles in group.roles_by_agent.items() if GroupRole.POD_REPRESENTATIVE in roles]
+    return reps
+
+
+def _proto_council_members(world: WorldState) -> Tuple[Optional[Group], List[str]]:
+    council = None
+    for group in getattr(world, "groups", []):
+        if group.group_type == GroupType.COUNCIL:
+            council = group
+            break
+    members = council.member_ids if council is not None else []
+    return council, members
+
+
+def _hazard_reduction_achieved(world: WorldState, protocol_baselines: Dict[str, Dict[str, float]]) -> bool:
+    registry = getattr(world, "protocols", None)
+    metrics = getattr(world, "metrics", {}) or {}
+    if registry is None:
+        return False
+
+    for protocol in registry.protocols_by_id.values():
+        if protocol.protocol_type != ProtocolType.TRAFFIC_AND_SAFETY or protocol.status != ProtocolStatus.ACTIVE:
+            continue
+        baseline = protocol_baselines.get(protocol.protocol_id, {})
+        for edge_id in protocol.covered_edge_ids:
+            inc_key = f"incidents:{edge_id}"
+            trav_key = f"traversals:{edge_id}"
+            pre_incidents = float(baseline.get(inc_key, 0.0))
+            pre_traversals = float(baseline.get(trav_key, 0.0))
+            post_incidents = float(metrics.get(inc_key, 0.0)) - pre_incidents
+            post_traversals = float(metrics.get(trav_key, 0.0)) - pre_traversals
+            if pre_traversals <= 0 or post_traversals <= 0:
+                continue
+            pre_rate = pre_incidents / pre_traversals
+            post_rate = post_incidents / post_traversals
+            if post_rate < pre_rate:
+                return True
+    return False
+
+
+def evaluate_founding_wakeup_success(
+    world: WorldState, protocol_baselines: Optional[Dict[str, Dict[str, float]]] = None
+) -> Dict[str, bool]:
+    reps_by_pod = _pod_representatives(world)
+    all_pods_have_reps = bool(reps_by_pod) and all(bool(reps) for reps in reps_by_pod.values())
+
+    council, council_members = _proto_council_members(world)
+    pod_rep_ids = {rep for reps in reps_by_pod.values() for rep in reps}
+    council_has_two_reps = council is not None and len(pod_rep_ids.intersection(council_members)) >= 2
+
+    info_goal = _gather_information_goal_exists(world)
+    registry = getattr(world, "protocols", None)
+    active_protocols = []
+    if registry is not None:
+        active_protocols = [
+            p
+            for p in registry.protocols_by_id.values()
+            if p.protocol_type == ProtocolType.TRAFFIC_AND_SAFETY and p.status == ProtocolStatus.ACTIVE
+        ]
+
+    protocol_authored = bool(active_protocols)
+    adoption_success = False
+    if active_protocols and len(world.agents) > 0:
+        for protocol in active_protocols:
+            readers = _count_protocol_reads(world, protocol.protocol_id)
+            if readers / max(len(world.agents), 1) >= 0.10:
+                adoption_success = True
+                break
+
+    hazard_reduction = False
+    if protocol_baselines is None:
+        protocol_baselines = {}
+    if active_protocols:
+        hazard_reduction = _hazard_reduction_achieved(world, protocol_baselines)
+
+    return {
+        "pod_leadership": all_pods_have_reps,
+        "proto_council_formed": council_has_two_reps,
+        "gather_information_goals": info_goal,
+        "protocol_authored": protocol_authored,
+        "protocol_adoption": adoption_success,
+        "hazard_reduction": hazard_reduction,
+    }
+
+
 def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> FoundingWakeupReport:
-    """Legacy alias: route MVP runs through the Wakeup Prime scenario."""
+    """Run the documented Founding Wakeup MVP loop and evaluate milestones."""
 
-    prime_report = run_wakeup_prime(
-        num_agents=num_agents,
-        max_ticks=max_ticks,
-        seed=seed,
-        include_canteen=True,
-        include_hazard_spurs=True,
-    )
+    world = generate_founding_wakeup_mvp(num_agents=num_agents, seed=seed)
+    runtime_cfg = RuntimeConfig(max_ticks=max_ticks)
+    world.runtime_config = runtime_cfg
+    world.rng.seed(seed)
 
-    if isinstance(prime_report, FoundingWakeupReport):
-        return prime_report
+    protocol_baselines: Dict[str, Dict[str, float]] = {}
 
-    world = getattr(prime_report, "world", None)
-    metrics = getattr(world, "metrics", {}) if world is not None else {}
-    return FoundingWakeupReport(world=world, metrics=metrics, summary=getattr(prime_report, "summary", {}))
+    while world.tick < runtime_cfg.max_ticks:
+        metrics_snapshot = dict(getattr(world, "metrics", {}) or {})
+        step_world_once(world)
+
+        registry = getattr(world, "protocols", None)
+        if registry is None:
+            continue
+        for protocol in registry.protocols_by_id.values():
+            if protocol.protocol_type != ProtocolType.TRAFFIC_AND_SAFETY or protocol.status != ProtocolStatus.ACTIVE:
+                continue
+            protocol_baselines.setdefault(protocol.protocol_id, metrics_snapshot)
+
+    report = build_founding_wakeup_report(world, protocol_baselines)
+    return report
 
 
-def build_founding_wakeup_report(world: WorldState) -> FoundingWakeupReport:
+def build_founding_wakeup_report(
+    world: WorldState, protocol_baselines: Optional[Dict[str, Dict[str, float]]] = None
+) -> FoundingWakeupReport:
     summary = {
         "ticks": world.tick,
         "agents": len(world.agents),
         "groups": len(world.groups),
         "protocols": len(world.protocols.protocols_by_id),
     }
-    return FoundingWakeupReport(world=world, metrics=dict(world.metrics), summary=summary)
+    success = evaluate_founding_wakeup_success(world, protocol_baselines)
+    return FoundingWakeupReport(world=world, metrics=dict(world.metrics), summary=summary, success=success)
 
 
 @dataclass(slots=True)

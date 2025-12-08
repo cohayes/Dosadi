@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from dosadi.agents.core import PlaceBelief
+from typing import TYPE_CHECKING
+
 from dosadi.memory.episodes import Episode, EpisodeVerb
+
+if TYPE_CHECKING:  # pragma: no cover
+    from dosadi.agents.core import PlaceBelief
 
 
 def apply_episode_to_place_belief(pb: PlaceBelief, ep: Episode) -> None:

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Mapping
 
 from .scenario_runner import get_scenario_entry
+from ..runtime.founding_wakeup import evaluate_founding_wakeup_success
 
 
 @dataclass(slots=True)
@@ -50,9 +51,36 @@ def _verify_wakeup_prime(report: object) -> ScenarioValidationResult:
     )
 
 
+def _verify_founding_wakeup(report: object) -> ScenarioValidationResult:
+    entry = get_scenario_entry("founding_wakeup_mvp")
+    success = getattr(report, "success", None)
+    world = getattr(report, "world", None)
+    if success is None and world is not None:
+        success = evaluate_founding_wakeup_success(world)
+
+    issues: List[ScenarioValidationIssue] = []
+    if isinstance(success, dict):
+        for check, passed in success.items():
+            if not passed:
+                issues.append(
+                    ScenarioValidationIssue(
+                        check=check,
+                        message=f"Scenario milestone '{check}' not satisfied",
+                    )
+                )
+
+    return ScenarioValidationResult(
+        scenario=entry.name,
+        doc_path=entry.doc_path,
+        passed=not issues,
+        issues=issues,
+        metrics=getattr(report, "metrics", {}),
+    )
+
+
 _SCENARIO_VERIFIERS: Dict[str, Verifier] = {
     "wakeup_prime": _verify_wakeup_prime,
-    "founding_wakeup_mvp": _verify_wakeup_prime,
+    "founding_wakeup_mvp": _verify_founding_wakeup,
 }
 
 

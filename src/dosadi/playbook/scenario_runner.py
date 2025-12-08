@@ -86,15 +86,12 @@ class WakeupPrimeScenarioConfig:
 
 
 def _run_founding_wakeup(config: FoundingWakeupScenarioConfig):
-    # Legacy alias: route MVP runs through the consolidated Wakeup Prime scenario
-    return _run_wakeup_prime(
-        WakeupPrimeScenarioConfig(
-            num_agents=config.num_agents,
-            seed=config.seed,
-            max_ticks=config.max_ticks,
-            include_canteen=True,
-            include_hazard_spurs=True,
-        )
+    from ..runtime.founding_wakeup import run_founding_wakeup_mvp
+
+    return run_founding_wakeup_mvp(
+        num_agents=config.num_agents,
+        max_ticks=config.max_ticks,
+        seed=config.seed,
     )
 
 
@@ -116,8 +113,8 @@ def _run_wakeup_prime(config: WakeupPrimeScenarioConfig):
 register_scenario(
     ScenarioEntry(
         name="founding_wakeup_mvp",
-        description="Legacy alias: runs the consolidated Wakeup Prime scenario",
-        doc_path="docs/latest/11_scenarios/D-SCEN-0001_Wakeup_Scenario_Prime_v0.md",
+        description="Founding wakeup MVP: pods, proto-council, movement protocol",
+        doc_path="docs/latest/11_scenarios/D-SCEN-0002_Founding_Wakeup_MVP_Scenario.md",
         config_type=FoundingWakeupScenarioConfig,
         runner=lambda config: _run_founding_wakeup(config),
     )

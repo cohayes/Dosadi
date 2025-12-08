@@ -7,13 +7,16 @@ Constructs the minimal topology and initial colonist population described in
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 import random
 
 from dosadi.agents.core import AgentState, initialize_agents_for_founding_wakeup
+from dosadi.agents.core import Goal, GoalHorizon, GoalOrigin, GoalStatus, GoalType, make_goal_id
 from dosadi.agents.groups import create_pod_group
+from dosadi.law import FacilityProtocolTuning
 from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.work_details import WorkDetailType
+from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
 from ...state import FactionState, WorldState
 from ..environment import get_or_create_place_env
 from ..constants import WATER_DAILY_CAPACITY
@@ -119,6 +122,20 @@ BASE_NODES: Tuple[LocationNode, ...] = (
         kind="mess_hall",
         tags=("mess_hall",),
     ),
+    LocationNode(
+        id="loc:suit-issue-1",
+        name="Suit Issue Point 1",
+        type="facility",
+        kind="suit_issue",
+        tags=("suit_issue",),
+    ),
+    LocationNode(
+        id="loc:assign-hall-1",
+        name="Assignment Hall 1",
+        type="facility",
+        kind="assignment_hall",
+        tags=("assignment_hall",),
+    ),
 )
 
 BASE_EDGES: Tuple[LocationEdge, ...] = (
@@ -134,7 +151,105 @@ BASE_EDGES: Tuple[LocationEdge, ...] = (
     LocationEdge(id="edge:well:water-depot-1", a=WELL_CORE_ID, b="loc:depot-water-1", base_hazard_prob=0.01),
     LocationEdge(id="edge:well:tap-1", a=WELL_CORE_ID, b="loc:tap-1", base_hazard_prob=0.01),
     LocationEdge(id="edge:mess-hall-1:well", a="loc:mess-hall-1", b=WELL_CORE_ID, base_hazard_prob=0.01),
+    LocationEdge(id="edge:well:suit-issue-1", a=WELL_CORE_ID, b="loc:suit-issue-1", base_hazard_prob=0.01),
+    LocationEdge(id="edge:well:assign-hall-1", a=WELL_CORE_ID, b="loc:assign-hall-1", base_hazard_prob=0.01),
 )
+
+
+def _initial_wakeup_goals(owner_id: str) -> List[Goal]:
+    """Seed suit + assignment goals to drive queue discipline."""
+
+    suit_goal = Goal(
+        goal_id=make_goal_id("goal"),
+        owner_id=owner_id,
+        goal_type=GoalType.ACQUIRE_RESOURCE,
+        description="Acquire suit from issue point",
+        target={"location_id": "loc:suit-issue-1"},
+        priority=0.75,
+        urgency=0.4,
+        horizon=GoalHorizon.SHORT,
+        status=GoalStatus.PENDING,
+        origin=GoalOrigin.INTERNAL_STATE,
+    )
+    suit_goal.kind = "get_suit"
+
+    assignment_goal = Goal(
+        goal_id=make_goal_id("goal"),
+        owner_id=owner_id,
+        goal_type=GoalType.ACQUIRE_RESOURCE,
+        description="Obtain assignment",
+        target={"location_id": "loc:assign-hall-1"},
+        priority=0.7,
+        urgency=0.35,
+        horizon=GoalHorizon.SHORT,
+        status=GoalStatus.PENDING,
+        origin=GoalOrigin.INTERNAL_STATE,
+    )
+    assignment_goal.kind = "get_assignment"
+
+    return [suit_goal, assignment_goal]
+
+
+def _register_wakeup_queues(world: WorldState) -> List[QueueState]:
+    """Create and register founding wakeup queues for scarce services."""
+
+    suit_queue = QueueState(
+        queue_id="queue:suit-issue",
+        location_id="queue:suit-issue:front",
+        associated_facility="loc:suit-issue-1",
+        priority_rule=QueuePriorityRule.FIFO,
+        processing_rate=2,
+        process_interval_ticks=100,
+        state=QueueLifecycleState.ACTIVE,
+    )
+
+    assignment_queue = QueueState(
+        queue_id="queue:assignment",
+        location_id="queue:assignment:front",
+        associated_facility="loc:assign-hall-1",
+        priority_rule=QueuePriorityRule.FIFO,
+        processing_rate=2,
+        process_interval_ticks=120,
+        state=QueueLifecycleState.ACTIVE,
+    )
+
+    world.register_queue(suit_queue)
+    world.register_queue(assignment_queue)
+
+    return [suit_queue, assignment_queue]
+
+
+def _seed_risk_metrics(world: WorldState) -> None:
+    """Prime traversal/incident metrics based on base hazard to trigger early protocols."""
+
+    metrics = getattr(world, "metrics", None)
+    if metrics is None or not isinstance(metrics, dict):
+        metrics = {}
+
+    hazard_edges = [
+        edge for edge in world.edges.values() if getattr(edge, "base_hazard_prob", 0.0) >= 0.15
+    ]
+
+    for edge in hazard_edges:
+        traversals_key = f"traversals:{edge.id}"
+        incidents_key = f"incidents:{edge.id}"
+        traversals = float(metrics.get(traversals_key, 12.0))
+        incidents_default = max(1.0, round(traversals * max(0.15, edge.base_hazard_prob)))
+        metrics.setdefault(traversals_key, traversals)
+        metrics.setdefault(incidents_key, incidents_default)
+
+    world.metrics = metrics
+
+
+def _initialize_pod_groups(world: WorldState, pod_ids: Iterable[str]) -> None:
+    pod_members: Dict[str, List[str]] = {pid: [] for pid in pod_ids}
+
+    for agent in world.agents.values():
+        pod_members.setdefault(agent.location_id, []).append(agent.agent_id)
+
+    for pod_id, members in pod_members.items():
+        group = create_pod_group(pod_location_id=pod_id, member_ids=members, tick=world.tick)
+        world.groups.append(group)
 
 
 def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
@@ -176,6 +291,11 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
                 water_stock=node.water_stock,
                 water_capacity=node.water_capacity,
             )
+
+    for fac_id in world.facilities.keys():
+        world.facility_protocol_tuning.setdefault(fac_id, FacilityProtocolTuning(facility_id=fac_id))
+    world.service_facilities.setdefault("suit_issue", []).append("loc:suit-issue-1")
+    world.service_facilities.setdefault("assignment_hall", []).append("loc:assign-hall-1")
     world.places = world.nodes
     world.water_tap_sources["loc:tap-1"] = "loc:depot-water-1"
 
@@ -194,15 +314,21 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
         colonist_faction.members.append(agent.id)
         world.register_agent(agent)
         _initialize_agent_sleep_schedule(agent, world, memory_config)
+        agent.goals.extend(_initial_wakeup_goals(agent.agent_id))
 
-    # Create pod groups based on initial occupancy
-    pod_members: Dict[str, List[str]] = {pid: [] for pid in pod_ids}
-    for agent in agents:
-        pod_members.setdefault(agent.location_id, []).append(agent.agent_id)
+    _register_wakeup_queues(world)
+    world.basic_suit_stock = len(agents)
 
-    for pod_id, members in pod_members.items():
-        group = create_pod_group(pod_location_id=pod_id, member_ids=members, tick=world.tick)
-        world.groups.append(group)
+    _initialize_pod_groups(world, pod_ids)
+    _seed_risk_metrics(world)
+    world.scenario_metadata = {
+        "scenario_id": "founding_wakeup_mvp",
+        "objectives": (
+            "queue_discipline",
+            "proto_council_readiness",
+            "risk_protocol_feedback",
+        ),
+    }
 
     initialize_environment_for_founding_wakeup(world)
 

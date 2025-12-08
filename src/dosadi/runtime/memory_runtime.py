@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from dosadi.agents.core import AgentState, PlaceBelief
+from typing import TYPE_CHECKING
+
 from dosadi.memory.config import MemoryConfig
 from dosadi.memory.episodes import EpisodeBuffers, Episode, EpisodeGoalRelation
 from dosadi.memory.place_belief_updates import apply_episode_to_place_belief
 from dosadi.state import WorldState
+
+if TYPE_CHECKING:  # pragma: no cover
+    from dosadi.agents.core import AgentState, PlaceBelief
 
 
 def _clamp01(x: float) -> float:
