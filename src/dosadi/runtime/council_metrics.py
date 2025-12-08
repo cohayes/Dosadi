@@ -442,12 +442,25 @@ def assign_work_crews(
             prof = wh.proficiency
             stress = agent.physical.stress_level
             morale = agent.physical.morale_level
+            wp = agent.work_preferences.get_or_create(work_type)
+            pref = wp.preference
 
             sup_bonus = 0.0
             if agent.supervisor_work_type == work_type:
                 sup_bonus = 0.1
 
-            score = 0.6 * prof + 0.2 * morale - 0.2 * stress + sup_bonus
+            desired_bonus = 0.0
+            if agent.desired_work_type == work_type:
+                desired_bonus = 0.1
+
+            score = (
+                0.6 * prof
+                + 0.2 * morale
+                - 0.2 * stress
+                + 0.2 * pref
+                + desired_bonus
+                + sup_bonus
+            )
             scored.append((score, agent))
 
         scored.sort(key=lambda pair: pair[0], reverse=True)

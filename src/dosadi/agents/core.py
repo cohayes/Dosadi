@@ -13,7 +13,12 @@ from dosadi.agents.physiology import (
     compute_specialization_multiplier,
     recover_sleep_pressure,
 )
-from dosadi.agents.work_history import WorkHistory, ticks_to_proficiency
+from dosadi.agents.work_history import (
+    WorkHistory,
+    WorkPreferences,
+    ticks_to_proficiency,
+    update_work_preference_after_shift,
+)
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
 from dosadi.memory.sleep_consolidation import consolidate_sleep_for_agent
 from dosadi.runtime.admin_log import AdminLogEntry, create_admin_log_id
@@ -402,9 +407,13 @@ class AgentState:
     personality: Personality = field(default_factory=Personality)
     physical: PhysicalState = field(default_factory=PhysicalState)
     work_history: WorkHistory = field(default_factory=WorkHistory)
+    work_preferences: WorkPreferences = field(default_factory=WorkPreferences)
 
     # If non-None, this agent is a Tier-2 supervisor for this work type.
     supervisor_work_type: Optional[WorkDetailType] = None
+
+    # If non-None, the work type this agent would prefer to move into.
+    desired_work_type: Optional[WorkDetailType] = None
 
     # Crew this supervisor leads, if any.
     supervisor_crew_id: Optional[str] = None
@@ -1273,6 +1282,31 @@ def _ensure_ticks_remaining(
     return float(meta["ticks_remaining"])
 
 
+def _compute_shift_enjoyment(agent: AgentState, work_type: WorkDetailType) -> float:
+    """
+    Map stress/morale to an enjoyment score in [-1, 1].
+    MVP: use current physical state as a proxy for how the shift felt.
+    """
+
+    phys = agent.physical
+
+    # Start from morale in [0,1] mapped roughly into [-0.2, +0.8]
+    base = phys.morale_level - 0.2
+
+    # Stress penalty
+    stress_penalty = 0.6 * phys.stress_level
+
+    enjoyment = base - stress_penalty
+
+    # Clamp
+    if enjoyment < -1.0:
+        enjoyment = -1.0
+    elif enjoyment > 1.0:
+        enjoyment = 1.0
+
+    return enjoyment
+
+
 def _handle_scout_interior(
     world: "WorldState",
     agent: AgentState,
@@ -1296,6 +1330,8 @@ def _handle_scout_interior(
     if ticks_remaining <= 0:
         wh.shifts += 1
         wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
+        enjoyment = _compute_shift_enjoyment(agent, work_type)
+        update_work_preference_after_shift(agent, work_type, enjoyment)
         goal.status = GoalStatus.COMPLETED
         return
 
@@ -1362,6 +1398,8 @@ def _handle_inventory_stores(
     if ticks_remaining <= 0:
         wh.shifts += 1
         wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
+        enjoyment = _compute_shift_enjoyment(agent, work_type)
+        update_work_preference_after_shift(agent, work_type, enjoyment)
         goal.status = GoalStatus.COMPLETED
         return
 
@@ -1422,6 +1460,8 @@ def _handle_food_processing(
     if ticks_remaining <= 0:
         wh.shifts += 1
         wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
+        enjoyment = _compute_shift_enjoyment(agent, work_type)
+        update_work_preference_after_shift(agent, work_type, enjoyment)
         goal.status = GoalStatus.COMPLETED
         return
 
@@ -1654,6 +1694,8 @@ def _handle_water_handling(
     if ticks_remaining <= 0:
         wh.shifts += 1
         wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
+        enjoyment = _compute_shift_enjoyment(agent, work_type)
+        update_work_preference_after_shift(agent, work_type, enjoyment)
         goal.status = GoalStatus.COMPLETED
         return
 
@@ -1795,6 +1837,8 @@ def _handle_env_control(
     if ticks_remaining <= 0:
         wh.shifts += 1
         wh.proficiency = ticks_to_proficiency(work_type, wh.ticks)
+        enjoyment = _compute_shift_enjoyment(agent, work_type)
+        update_work_preference_after_shift(agent, work_type, enjoyment)
         goal.status = GoalStatus.COMPLETED
         return
 
