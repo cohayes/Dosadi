@@ -8,7 +8,6 @@ from collections import defaultdict
 
 from typing import Dict, Optional
 
-from dosadi.agents.core import AgentState, PlaceBelief
 from dosadi.memory.episode_factory import EpisodeFactory
 from dosadi.runtime.config import (
     MAX_SUPERVISORS_PER_WORK_TYPE,
@@ -23,6 +22,7 @@ from dosadi.runtime.work_details import WorkDetailType
 
 if TYPE_CHECKING:
     from dosadi.state import WorldState
+    from dosadi.agents.core import AgentState, PlaceBelief
     from dosadi.agents.work_history import WorkHistory  # type: ignore
 
 

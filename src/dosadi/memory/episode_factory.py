@@ -3,9 +3,8 @@ from __future__ import annotations
 import itertools
 import uuid
 from dataclasses import dataclass
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, TYPE_CHECKING
 
-from dosadi.agents.core import AgentState, Goal
 from dosadi.runtime.admin_log import AdminLogEntry
 from dosadi.memory.episodes import (
     EmotionSnapshot,
@@ -16,8 +15,11 @@ from dosadi.memory.episodes import (
     EpisodeTargetType,
     EpisodeVerb,
 )
-from dosadi.state import WorldState
 from dosadi.runtime.work_details import WorkDetailType
+
+if TYPE_CHECKING:  # pragma: no cover
+    from dosadi.agents.core import AgentState, Goal
+    from dosadi.state import WorldState
 
 
 @dataclass(frozen=True)
