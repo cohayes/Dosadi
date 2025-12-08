@@ -37,6 +37,7 @@ from dosadi.runtime.memory_runtime import (
 from dosadi.runtime.proto_council import run_proto_council_tuning
 from dosadi.runtime.agent_preferences import maybe_update_desired_work_type
 from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
+from dosadi.runtime.protocols import update_protocol_adoption_metrics
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
 from dosadi.runtime.work_details import ensure_scout_detail_for_gather_goal
@@ -60,6 +61,13 @@ class RuntimeConfig:
     risk_threshold_for_protocol: float = 0.15
     max_ticks: int = 100_000
     queue_interval_ticks: int = 100
+    min_traversals_for_adoption_check: int = 20
+    min_ticks_since_authored_for_adoption_check: int = 200
+    min_protocol_adoption_ratio: float = 0.6
+
+
+# Alias used in docs/specs
+FoundingWakeupRuntimeConfig = RuntimeConfig
 
 
 @dataclass
@@ -133,6 +141,7 @@ def step_world_once(world: WorldState) -> None:
         process_all_queues(world, tick, queue_emitter)
 
     _maybe_run_proto_council(world, tick)
+    update_protocol_adoption_metrics(world, tick)
     update_council_metrics_and_staffing(world)
 
     world.tick += 1
@@ -276,20 +285,6 @@ def _gather_information_goal_exists(world: WorldState) -> bool:
     return False
 
 
-def _count_protocol_reads(world: WorldState, protocol_id: str) -> int:
-    readers: set[str] = set()
-    for agent in world.agents.values():
-        buffers = getattr(agent, "episodes", None)
-        if not buffers:
-            continue
-        for ep in list(getattr(buffers, "short_term", [])) + list(getattr(buffers, "daily", [])):
-            if getattr(ep, "verb", "") != "READ_PROTOCOL":
-                continue
-            if getattr(ep, "metadata", {}).get("protocol_id") == protocol_id:
-                readers.add(agent.agent_id)
-    return len(readers)
-
-
 def _pod_representatives(world: WorldState) -> Dict[str, List[str]]:
     reps: Dict[str, List[str]] = {}
     for group in getattr(world, "groups", []):
@@ -336,9 +331,69 @@ def _hazard_reduction_achieved(world: WorldState, protocol_baselines: Dict[str, 
     return False
 
 
+def _protocol_adoption_ok(world: WorldState, cfg: RuntimeConfig) -> bool:
+    registry = getattr(world, "protocols", None)
+    if registry is None:
+        return False
+
+    protocols = []
+    if hasattr(registry, "protocols_by_id"):
+        protocols = list(registry.protocols_by_id.values())
+    elif isinstance(registry, dict):
+        protocols = list(registry.values())
+    else:
+        values_fn = getattr(registry, "values", None)
+        if callable(values_fn):
+            protocols = list(values_fn())
+
+    protocols = [
+        p
+        for p in protocols
+        if getattr(p, "status", None) is ProtocolStatus.ACTIVE
+        and getattr(p, "protocol_type", getattr(p, "field", None))
+        == ProtocolType.TRAFFIC_AND_SAFETY
+    ]
+    if not protocols:
+        return False
+
+    candidates: List = []
+    for p in protocols:
+        m = getattr(p, "adoption", None)
+        if m is None or m.total_traversals < cfg.min_traversals_for_adoption_check:
+            continue
+        authored_tick = getattr(p, "authored_at_tick", getattr(p, "created_at_tick", 0))
+        if m.last_observed_tick is not None:
+            if (
+                m.last_observed_tick - authored_tick
+                < cfg.min_ticks_since_authored_for_adoption_check
+            ):
+                continue
+        candidates.append(p)
+
+    if not candidates:
+        return False
+
+    total_traversals = sum(
+        getattr(p.adoption, "total_traversals", 0) for p in candidates if getattr(p, "adoption", None)
+    )
+    conforming_traversals = sum(
+        getattr(p.adoption, "conforming_traversals", 0)
+        for p in candidates
+        if getattr(p, "adoption", None)
+    )
+    if total_traversals == 0:
+        return False
+
+    ratio = conforming_traversals / float(total_traversals)
+    return ratio >= cfg.min_protocol_adoption_ratio
+
+
 def evaluate_founding_wakeup_success(
-    world: WorldState, protocol_baselines: Optional[Dict[str, Dict[str, float]]] = None
+    world: WorldState,
+    protocol_baselines: Optional[Dict[str, Dict[str, float]]] = None,
+    cfg: Optional[RuntimeConfig] = None,
 ) -> Dict[str, bool]:
+    cfg = cfg or getattr(world, "runtime_config", None) or RuntimeConfig()
     reps_by_pod = _pod_representatives(world)
     all_pods_have_reps = bool(reps_by_pod) and all(bool(reps) for reps in reps_by_pod.values())
 
@@ -357,13 +412,7 @@ def evaluate_founding_wakeup_success(
         ]
 
     protocol_authored = bool(active_protocols)
-    adoption_success = False
-    if active_protocols and len(world.agents) > 0:
-        for protocol in active_protocols:
-            readers = _count_protocol_reads(world, protocol.protocol_id)
-            if readers / max(len(world.agents), 1) >= 0.10:
-                adoption_success = True
-                break
+    adoption_success = _protocol_adoption_ok(world, cfg)
 
     hazard_reduction = False
     if protocol_baselines is None:
@@ -403,22 +452,26 @@ def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> Found
                 continue
             protocol_baselines.setdefault(protocol.protocol_id, metrics_snapshot)
 
-    report = build_founding_wakeup_report(world, protocol_baselines)
+    report = build_founding_wakeup_report(world, protocol_baselines, runtime_cfg)
     return report
 
 
 def build_founding_wakeup_report(
-    world: WorldState, protocol_baselines: Optional[Dict[str, Dict[str, float]]] = None
+    world: WorldState,
+    protocol_baselines: Optional[Dict[str, Dict[str, float]]] = None,
+    cfg: Optional[RuntimeConfig] = None,
 ) -> FoundingWakeupReport:
+    cfg = cfg or getattr(world, "runtime_config", None) or RuntimeConfig()
     summary = {
         "ticks": world.tick,
         "agents": len(world.agents),
         "groups": len(world.groups),
         "protocols": len(world.protocols.protocols_by_id),
     }
-    success = evaluate_founding_wakeup_success(world, protocol_baselines)
+    success = evaluate_founding_wakeup_success(world, protocol_baselines, cfg)
     flags = {
         "gather_information_goals": "OK" if success.get("gather_information_goals") else "MISSING",
+        "protocol_adoption": "OK" if success.get("protocol_adoption") else "MISSING",
     }
     summary["flags"] = flags
     return FoundingWakeupReport(world=world, metrics=dict(world.metrics), summary=summary, success=success)
@@ -441,6 +494,7 @@ def run_founding_wakeup_from_config(config: FoundingWakeupConfig) -> FoundingWak
 
 __all__ = [
     "RuntimeConfig",
+    "FoundingWakeupRuntimeConfig",
     "FoundingWakeupConfig",
     "FoundingWakeupReport",
     "step_world_once",

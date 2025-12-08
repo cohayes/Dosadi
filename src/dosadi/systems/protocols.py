@@ -23,6 +23,22 @@ class ProtocolStatus(str, Enum):
 
 
 @dataclass
+class ProtocolAdoptionMetrics:
+    first_observed_tick: Optional[int] = None
+    last_observed_tick: Optional[int] = None
+
+    total_traversals: int = 0
+    conforming_traversals: int = 0
+    nonconforming_traversals: int = 0
+
+    @property
+    def adoption_ratio(self) -> float:
+        if self.total_traversals == 0:
+            return 0.0
+        return self.conforming_traversals / float(self.total_traversals)
+
+
+@dataclass
 class Protocol:
     """MVP movement/safety protocol.
 
@@ -43,6 +59,7 @@ class Protocol:
     author_agent_id: Optional[str] = None  # scribe or lead author
 
     created_at_tick: int = 0
+    authored_at_tick: int = 0
     activated_at_tick: Optional[int] = None
     retired_at_tick: Optional[int] = None
 
@@ -64,6 +81,8 @@ class Protocol:
     times_read: int = 0
     times_referenced: int = 0
 
+    adoption: Optional[ProtocolAdoptionMetrics] = None
+
 
 def make_protocol_id(prefix: str = "protocol") -> str:
     return f"{prefix}:{uuid.uuid4().hex}"
@@ -80,6 +99,9 @@ class ProtocolRegistry:
 
     def get(self, protocol_id: str) -> Optional[Protocol]:
         return self.protocols_by_id.get(protocol_id)
+
+    def values(self):
+        return self.protocols_by_id.values()
 
     def active_protocols_for_location(self, location_id: str) -> List[Protocol]:
         return [
@@ -128,7 +150,9 @@ def create_movement_protocol_from_goal(
         author_group_id=council_group_id,
         author_agent_id=scribe_agent_id,
         created_at_tick=tick,
+        authored_at_tick=tick,
         covered_location_ids=list(corridors),
+        covered_edge_ids=list(corridors),
         # MVP defaults from D-LAW-0013
         min_group_size=3,
         max_group_size=None,
@@ -251,6 +275,7 @@ def compute_effective_hazard_prob(
 
 __all__ = [
     "Protocol",
+    "ProtocolAdoptionMetrics",
     "ProtocolRegistry",
     "ProtocolStatus",
     "ProtocolType",

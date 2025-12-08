@@ -2,6 +2,7 @@
 
 from .protocols import (
     Protocol,
+    ProtocolAdoptionMetrics,
     ProtocolRegistry,
     ProtocolStatus,
     ProtocolType,
@@ -14,6 +15,7 @@ from .protocols import (
 
 __all__ = [
     "Protocol",
+    "ProtocolAdoptionMetrics",
     "ProtocolRegistry",
     "ProtocolStatus",
     "ProtocolType",
