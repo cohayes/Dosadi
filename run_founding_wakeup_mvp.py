@@ -82,15 +82,34 @@ def _print_agent_episodes(agent, max_eps: int = 4) -> None:
         )
 
 
-def _print_success(success: dict) -> None:
+def _print_success(success: dict, scenario_success: bool | None = None) -> None:
     if not success:
         print("No success metrics available.")
         return
 
+    ordered_keys = (
+        "pod_leadership",
+        "proto_council_formed",
+        "gather_information_goals",
+        "protocol_authored",
+        "protocol_adoption",
+        "hazard_reduction",
+    )
+
+    overall = scenario_success
+    if overall is None and "scenario_success" in success:
+        overall = bool(success.get("scenario_success"))
+
     print("\nScenario success checks:")
-    for key, passed in success.items():
-        status = "OK" if passed else "MISSING"
+    for key in ordered_keys:
+        if key not in success:
+            continue
+        status = "OK" if success.get(key) else "MISSING"
         print(f"- {key}: {status}")
+
+    if overall is not None:
+        overall_label = "OK" if overall else "MISSING"
+        print(f"\nOverall scenario success: {overall_label}")
 
 
 def _print_council_members(world) -> None:
@@ -152,7 +171,7 @@ def print_report(report: FoundingWakeupReport, sample_size: int, seed: int) -> N
     print(f"Groups: {report.summary.get('groups', len(world.groups))}")
     print(f"Protocols: {report.summary.get('protocols', len(getattr(world, 'protocols', {}).protocols_by_id))}")
 
-    _print_success(getattr(report, "success", {}))
+    _print_success(getattr(report, "success", {}), report.summary.get("scenario_success"))
 
     sample = _sample_agents(tuple(world.agents.values()), sample_size, seed)
     if not sample:
