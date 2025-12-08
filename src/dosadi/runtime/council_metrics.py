@@ -2,11 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Set, Tuple, TYPE_CHECKING
-
-from collections import defaultdict
-
-from typing import Dict, Optional
+from typing import Dict, Iterable, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from dosadi.memory.episode_factory import EpisodeFactory
 from dosadi.runtime.config import (
@@ -100,6 +96,8 @@ def iter_council_place_beliefs(world: "WorldState") -> Iterable[Tuple[str, Place
     - Otherwise, aggregate over agents' place_beliefs by averaging their scores
       per place_id.
     """
+    from dosadi.agents.core import AgentState, PlaceBelief
+
     index = getattr(world, "place_belief_index", None)
     if index is not None:
         for place_id, pb in index.items():
