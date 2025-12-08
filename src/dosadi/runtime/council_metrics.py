@@ -4,6 +4,10 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Set, Tuple, TYPE_CHECKING
 
+from collections import defaultdict
+
+from typing import Dict, Optional
+
 from dosadi.agents.core import AgentState, PlaceBelief
 from dosadi.memory.episode_factory import EpisodeFactory
 from dosadi.runtime.config import (
@@ -14,6 +18,7 @@ from dosadi.runtime.config import (
     PROMOTION_CHECK_INTERVAL_TICKS,
     SENIORITY_HORIZON,
 )
+from dosadi.runtime.admin_log import AdminLogEntry
 from dosadi.runtime.work_details import WorkDetailType
 
 if TYPE_CHECKING:
@@ -203,6 +208,41 @@ def is_interior_place(world: "WorldState", place_id: str) -> bool:
     return place_id.startswith("loc:")
 
 
+def compute_report_based_metrics(world: "WorldState") -> Dict[str, float]:
+    HORIZON = 240_000
+    cutoff_tick = max(0, getattr(world, "tick", 0) - HORIZON)
+
+    strain_counts = defaultdict(float)
+    strain_weighted_reports = defaultdict(float)
+    queue_counts = defaultdict(float)
+    queue_weighted_reports = defaultdict(float)
+
+    for entry in getattr(world, "admin_logs", {}).values():
+        if entry.tick_end < cutoff_tick:
+            continue
+        key = entry.work_type
+
+        strain_flag = entry.flags.get("strain_high", 0.0)
+        queue_flag = entry.flags.get("queue_chronic", 0.0)
+
+        strain_counts[key] += 1.0
+        strain_weighted_reports[key] += strain_flag
+        queue_counts[key] += 1.0
+        queue_weighted_reports[key] += queue_flag
+
+    metrics: Dict[str, float] = {}
+
+    for work_type, count in strain_counts.items():
+        if count <= 0.0:
+            continue
+        avg_strain = strain_weighted_reports[work_type] / count
+        avg_queue = queue_weighted_reports[work_type] / max(queue_counts[work_type], 1.0)
+        metrics[f"report_avg_strain_{work_type.name.lower()}"] = avg_strain
+        metrics[f"report_avg_queue_{work_type.name.lower()}"] = avg_queue
+
+    return metrics
+
+
 def update_council_metrics_and_staffing(world: "WorldState") -> None:
     """
     Periodically recompute council metrics from place beliefs and adjust desired
@@ -280,12 +320,14 @@ def update_council_metrics_and_staffing(world: "WorldState") -> None:
         metrics.water_depot_fill_index = 1.0
         metrics.water_depot_count = 0
 
-    _adjust_staffing_from_metrics(world)
+    report_metrics = compute_report_based_metrics(world)
+
+    _adjust_staffing_from_metrics(world, report_metrics)
     assign_work_crews(world, getattr(world, "desired_work_details", {}))
     maybe_run_promotion_cycle(world)
 
 
-def _adjust_staffing_from_metrics(world: "WorldState") -> None:
+def _adjust_staffing_from_metrics(world: "WorldState", report_metrics: Optional[Dict[str, float]] = None) -> None:
     cfg = getattr(world, "council_staffing_config", None)
     desired = getattr(world, "desired_work_details", None)
     if cfg is None or desired is None:
@@ -326,6 +368,12 @@ def _adjust_staffing_from_metrics(world: "WorldState") -> None:
         desired[WorkDetailType.WATER_HANDLING] += cfg.water_handling_adjust_step
     elif wf > cfg.target_water_fill_high:
         desired[WorkDetailType.WATER_HANDLING] -= cfg.water_handling_adjust_step
+
+    for work_type in WorkDetailType:
+        strain_key = f"report_avg_strain_{work_type.name.lower()}"
+        strain = (report_metrics or {}).get(strain_key, 0.0)
+        if strain > 0.5:
+            desired[work_type] = desired.get(work_type, 0) + 1
 
     desired[WorkDetailType.SCOUT_INTERIOR] = max(
         cfg.min_scouts,

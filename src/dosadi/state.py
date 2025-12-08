@@ -19,6 +19,7 @@ from .admin_log import AdminEventLog
 from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
 from .simulation.snapshots import serialize_state
+from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from .runtime.work_details import WorkDetailType
 from .world.environment import PlaceEnvironmentState
@@ -841,6 +842,8 @@ class WorldState:
     metrics: MutableMapping[str, float] = field(default_factory=dict)
     council_metrics: CouncilMetrics = field(default_factory=CouncilMetrics)
     council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
+    admin_logs: Dict[str, AdminLogEntry] = field(default_factory=dict)
+    next_admin_log_seq: int = 0
     well: WellState = field(default_factory=WellState)
     place_environment: Dict[str, PlaceEnvironmentState] = field(default_factory=dict)
     runtime_config: Any = None

@@ -7,3 +7,7 @@ MIN_SHIFTS_FOR_SUPERVISOR: int = 10
 MAX_SUPERVISORS_PER_WORK_TYPE: int = 3
 
 SENIORITY_HORIZON: float = 400_000.0  # for normalizing total_ticks_employed
+
+# Supervisor reporting cadence (MVP defaults)
+SUPERVISOR_REPORT_INTERVAL_TICKS: int = 120_000
+MIN_TICKS_AS_SUPERVISOR_BEFORE_REPORT: int = 40_000

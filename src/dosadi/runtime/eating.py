@@ -13,6 +13,10 @@ from dosadi.agents.physiology import (
 )
 from dosadi.memory.episode_factory import EpisodeFactory
 from dosadi.world.environment import get_or_create_place_env
+from dosadi.runtime.config import (
+    MIN_TICKS_AS_SUPERVISOR_BEFORE_REPORT,
+    SUPERVISOR_REPORT_INTERVAL_TICKS,
+)
 
 # Hunger and meal tuning constants (MVP defaults)
 HUNGER_RATE_PER_TICK: float = 1.0 / 50_000.0
@@ -224,6 +228,45 @@ def maybe_create_rest_goal(world, agent: AgentState) -> None:
         created_at_tick=current_tick,
         priority=max(physical.sleep_pressure, 0.6),
         urgency=max(0.0, min(1.0, physical.sleep_pressure)),
+        metadata={},
+    )
+    agent.goals.append(goal)
+
+
+def maybe_create_supervisor_report_goal(world, agent: AgentState) -> None:
+    # Only Tier-2 supervisors with an assigned work type
+    if agent.tier != 2 or agent.supervisor_work_type is None:
+        return
+
+    current_tick = getattr(world, "tick", getattr(world, "current_tick", 0))
+
+    # Cadence check
+    if current_tick - agent.last_report_tick < SUPERVISOR_REPORT_INTERVAL_TICKS:
+        return
+
+    # Require some time as supervisor
+    if agent.total_ticks_employed < MIN_TICKS_AS_SUPERVISOR_BEFORE_REPORT:
+        return
+
+    # Avoid during acute food/water crisis
+    physical = agent.physical
+    if physical.hunger_level > 1.2 or physical.hydration_level < 0.2:
+        return
+
+    # Avoid duplicates
+    for g in agent.goals:
+        if g.goal_type == GoalType.WRITE_SUPERVISOR_REPORT and g.status in (
+            GoalStatus.PENDING,
+            GoalStatus.ACTIVE,
+        ):
+            return
+
+    goal = Goal(
+        goal_id=f"goal:write_report:{agent.id}:{current_tick}",
+        owner_id=agent.id,
+        goal_type=GoalType.WRITE_SUPERVISOR_REPORT,
+        status=GoalStatus.PENDING,
+        created_at_tick=current_tick,
         metadata={},
     )
     agent.goals.append(goal)
