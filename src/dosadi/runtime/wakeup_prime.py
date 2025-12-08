@@ -106,6 +106,7 @@ def _step_governance(world: WorldState, tick: int, cfg: WakeupPrimeRuntimeConfig
     if council is not None:
         world.council_agent_ids = list(council.member_ids)
         maybe_run_council_meeting(
+            world=world,
             council_group=council,
             agents_by_id=world.agents,
             tick=tick,

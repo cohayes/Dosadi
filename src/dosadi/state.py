@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .systems.protocols import ProtocolRegistry
     from .runtime.queues import FacilityQueueState, QueueState
     from .runtime.work_details import WorkDetailType
+    from dosadi.agents.core import Goal, GoalType
 
 
 
@@ -831,6 +832,9 @@ class WorldState:
     labor_assignments: List[Dict[str, object]] = field(default_factory=list)
     desired_work_details: Dict["WorkDetailType", int] = field(default_factory=dict)
     active_work_details: Dict["WorkDetailType", int] = field(default_factory=dict)
+    goals: Dict[str, "Goal"] = field(default_factory=dict)
+    goals_by_owner: Dict[str, List[str]] = field(default_factory=dict)
+    next_goal_seq: int = 0
     maintenance_tasks: List[Dict[str, object]] = field(default_factory=list)
     clinic_records: List[Dict[str, object]] = field(default_factory=list)
     law_cases: List[Dict[str, object]] = field(default_factory=list)
@@ -860,6 +864,29 @@ class WorldState:
 
     def register_agent(self, agent: AgentState) -> None:
         self.agents[agent.id] = agent
+
+    def next_goal_id(self, prefix: str = "goal") -> str:
+        self.next_goal_seq += 1
+        return f"{prefix}:{self.next_goal_seq}"
+
+    def register_goal(self, goal: "Goal") -> None:
+        self.goals[goal.goal_id] = goal
+        owner_list = self.goals_by_owner.setdefault(goal.owner_id, [])
+        if goal.goal_id not in owner_list:
+            owner_list.append(goal.goal_id)
+
+    def get_goal(self, goal_id: str) -> Optional["Goal"]:
+        return self.goals.get(goal_id)
+
+    def goals_for_owner(self, owner_id: str, goal_type: Optional["GoalType"] = None) -> List["Goal"]:
+        from dosadi.agents.core import GoalType as CoreGoalType  # Local import to avoid cycles
+
+        ids = self.goals_by_owner.get(owner_id, [])
+        results = [self.goals[g_id] for g_id in ids if g_id in self.goals]
+        if goal_type is None:
+            return results
+        target_type = goal_type if isinstance(goal_type, CoreGoalType) else CoreGoalType(goal_type)
+        return [g for g in results if g.goal_type == target_type]
 
     def register_queue(self, queue: "QueueState") -> None:
         self.queues[queue.queue_id] = queue

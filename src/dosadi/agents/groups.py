@@ -66,6 +66,29 @@ def make_group_id(prefix: str = "group") -> str:
 _GOAL_REGISTRY: Dict[str, Goal] = {}
 
 
+def _register_goal(world: Optional[object], goal: Goal) -> None:
+    if world is not None and hasattr(world, "register_goal"):
+        world.register_goal(goal)
+    _GOAL_REGISTRY[goal.goal_id] = goal
+
+
+def _get_goal(world: Optional[object], goal_id: str) -> Optional[Goal]:
+    if world is not None and hasattr(world, "get_goal"):
+        found = world.get_goal(goal_id)
+        if found:
+            return found
+    return _GOAL_REGISTRY.get(goal_id)
+
+
+def _next_goal_id(world: Optional[object]) -> str:
+    if world is not None and hasattr(world, "next_goal_id"):
+        try:
+            return world.next_goal_id()
+        except Exception:
+            pass
+    return make_goal_id()
+
+
 def create_pod_group(pod_location_id: str, member_ids: List[str], tick: int) -> Group:
     """
     Create a Group of type POD for a given pod location.
@@ -302,6 +325,7 @@ def maybe_form_proto_council(
 
 
 def maybe_run_council_meeting(
+    world: Optional[object],
     council_group: Group,
     agents_by_id: Dict[str, AgentState],
     tick: int,
@@ -344,6 +368,23 @@ def maybe_run_council_meeting(
         min_incidents_for_protocol=cfg.min_incidents_for_protocol,
         risk_threshold_for_protocol=cfg.risk_threshold_for_protocol,
     )
+
+    if dangerous_edge_ids:
+        gather_goal = ensure_council_gather_information_goal(
+            world=world,
+            council_group=council_group,
+            hazard_metrics=metrics,
+            corridors_of_interest=dangerous_edge_ids,
+            current_tick=tick,
+        )
+        project_gather_information_to_scouts(
+            world=world,
+            council_group=council_group,
+            group_goal=gather_goal,
+            corridors_of_interest=dangerous_edge_ids,
+            current_tick=tick,
+            rng=rng,
+        )
 
     if not dangerous_edge_ids:
         return
@@ -388,24 +429,40 @@ def maybe_run_council_meeting(
 
 
 def ensure_council_gather_information_goal(
+    world: Optional[object],
     council_group: Group,
+    hazard_metrics: Optional[object],
     corridors_of_interest: List[str],
-    tick: int,
+    current_tick: int,
 ) -> Goal:
     """
     Ensure the council has an active GATHER_INFORMATION group goal.
 
-    - If an ACTIVE goal of this type already exists, return it.
-    - Otherwise, create one and add its id to council_group.goal_ids.
+    - If an ACTIVE/PLANNING goal of this type already exists with matching corridors,
+      return it.
+    - Otherwise, create one and add its id to council_group.goal_ids and registry.
     """
-    # Check existing goals created via this module's registry.
     for goal_id in council_group.goal_ids:
-        existing = _GOAL_REGISTRY.get(goal_id)
-        if existing and existing.goal_type == GoalType.GATHER_INFORMATION and existing.status == GoalStatus.ACTIVE:
+        existing = _get_goal(world, goal_id)
+        if existing is None:
+            continue
+        if existing.goal_type != GoalType.GATHER_INFORMATION:
+            continue
+        if existing.status not in {GoalStatus.ACTIVE, GoalStatus.PENDING}:
+            continue
+        existing_corridors = existing.metadata.get("corridor_edge_ids") if hasattr(existing, "metadata") else None
+        if existing_corridors and set(existing_corridors) == set(corridors_of_interest):
             return existing
 
+    metadata: Dict[str, object] = {
+        "corridor_edge_ids": list(corridors_of_interest),
+        "hazard_snapshot": hazard_metrics.to_dict() if hasattr(hazard_metrics, "to_dict") else {},
+        "max_scouts": 3,
+        "created_by_group_id": council_group.group_id,
+    }
+
     goal = Goal(
-        goal_id=make_goal_id(),
+        goal_id=_next_goal_id(world),
         owner_id=council_group.group_id,
         goal_type=GoalType.GATHER_INFORMATION,
         description="Gather information about corridor risk.",
@@ -414,21 +471,23 @@ def ensure_council_gather_information_goal(
         urgency=0.95,
         horizon=GoalHorizon.MEDIUM,
         status=GoalStatus.ACTIVE,
-        created_at_tick=tick,
-        last_updated_tick=tick,
+        created_at_tick=current_tick,
+        last_updated_tick=current_tick,
         origin=GoalOrigin.GROUP_DECISION,
+        metadata=metadata,
     )
     council_group.goal_ids.append(goal.goal_id)
-    _GOAL_REGISTRY[goal.goal_id] = goal
+    _register_goal(world, goal)
     return goal
 
 
 def project_gather_information_to_scouts(
+    world: Optional[object],
     council_group: Group,
     group_goal: Goal,
-    agents_by_id: Dict[str, AgentState],
+    corridors_of_interest: List[str],
+    current_tick: int,
     rng: random.Random,
-    max_scouts: int = 3,
 ) -> None:
     """
     Assign GATHER_INFORMATION goals to selected scouts.
@@ -438,47 +497,68 @@ def project_gather_information_to_scouts(
     - Append a personal GATHER_INFORMATION goal to each AgentState.goals with
       origin = GROUP_DECISION.
     """
+    all_agents: List[AgentState] = list(getattr(world, "agents", {}).values()) if world is not None else []
+    if not all_agents:
+        return
+
+    def _has_active_gather_goal(agent: AgentState) -> bool:
+        return any(
+            g.goal_type == GoalType.GATHER_INFORMATION and g.status == GoalStatus.ACTIVE
+            for g in getattr(agent, "goals", [])
+        )
+
+    def scout_score(agent: AgentState) -> float:
+        dex = getattr(agent.attributes, "DEX", getattr(agent.attributes, "dexterity", 0))
+        endu = getattr(agent.attributes, "END", getattr(agent.attributes, "endurance", 0))
+        stress_term = 1.0 - getattr(agent.physical, "stress_level", 0.0)
+        return 0.4 * dex + 0.3 * endu + 0.3 * stress_term
+
     candidates = [
-        agents_by_id[aid]
-        for aid in council_group.member_ids
-        if aid in agents_by_id
+        a
+        for a in all_agents
+        if not getattr(a, "is_asleep", False)
+        and not getattr(a.physical, "is_sleeping", False)
+        and getattr(a.physical, "health", 1.0) > 0.2
+        and not _has_active_gather_goal(a)
     ]
+
     if not candidates:
         return
 
-    def scout_score(agent: AgentState) -> float:
-        return (
-            agent.attributes.DEX
-            + agent.attributes.END
-            + 5.0 * agent.personality.bravery
-        )
-
     candidates.sort(key=scout_score, reverse=True)
-    chosen = candidates[:max_scouts]
+    max_scouts = group_goal.metadata.get("max_scouts", 3) if hasattr(group_goal, "metadata") else 3
+    chosen = candidates[:max(1, int(max_scouts))]
 
     for agent in chosen:
         roles = council_group.roles_by_agent.setdefault(agent.agent_id, [])
         if GroupRole.SCOUT not in roles:
             roles.append(GroupRole.SCOUT)
         personal_goal = Goal(
-            goal_id=make_goal_id(),
+            goal_id=_next_goal_id(world),
             owner_id=agent.agent_id,
             goal_type=GoalType.GATHER_INFORMATION,
             description="Scout corridors on behalf of the council.",
             parent_goal_id=group_goal.goal_id,
             target={
-                "corridor_ids": group_goal.target.get("corridor_ids", []),
+                "corridor_ids": list(corridors_of_interest),
                 "group_goal_id": group_goal.goal_id,
             },
             priority=0.95,
             urgency=0.95,
             horizon=GoalHorizon.SHORT,
             status=GoalStatus.ACTIVE,
-            created_at_tick=group_goal.created_at_tick,
-            last_updated_tick=group_goal.last_updated_tick,
+            created_at_tick=current_tick,
+            last_updated_tick=current_tick,
             origin=GoalOrigin.GROUP_DECISION,
+            metadata={
+                "parent_group_goal_id": group_goal.goal_id,
+                "corridor_edge_ids": list(corridors_of_interest),
+                "ticks_active": 0,
+                "visits_recorded": 0,
+            },
         )
         agent.goals.append(personal_goal)
+        _register_goal(world, personal_goal)
 
 
 def project_author_protocol_to_scribe(

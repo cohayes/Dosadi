@@ -41,7 +41,7 @@ class GoalType(str, Enum):
     REDUCE_POD_RISK = "REDUCE_POD_RISK"
     FORM_GROUP = "FORM_GROUP"
     STABILIZE_POD = "STABILIZE_POD"
-    GATHER_INFORMATION = "GATHER_INFORMATION"
+    GATHER_INFORMATION = "gather_information"
     AUTHOR_PROTOCOL = "AUTHOR_PROTOCOL"
     ORGANIZE_GROUP = "ORGANIZE_GROUP"
     WORK_DETAIL = "WORK_DETAIL"
@@ -866,15 +866,13 @@ def decide_next_action(
         )
 
     if focus_goal and focus_goal.goal_type == GoalType.GATHER_INFORMATION:
-        options = neighbors.get(agent.location_id, [])
-        target_loc = rng.choice(options) if options else None
-        if target_loc:
-            return Action(
-                actor_id=agent.agent_id,
-                verb="MOVE",
-                target_location_id=target_loc,
-                related_goal_id=focus_goal.goal_id,
-            )
+        _handle_scout_interior(world, agent, focus_goal, rng)
+        return Action(
+            actor_id=agent.agent_id,
+            verb="REST_IN_POD",
+            target_location_id=agent.location_id,
+            related_goal_id=focus_goal.goal_id,
+        )
 
     if focus_goal and focus_goal.goal_type == GoalType.SECURE_SHELTER:
         home_location = agent.home or agent.location_id
@@ -1335,11 +1333,73 @@ def _handle_scout_interior(
         goal.status = GoalStatus.COMPLETED
         return
 
-    _move_one_step_random_interior(world, agent, rng)
+    gather_goal = goal if goal.goal_type == GoalType.GATHER_INFORMATION else None
+    if gather_goal is None:
+        parent_id = goal.metadata.get("parent_group_goal_id") if hasattr(goal, "metadata") else None
+        if parent_id:
+            gather_goal = getattr(world, "get_goal", lambda _gid: None)(parent_id)
+        if gather_goal is None:
+            gather_goal = next(
+                (
+                    g
+                    for g in getattr(agent, "goals", [])
+                    if g.goal_type == GoalType.GATHER_INFORMATION
+                    and g.status == GoalStatus.ACTIVE
+                ),
+                None,
+            )
+
+    gather_goal_meta = gather_goal.metadata if gather_goal is not None else goal.metadata
+    gather_goal_meta["ticks_active"] = gather_goal_meta.get("ticks_active", 0) + 1
+
+    target_edges = []
+    if hasattr(goal, "metadata"):
+        target_edges = list(goal.metadata.get("target_edges", []))
+    if not target_edges and gather_goal is not None:
+        target_edges = list(gather_goal.metadata.get("corridor_edge_ids", []))
+
+    topology = _topology_from_world(world)
+    neighbors = _neighbors_for_location(world, agent.location_id)
+    chosen_neighbor = None
+    chosen_edge_id = None
+    targeted_neighbors: List[Tuple[str, str]] = []
+    for loc in neighbors:
+        edge = _edge_lookup(agent.location_id, loc, topology)
+        edge_id = edge.get("id") if edge else None
+        if edge_id in target_edges:
+            targeted_neighbors.append((loc, edge_id))
+
+    if targeted_neighbors:
+        chosen_neighbor, chosen_edge_id = rng.choice(targeted_neighbors)
+    elif neighbors:
+        chosen_neighbor = rng.choice(neighbors)
+        edge = _edge_lookup(agent.location_id, chosen_neighbor, topology)
+        chosen_edge_id = edge.get("id") if edge else None
+
+    if chosen_neighbor:
+        agent.location_id = chosen_neighbor
+
+    current_tick = getattr(world, "tick", 0)
+    factory = EpisodeFactory(world=world)
+
+    if chosen_edge_id and chosen_edge_id in target_edges:
+        gather_goal_meta["visits_recorded"] = gather_goal_meta.get("visits_recorded", 0) + 1
+        episode = factory.create_scout_place_episode(
+            owner_agent_id=agent.id,
+            tick=current_tick,
+            place_id=agent.location_id,
+            interior=True,
+            hazard_level=0.0,
+            visibility=1.0,
+            distance_from_pod=0.0,
+            note="hazard_inspection",
+        )
+        agent.record_episode(episode)
+        min_visits = gather_goal.metadata.get("min_visits_for_gather_information", 1) if gather_goal is not None else 1
+        if gather_goal is not None and gather_goal_meta.get("visits_recorded", 0) >= min_visits:
+            gather_goal.status = GoalStatus.COMPLETED
 
     if rng.random() < 0.10:
-        factory = EpisodeFactory(world=world)
-        current_tick = getattr(world, "tick", 0)
         episode = factory.create_scout_place_episode(
             owner_agent_id=agent.id,
             tick=current_tick,
@@ -1355,8 +1415,6 @@ def _handle_scout_interior(
     co_located = _agents_at_location(world, agent.location_id)
     if len(co_located) > 8:
         density = min(1.0, (len(co_located) - 8) / 8.0)
-        factory = EpisodeFactory(world=world)
-        current_tick = getattr(world, "tick", 0)
         episode = factory.create_corridor_crowding_episode(
             owner_agent_id=agent.id,
             tick=current_tick,
