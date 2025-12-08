@@ -34,6 +34,7 @@ from dosadi.runtime.memory_runtime import (
     step_agent_sleep_wake,
 )
 from dosadi.runtime.proto_council import run_proto_council_tuning
+from dosadi.runtime.agent_preferences import maybe_update_desired_work_type
 from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
@@ -113,6 +114,7 @@ def step_world_once(world: WorldState) -> None:
         update_agent_physical_state(world, agent)
         if not agent.physical.is_sleeping:
             agent.total_ticks_employed += 1.0
+        maybe_update_desired_work_type(world, agent)
         maybe_create_get_meal_goal(world, agent)
         maybe_create_get_water_goal(world, agent)
         maybe_create_rest_goal(world, agent)

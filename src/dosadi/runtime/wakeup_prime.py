@@ -23,6 +23,7 @@ from dosadi.scenarios.wakeup_prime import (
 from dosadi.state import WorldState
 from dosadi.runtime.proto_council import run_proto_council_tuning
 from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
+from dosadi.runtime.agent_preferences import maybe_update_desired_work_type
 
 
 @dataclass(slots=True)
@@ -142,6 +143,7 @@ def step_wakeup_prime_once(world: WorldState) -> None:
         step_agent_memory_maintenance(world, agent, tick, memory_config)
         if not agent.physical.is_sleeping:
             agent.total_ticks_employed += 1.0
+        maybe_update_desired_work_type(world, agent)
 
     if tick % cfg.queue_interval_ticks == 0:
         process_all_queues(world, tick, queue_emitter)

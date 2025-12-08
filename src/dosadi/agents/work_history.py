@@ -1,11 +1,39 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 
 import math
 
 from dosadi.runtime.work_details import WorkDetailType
+
+if TYPE_CHECKING:  # pragma: no cover - for type checking only
+    from dosadi.agents.core import AgentState
+
+
+@dataclass
+class WorkPreference:
+    # Preference in [-1.0, 1.0]
+    # -1.0 = strongly dislikes / avoids
+    #  0.0 = neutral
+    # +1.0 = strongly likes / seeks
+    preference: float = 0.0
+
+    # Smoothed recent experience ([-1, 1])
+    recent_enjoyment: float = 0.0
+
+    # Number of shifts contributing to this preference
+    samples: int = 0
+
+
+@dataclass
+class WorkPreferences:
+    per_type: Dict[WorkDetailType, WorkPreference] = field(default_factory=dict)
+
+    def get_or_create(self, work_type: WorkDetailType) -> WorkPreference:
+        if work_type not in self.per_type:
+            self.per_type[work_type] = WorkPreference()
+        return self.per_type[work_type]
 
 
 @dataclass
@@ -49,3 +77,35 @@ def ticks_to_proficiency(work_type: WorkDetailType, ticks: float) -> float:
     elif prof > 1.0:
         prof = 1.0
     return prof
+
+
+def update_work_preference_after_shift(
+    agent: "AgentState",
+    work_type: WorkDetailType,
+    enjoyment_score: float,
+) -> None:
+    """
+    Update the agent's preference for `work_type` based on a single shift
+    experience, summarized as enjoyment_score in [-1.0, 1.0].
+    """
+
+    wp = agent.work_preferences.get_or_create(work_type)
+
+    # Clamp enjoyment to [-1, 1]
+    enjoyment = max(-1.0, min(1.0, enjoyment_score))
+
+    # Exponential moving average for recent_enjoyment
+    alpha = 0.2
+    wp.recent_enjoyment = (1.0 - alpha) * wp.recent_enjoyment + alpha * enjoyment
+
+    # Slowly nudge preference toward recent_enjoyment
+    beta = 0.1
+    wp.preference += beta * (wp.recent_enjoyment - wp.preference)
+
+    # Clamp preference
+    if wp.preference < -1.0:
+        wp.preference = -1.0
+    elif wp.preference > 1.0:
+        wp.preference = 1.0
+
+    wp.samples += 1
