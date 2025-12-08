@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from dosadi.memory.episode_factory import EpisodeFactory
@@ -42,6 +42,9 @@ class CouncilMetrics:
     food_hall_count: int = 0
     interior_place_count: int = 0
     water_depot_count: int = 0
+
+    hazard_incidents_by_edge: Dict[str, int] = field(default_factory=dict)
+    traversals_by_edge: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass

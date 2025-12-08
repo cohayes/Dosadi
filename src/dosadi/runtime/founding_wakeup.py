@@ -47,6 +47,12 @@ from dosadi.systems.protocols import ProtocolStatus, ProtocolType
 
 
 @dataclass
+class HazardSnapshot:
+    tick: int
+    hazard_rate_by_edge: dict[str, float]
+
+
+@dataclass
 class RuntimeConfig:
     """Tunable configuration for the Founding Wakeup MVP runtime."""
 
@@ -64,6 +70,9 @@ class RuntimeConfig:
     min_traversals_for_adoption_check: int = 20
     min_ticks_since_authored_for_adoption_check: int = 200
     min_protocol_adoption_ratio: float = 0.6
+    min_edges_for_hazard_check: int = 1
+    min_baseline_hazard_rate: float = 0.05
+    min_hazard_reduction_fraction: float = 0.30
 
 
 # Alias used in docs/specs
@@ -305,30 +314,32 @@ def _proto_council_members(world: WorldState) -> Tuple[Optional[Group], List[str
     return council, members
 
 
-def _hazard_reduction_achieved(world: WorldState, protocol_baselines: Dict[str, Dict[str, float]]) -> bool:
-    registry = getattr(world, "protocols", None)
-    metrics = getattr(world, "metrics", {}) or {}
-    if registry is None:
-        return False
-
-    for protocol in registry.protocols_by_id.values():
-        if protocol.protocol_type != ProtocolType.TRAFFIC_AND_SAFETY or protocol.status != ProtocolStatus.ACTIVE:
+def _compute_hazard_rates_for_target_edges(world: WorldState) -> dict[str, float]:
+    target_edges: set[str] = set()
+    for p in world.protocols.values():
+        if p.status is not ProtocolStatus.ACTIVE:
             continue
-        baseline = protocol_baselines.get(protocol.protocol_id, {})
-        for edge_id in protocol.covered_edge_ids:
-            inc_key = f"incidents:{edge_id}"
-            trav_key = f"traversals:{edge_id}"
-            pre_incidents = float(baseline.get(inc_key, 0.0))
-            pre_traversals = float(baseline.get(trav_key, 0.0))
-            post_incidents = float(metrics.get(inc_key, 0.0)) - pre_incidents
-            post_traversals = float(metrics.get(trav_key, 0.0)) - pre_traversals
-            if pre_traversals <= 0 or post_traversals <= 0:
-                continue
-            pre_rate = pre_incidents / pre_traversals
-            post_rate = post_incidents / post_traversals
-            if post_rate < pre_rate:
-                return True
-    return False
+        field = getattr(p, "field", getattr(p, "protocol_type", None))
+        if field != ProtocolType.TRAFFIC_AND_SAFETY:
+            continue
+        coverage = getattr(p, "coverage", None)
+        edge_ids = list(getattr(coverage, "edge_ids", []) or [])
+        if hasattr(p, "covered_edge_ids"):
+            edge_ids.extend(getattr(p, "covered_edge_ids", []) or [])
+        for eid in edge_ids:
+            target_edges.add(eid)
+
+    rates: dict[str, float] = {}
+    for edge_id in target_edges:
+        incidents = world.council_metrics.hazard_incidents_by_edge.get(edge_id, 0)
+        traversals = world.council_metrics.traversals_by_edge.get(edge_id, 0)
+        if traversals <= 0:
+            rate = 0.0
+        else:
+            rate = incidents / float(traversals)
+        rates[edge_id] = rate
+
+    return rates
 
 
 def _protocol_adoption_ok(world: WorldState, cfg: RuntimeConfig) -> bool:
@@ -388,9 +399,39 @@ def _protocol_adoption_ok(world: WorldState, cfg: RuntimeConfig) -> bool:
     return ratio >= cfg.min_protocol_adoption_ratio
 
 
+def _hazard_reduction_ok(
+    baseline: HazardSnapshot | None,
+    final: HazardSnapshot | None,
+    cfg: FoundingWakeupRuntimeConfig,
+) -> bool:
+    if baseline is None or final is None:
+        return False
+
+    edges = set(baseline.hazard_rate_by_edge.keys()) | set(final.hazard_rate_by_edge.keys())
+    if len(edges) < cfg.min_edges_for_hazard_check:
+        return False
+
+    baseline_vals = [baseline.hazard_rate_by_edge.get(e, 0.0) for e in edges]
+    final_vals = [final.hazard_rate_by_edge.get(e, 0.0) for e in edges]
+
+    if not baseline_vals:
+        return False
+
+    baseline_avg = sum(baseline_vals) / float(len(baseline_vals))
+    final_avg = sum(final_vals) / float(len(final_vals))
+
+    # If there basically wasn't a hazard problem, don't demand a reduction
+    if baseline_avg < cfg.min_baseline_hazard_rate:
+        return True
+
+    required_max_final = baseline_avg * (1.0 - cfg.min_hazard_reduction_fraction)
+    return final_avg <= required_max_final
+
+
 def evaluate_founding_wakeup_success(
     world: WorldState,
-    protocol_baselines: Optional[Dict[str, Dict[str, float]]] = None,
+    baseline_snapshot: HazardSnapshot | None = None,
+    final_snapshot: HazardSnapshot | None = None,
     cfg: Optional[RuntimeConfig] = None,
 ) -> Dict[str, bool]:
     cfg = cfg or getattr(world, "runtime_config", None) or RuntimeConfig()
@@ -414,11 +455,7 @@ def evaluate_founding_wakeup_success(
     protocol_authored = bool(active_protocols)
     adoption_success = _protocol_adoption_ok(world, cfg)
 
-    hazard_reduction = False
-    if protocol_baselines is None:
-        protocol_baselines = {}
-    if active_protocols:
-        hazard_reduction = _hazard_reduction_achieved(world, protocol_baselines)
+    hazard_reduction = _hazard_reduction_ok(baseline_snapshot, final_snapshot, cfg)
 
     return {
         "pod_leadership": all_pods_have_reps,
@@ -438,28 +475,47 @@ def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> Found
     world.runtime_config = runtime_cfg
     world.rng.seed(seed)
 
-    protocol_baselines: Dict[str, Dict[str, float]] = {}
+    baseline_snapshot: HazardSnapshot | None = None
+    final_snapshot: HazardSnapshot | None = None
 
     while world.tick < runtime_cfg.max_ticks:
-        metrics_snapshot = dict(getattr(world, "metrics", {}) or {})
         step_world_once(world)
+        current_tick = world.tick
 
-        registry = getattr(world, "protocols", None)
-        if registry is None:
-            continue
-        for protocol in registry.protocols_by_id.values():
-            if protocol.protocol_type != ProtocolType.TRAFFIC_AND_SAFETY or protocol.status != ProtocolStatus.ACTIVE:
-                continue
-            protocol_baselines.setdefault(protocol.protocol_id, metrics_snapshot)
+        if baseline_snapshot is None:
+            registry = getattr(world, "protocols", None)
+            protocols = registry.values() if registry is not None else []
+            has_traffic_protocol = any(
+                p.status is ProtocolStatus.ACTIVE
+                and getattr(p, "field", getattr(p, "protocol_type", None))
+                == ProtocolType.TRAFFIC_AND_SAFETY
+                for p in protocols
+            )
+            if has_traffic_protocol:
+                baseline_snapshot = HazardSnapshot(
+                    tick=current_tick,
+                    hazard_rate_by_edge=_compute_hazard_rates_for_target_edges(world),
+                )
 
-    report = build_founding_wakeup_report(world, protocol_baselines, runtime_cfg)
+    final_snapshot = HazardSnapshot(
+        tick=world.tick,
+        hazard_rate_by_edge=_compute_hazard_rates_for_target_edges(world),
+    )
+
+    report = build_founding_wakeup_report(
+        world=world,
+        cfg=runtime_cfg,
+        baseline_snapshot=baseline_snapshot,
+        final_snapshot=final_snapshot,
+    )
     return report
 
 
 def build_founding_wakeup_report(
     world: WorldState,
-    protocol_baselines: Optional[Dict[str, Dict[str, float]]] = None,
     cfg: Optional[RuntimeConfig] = None,
+    baseline_snapshot: HazardSnapshot | None = None,
+    final_snapshot: HazardSnapshot | None = None,
 ) -> FoundingWakeupReport:
     cfg = cfg or getattr(world, "runtime_config", None) or RuntimeConfig()
     summary = {
@@ -468,10 +524,17 @@ def build_founding_wakeup_report(
         "groups": len(world.groups),
         "protocols": len(world.protocols.protocols_by_id),
     }
-    success = evaluate_founding_wakeup_success(world, protocol_baselines, cfg)
+    success = evaluate_founding_wakeup_success(
+        world=world,
+        baseline_snapshot=baseline_snapshot,
+        final_snapshot=final_snapshot,
+        cfg=cfg,
+    )
     flags = {
         "gather_information_goals": "OK" if success.get("gather_information_goals") else "MISSING",
+        "protocol_authored": "OK" if success.get("protocol_authored") else "MISSING",
         "protocol_adoption": "OK" if success.get("protocol_adoption") else "MISSING",
+        "hazard_reduction": "OK" if success.get("hazard_reduction") else "MISSING",
     }
     summary["flags"] = flags
     return FoundingWakeupReport(world=world, metrics=dict(world.metrics), summary=summary, success=success)
