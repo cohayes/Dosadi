@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Set
 
 from dosadi.agents.core import AgentState, Goal
+from dosadi.runtime.admin_log import AdminLogEntry
 from dosadi.memory.episodes import (
     EmotionSnapshot,
     Episode,
@@ -955,5 +956,43 @@ class EpisodeFactory:
                 "work_type": work_type.name,
                 "new_tier": int(new_tier),
                 "crew_id": crew_id or "",
+            },
+        )
+
+    def create_supervisor_report_episode(
+        self,
+        *,
+        owner_agent_id: str,
+        tick: int,
+        entry: AdminLogEntry,
+    ) -> Episode:
+        tags = {"report", "supervisor", entry.work_type.name.lower()}
+        if entry.crew_id:
+            tags.add("crew")
+
+        return Episode(
+            episode_id=self._next_episode_id(),
+            owner_agent_id=owner_agent_id,
+            tick=tick,
+            location_id=None,
+            channel=EpisodeChannel.DIRECT,
+            target_type=EpisodeTargetType.SELF,
+            target_id=owner_agent_id,
+            verb=EpisodeVerb.SUPERVISOR_REPORT_SUBMITTED,
+            summary_tag="supervisor_report_submitted",
+            goal_relation=EpisodeGoalRelation.SUPPORTS,
+            goal_relevance=0.3,
+            outcome=EpisodeOutcome.SUCCESS,
+            emotion=EmotionSnapshot(valence=0.3, arousal=0.2, threat=0.0),
+            importance=0.3,
+            reliability=0.9,
+            tags=tags,
+            details={
+                "log_id": entry.log_id,
+                "work_type": entry.work_type.name,
+                "crew_id": entry.crew_id or "",
+                "episodes_work_related": entry.metrics.get("episodes_work_related", 0.0),
+                "episodes_strain": entry.metrics.get("episodes_strain", 0.0),
+                "episodes_incidents": entry.metrics.get("episodes_incidents", 0.0),
             },
         )

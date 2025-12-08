@@ -16,6 +16,8 @@ from dosadi.agents.physiology import (
 from dosadi.agents.work_history import WorkHistory, ticks_to_proficiency
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
 from dosadi.memory.sleep_consolidation import consolidate_sleep_for_agent
+from dosadi.runtime.admin_log import AdminLogEntry, create_admin_log_id
+from dosadi.runtime.config import SUPERVISOR_REPORT_INTERVAL_TICKS
 from dosadi.runtime.work_details import WorkDetailType, WORK_DETAIL_CATALOG
 from dosadi.systems.protocols import (
     ProtocolRegistry,
@@ -41,6 +43,7 @@ class GoalType(str, Enum):
     GET_MEAL_TODAY = "GET_MEAL_TODAY"
     GET_WATER_TODAY = "GET_WATER_TODAY"
     REST_TONIGHT = "REST_TONIGHT"
+    WRITE_SUPERVISOR_REPORT = "WRITE_SUPERVISOR_REPORT"
 
 
 class GoalStatus(str, Enum):
@@ -405,6 +408,9 @@ class AgentState:
 
     # Crew this supervisor leads, if any.
     supervisor_crew_id: Optional[str] = None
+
+    # Last tick when a supervisor report was written.
+    last_report_tick: int = 0
 
     # Simple seniority tracking for promotion ranking
     total_ticks_employed: float = 0.0
@@ -809,6 +815,15 @@ def decide_next_action(
 
     if focus_goal and focus_goal.goal_type == GoalType.REST_TONIGHT:
         _handle_rest_goal(world, agent, focus_goal, rng)
+        return Action(
+            actor_id=agent.agent_id,
+            verb="REST_IN_POD",
+            target_location_id=agent.location_id,
+            related_goal_id=focus_goal.goal_id,
+        )
+
+    if focus_goal and focus_goal.goal_type == GoalType.WRITE_SUPERVISOR_REPORT:
+        _handle_write_supervisor_report(world, agent, focus_goal, rng)
         return Action(
             actor_id=agent.agent_id,
             verb="REST_IN_POD",
@@ -1811,6 +1826,132 @@ def _handle_env_control(
             comfort_after=comfort_after,
         )
         agent.record_episode(episode)
+
+
+def _handle_write_supervisor_report(
+    world: "WorldState",
+    agent: AgentState,
+    goal: Goal,
+    rng: random.Random,
+) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
+
+    if agent.tier != 2 or agent.supervisor_work_type is None:
+        goal.status = GoalStatus.FAILED
+        return
+
+    work_type = agent.supervisor_work_type
+    crew_id = agent.supervisor_crew_id
+
+    tick_end = getattr(world, "tick", getattr(world, "current_tick", 0))
+    tick_start = max(0, tick_end - SUPERVISOR_REPORT_INTERVAL_TICKS)
+
+    metrics, flags, notes = _aggregate_supervisor_report_inputs(
+        world=world,
+        agent=agent,
+        work_type=work_type,
+        crew_id=crew_id,
+        tick_start=tick_start,
+        tick_end=tick_end,
+    )
+
+    log_id = create_admin_log_id(world)
+    entry = AdminLogEntry(
+        log_id=log_id,
+        author_agent_id=agent.id,
+        work_type=work_type,
+        crew_id=crew_id,
+        tick_start=tick_start,
+        tick_end=tick_end,
+        metrics=metrics,
+        flags=flags,
+        notes=notes,
+    )
+
+    if getattr(world, "admin_logs", None) is None:
+        world.admin_logs = {}
+    world.admin_logs[log_id] = entry
+
+    agent.last_report_tick = tick_end
+
+    _emit_report_episodes(world, agent, entry)
+
+    goal.status = GoalStatus.COMPLETED
+
+
+def _aggregate_supervisor_report_inputs(
+    world: "WorldState",
+    agent: AgentState,
+    work_type: WorkDetailType,
+    crew_id: Optional[str],
+    tick_start: int,
+    tick_end: int,
+) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, str]]:
+    metrics: Dict[str, float] = {}
+    flags: Dict[str, float] = {}
+    notes: Dict[str, str] = {}
+
+    total_work_eps = 0
+    queue_issue_eps = 0
+    strain_eps = 0
+    incident_eps = 0
+
+    work_tag = work_type.name.lower()
+    daily_eps = getattr(getattr(agent, "episodes", None), "daily", [])
+
+    for ep in daily_eps:
+        ep_tick = getattr(ep, "tick", 0)
+        if ep_tick < tick_start or ep_tick > tick_end:
+            continue
+
+        ep_tags = getattr(ep, "tags", set()) or set()
+        lower_tags = {str(t).lower() for t in ep_tags}
+
+        if work_tag not in lower_tags:
+            continue
+
+        total_work_eps += 1
+
+        if "queue" in lower_tags:
+            queue_issue_eps += 1
+        if "strain" in lower_tags or "overworked" in lower_tags:
+            strain_eps += 1
+        if "incident" in lower_tags or "failure" in lower_tags:
+            incident_eps += 1
+
+    metrics["episodes_work_related"] = float(total_work_eps)
+    metrics["episodes_queue_issues"] = float(queue_issue_eps)
+    metrics["episodes_strain"] = float(strain_eps)
+    metrics["episodes_incidents"] = float(incident_eps)
+
+    if total_work_eps > 0:
+        strain_ratio = strain_eps / total_work_eps
+        queue_ratio = queue_issue_eps / total_work_eps
+    else:
+        strain_ratio = 0.0
+        queue_ratio = 0.0
+
+    flags["strain_high"] = 1.0 if strain_ratio > 0.3 else 0.0
+    flags["queue_chronic"] = 1.0 if queue_ratio > 0.3 else 0.0
+
+    notes["summary"] = (
+        f"Supervisor report for {work_type.name} crew {crew_id or 'none'}; "
+        f"work_eps={total_work_eps}, strain_eps={strain_eps}, incidents={incident_eps}."
+    )
+
+    return metrics, flags, notes
+
+
+def _emit_report_episodes(world: "WorldState", agent: AgentState, entry: AdminLogEntry) -> None:
+    from dosadi.memory.episode_factory import EpisodeFactory
+
+    factory = EpisodeFactory(world=world)
+    ep = factory.create_supervisor_report_episode(
+        owner_agent_id=agent.id,
+        tick=getattr(world, "tick", getattr(world, "current_tick", 0)),
+        entry=entry,
+    )
+    agent.record_episode(ep)
 
 
 def _neighbors_for_location(world: "WorldState", location_id: str) -> List[str]:
