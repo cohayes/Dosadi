@@ -39,6 +39,7 @@ from dosadi.runtime.agent_preferences import maybe_update_desired_work_type
 from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
+from dosadi.runtime.work_details import ensure_scout_detail_for_gather_goal
 from dosadi.state import WorldState
 from dosadi.world.scenarios.founding_wakeup import generate_founding_wakeup_mvp
 from dosadi.systems.protocols import ProtocolStatus, ProtocolType
@@ -172,6 +173,7 @@ def _phase_A_groups_and_council(world: WorldState, tick: int, rng: random.Random
     if council is not None:
         prev_last_meeting = council.last_meeting_tick
         maybe_run_council_meeting(
+            world=world,
             council_group=council,
             agents_by_id=world.agents,
             tick=tick,
@@ -202,6 +204,16 @@ def _phase_B_agent_decisions(world: WorldState, tick: int) -> Dict[str, Action]:
     for agent_id, agent in world.agents.items():
         if getattr(agent, "is_asleep", False) and not agent.physical.is_sleeping:
             continue
+        gather_goal = next(
+            (
+                g
+                for g in agent.goals
+                if g.goal_type == GoalType.GATHER_INFORMATION and g.status == GoalStatus.ACTIVE
+            ),
+            None,
+        )
+        if gather_goal is not None:
+            ensure_scout_detail_for_gather_goal(world, agent, gather_goal, tick)
         focus_goal = agent.choose_focus_goal()
         queue_id, queue_location_id = choose_queue_for_goal(
             agent, world, focus_goal, rng=rng
@@ -238,20 +250,28 @@ def _phase_C_apply_actions_and_hazards(world: WorldState, tick: int, actions_by_
 
 
 def _gather_information_goal_exists(world: WorldState) -> bool:
-    from dosadi.agents import groups as groups_module
+    goals = list(getattr(world, "goals", {}).values())
 
-    for group in getattr(world, "groups", []):
-        if group.group_type != GroupType.COUNCIL:
-            continue
+    group_goals = [
+        g
+        for g in goals
+        if g.goal_type == GoalType.GATHER_INFORMATION
+        and str(getattr(g, "owner_id", "")).startswith("group:")
+    ]
+    if not group_goals:
+        return False
 
-        for goal_id in getattr(group, "goal_ids", []):
-            goal = groups_module._GOAL_REGISTRY.get(goal_id)  # noqa: SLF001
-            if goal and goal.goal_type == GoalType.GATHER_INFORMATION:
-                return True
-
-    for agent in world.agents.values():
-        for goal in getattr(agent, "goals", []):
-            if goal.goal_type == GoalType.GATHER_INFORMATION and goal.origin == GoalOrigin.GROUP_DECISION:
+    for gg in group_goals:
+        for ag in goals:
+            if (
+                ag.goal_type == GoalType.GATHER_INFORMATION
+                and str(getattr(ag, "owner_id", "")).startswith("agent:")
+                and ag.metadata.get("parent_group_goal_id") == gg.goal_id
+                and (
+                    ag.status is GoalStatus.COMPLETED
+                    or ag.metadata.get("visits_recorded", 0) >= 1
+                )
+            ):
                 return True
     return False
 
@@ -397,6 +417,10 @@ def build_founding_wakeup_report(
         "protocols": len(world.protocols.protocols_by_id),
     }
     success = evaluate_founding_wakeup_success(world, protocol_baselines)
+    flags = {
+        "gather_information_goals": "OK" if success.get("gather_information_goals") else "MISSING",
+    }
+    summary["flags"] = flags
     return FoundingWakeupReport(world=world, metrics=dict(world.metrics), summary=summary, success=success)
 
 

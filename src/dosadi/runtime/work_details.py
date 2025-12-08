@@ -7,6 +7,9 @@ from enum import Enum, auto
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from dosadi.agents.core import AgentState, Goal, GoalOrigin, GoalStatus, GoalType
+
+if TYPE_CHECKING:
     from dosadi.agents.core import AgentState
     from dosadi.state import WorldState
 
@@ -191,4 +194,51 @@ def choose_work_detail_for_agent(world: "WorldState", agent: "AgentState") -> Op
         print(f"[work-detail] no gaps for agent {agent.agent_id}")
 
     return best_type
+
+
+def ensure_scout_detail_for_gather_goal(
+    world: "WorldState",
+    agent: "AgentState",
+    gather_goal: "Goal",
+    current_tick: int,
+) -> Optional["Goal"]:
+    """Ensure the agent has an active SCOUT_INTERIOR work-detail for a gather goal."""
+
+    from dosadi.agents.core import Goal, GoalOrigin, GoalStatus, GoalType, make_goal_id
+
+    if gather_goal.status != GoalStatus.ACTIVE:
+        return None
+
+    for goal in getattr(agent, "goals", []):
+        if goal.goal_type != GoalType.WORK_DETAIL:
+            continue
+        meta = goal.metadata
+        if meta.get("work_detail_type") == WorkDetailType.SCOUT_INTERIOR.name and meta.get("parent_gather_goal_id") == gather_goal.goal_id:
+            if goal.status in {GoalStatus.ACTIVE, GoalStatus.PENDING}:
+                return goal
+
+    goal_id = world.next_goal_id() if hasattr(world, "next_goal_id") else make_goal_id()
+    target_edges = list(gather_goal.metadata.get("corridor_edge_ids", []))
+    work_goal = Goal(
+        goal_id=goal_id,
+        owner_id=agent.agent_id,
+        goal_type=GoalType.WORK_DETAIL,
+        description="Scout interior corridors to gather information.",
+        priority=gather_goal.priority,
+        urgency=gather_goal.urgency,
+        status=GoalStatus.ACTIVE,
+        created_at_tick=current_tick,
+        origin=GoalOrigin.GROUP_DECISION,
+        metadata={
+            "work_detail_type": WorkDetailType.SCOUT_INTERIOR.name,
+            "parent_gather_goal_id": gather_goal.goal_id,
+            "target_edges": target_edges,
+        },
+    )
+
+    agent.goals.append(work_goal)
+    if hasattr(world, "register_goal"):
+        world.register_goal(work_goal)
+    world.active_work_details[WorkDetailType.SCOUT_INTERIOR] = world.active_work_details.get(WorkDetailType.SCOUT_INTERIOR, 0) + 1
+    return work_goal
 
