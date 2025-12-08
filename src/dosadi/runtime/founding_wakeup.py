@@ -457,7 +457,7 @@ def evaluate_founding_wakeup_success(
 
     hazard_reduction = _hazard_reduction_ok(baseline_snapshot, final_snapshot, cfg)
 
-    return {
+    success_flags = {
         "pod_leadership": all_pods_have_reps,
         "proto_council_formed": council_has_two_reps,
         "gather_information_goals": info_goal,
@@ -465,6 +465,9 @@ def evaluate_founding_wakeup_success(
         "protocol_adoption": adoption_success,
         "hazard_reduction": hazard_reduction,
     }
+
+    success_flags["scenario_success"] = all(success_flags.values())
+    return success_flags
 
 
 def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> FoundingWakeupReport:
@@ -530,12 +533,19 @@ def build_founding_wakeup_report(
         final_snapshot=final_snapshot,
         cfg=cfg,
     )
+    summary["scenario_success"] = success.get("scenario_success", False)
     flags = {
-        "gather_information_goals": "OK" if success.get("gather_information_goals") else "MISSING",
-        "protocol_authored": "OK" if success.get("protocol_authored") else "MISSING",
-        "protocol_adoption": "OK" if success.get("protocol_adoption") else "MISSING",
-        "hazard_reduction": "OK" if success.get("hazard_reduction") else "MISSING",
+        key: "OK" if success.get(key) else "MISSING"
+        for key in (
+            "pod_leadership",
+            "proto_council_formed",
+            "gather_information_goals",
+            "protocol_authored",
+            "protocol_adoption",
+            "hazard_reduction",
+        )
     }
+    flags["scenario_success"] = "OK" if summary["scenario_success"] else "MISSING"
     summary["flags"] = flags
     return FoundingWakeupReport(world=world, metrics=dict(world.metrics), summary=summary, success=success)
 
