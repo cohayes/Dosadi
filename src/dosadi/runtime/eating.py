@@ -39,95 +39,108 @@ MIN_TICKS_BETWEEN_SLEEP_GOALS: int = 40_000
 ENV_UNCOMFORTABLE_THRESHOLD = 0.3
 ENV_COMFORTABLE_THRESHOLD = 0.7
 
+CHRONIC_PHYSICAL_UPDATE_INTERVAL_TICKS: int = 10
 
-def update_agent_physical_state(
+
+def chronic_update_agent_physical_state(
     world, agent: AgentState, rng: Optional[random.Random] = None
 ) -> None:
-    """Update per-tick physiological drift such as hunger."""
+    """Update physiological drift and signals on a 10-tick cadence."""
 
     physical = agent.physical
+    current_tick = getattr(world, "tick", getattr(world, "current_tick", 0))
 
     if getattr(agent, "is_asleep", False) and not physical.is_sleeping:
+        physical.last_physical_update_tick = current_tick
         return
     if physical.is_sleeping:
+        physical.last_physical_update_tick = current_tick
+        return
+
+    if current_tick - physical.last_physical_update_tick < CHRONIC_PHYSICAL_UPDATE_INTERVAL_TICKS:
         return
 
     rng = rng or getattr(world, "rng", None) or random
-    physical.hunger_level += HUNGER_RATE_PER_TICK
-    if physical.hunger_level > HUNGER_MAX:
-        physical.hunger_level = HUNGER_MAX
-
-    physical.hydration_level -= HYDRATION_DECAY_PER_TICK
-    if physical.hydration_level < 0.0:
-        physical.hydration_level = 0.0
-    elif physical.hydration_level > 1.0:
-        physical.hydration_level = 1.0
-
-    needs_pressure = compute_needs_pressure(physical)
-    update_stress_and_morale(physical, needs_pressure)
-
-    if not physical.is_sleeping:
-        accumulate_sleep_pressure(physical)
-
     env = get_or_create_place_env(world, agent.location_id)
     factory = EpisodeFactory(world=world)
-    current_tick = getattr(world, "tick", 0)
 
-    signal_type = None
-    intensity = 0.0
+    start_tick = max(
+        physical.last_physical_update_tick + 1,
+        current_tick - CHRONIC_PHYSICAL_UPDATE_INTERVAL_TICKS + 1,
+        0,
+    )
+    for tick in range(start_tick, current_tick + 1):
+        physical.hunger_level += HUNGER_RATE_PER_TICK
+        if physical.hunger_level > HUNGER_MAX:
+            physical.hunger_level = HUNGER_MAX
 
-    if agent.physical.hydration_level < 0.2 and rng.random() < 0.05:
-        signal_type = "EXTREMELY_THIRSTY"
-        intensity = 1.0
-    elif agent.physical.hydration_level < 0.4 and rng.random() < 0.03:
-        signal_type = "VERY_THIRSTY"
-        intensity = 0.7
-    elif agent.physical.hydration_level < 0.7 and rng.random() < 0.02:
-        signal_type = "THIRSTY"
-        intensity = 0.4
+        physical.hydration_level -= HYDRATION_DECAY_PER_TICK
+        if physical.hydration_level < 0.0:
+            physical.hydration_level = 0.0
+        elif physical.hydration_level > 1.0:
+            physical.hydration_level = 1.0
 
-    if signal_type is not None:
-        episode = factory.create_body_signal_episode(
-            owner_agent_id=agent.id,
-            tick=current_tick,
-            signal_type=signal_type,
-            intensity=intensity,
-        )
-        agent.record_episode(episode)
+        needs_pressure = compute_needs_pressure(physical)
+        update_stress_and_morale(physical, needs_pressure)
+        accumulate_sleep_pressure(physical)
 
-    if needs_pressure > 0.9 and rng.random() < 0.02:
-        episode = factory.create_body_signal_episode(
-            owner_agent_id=agent.id,
-            tick=current_tick,
-            signal_type="NEEDS_OVERWHELMING",
-            intensity=needs_pressure,
-        )
-        agent.record_episode(episode)
-    elif needs_pressure > 0.6 and rng.random() < 0.02:
-        episode = factory.create_body_signal_episode(
-            owner_agent_id=agent.id,
-            tick=current_tick,
-            signal_type="WEAK_FROM_HUNGER_AND_THIRST",
-            intensity=needs_pressure,
-        )
-        agent.record_episode(episode)
+        signal_type = None
+        intensity = 0.0
 
-    if env.comfort < ENV_UNCOMFORTABLE_THRESHOLD and rng.random() < 0.02:
-        episode = factory.create_body_signal_episode(
-            owner_agent_id=agent.id,
-            tick=current_tick,
-            signal_type="ENV_UNCOMFORTABLE",
-            intensity=1.0 - env.comfort,
-        )
-        agent.record_episode(episode)
-    elif env.comfort > ENV_COMFORTABLE_THRESHOLD and rng.random() < 0.02:
-        episode = factory.create_body_signal_episode(
-            owner_agent_id=agent.id,
-            tick=current_tick,
-            signal_type="ENV_COMFORTABLE",
-            intensity=env.comfort,
-        )
-        agent.record_episode(episode)
+        if agent.physical.hydration_level < 0.2 and rng.random() < 0.05:
+            signal_type = "EXTREMELY_THIRSTY"
+            intensity = 1.0
+        elif agent.physical.hydration_level < 0.4 and rng.random() < 0.03:
+            signal_type = "VERY_THIRSTY"
+            intensity = 0.7
+        elif agent.physical.hydration_level < 0.7 and rng.random() < 0.02:
+            signal_type = "THIRSTY"
+            intensity = 0.4
+
+        if signal_type is not None:
+            episode = factory.create_body_signal_episode(
+                owner_agent_id=agent.id,
+                tick=tick,
+                signal_type=signal_type,
+                intensity=intensity,
+            )
+            agent.record_episode(episode)
+
+        if needs_pressure > 0.9 and rng.random() < 0.02:
+            episode = factory.create_body_signal_episode(
+                owner_agent_id=agent.id,
+                tick=tick,
+                signal_type="NEEDS_OVERWHELMING",
+                intensity=needs_pressure,
+            )
+            agent.record_episode(episode)
+        elif needs_pressure > 0.6 and rng.random() < 0.02:
+            episode = factory.create_body_signal_episode(
+                owner_agent_id=agent.id,
+                tick=tick,
+                signal_type="WEAK_FROM_HUNGER_AND_THIRST",
+                intensity=needs_pressure,
+            )
+            agent.record_episode(episode)
+
+        if env.comfort < ENV_UNCOMFORTABLE_THRESHOLD and rng.random() < 0.02:
+            episode = factory.create_body_signal_episode(
+                owner_agent_id=agent.id,
+                tick=tick,
+                signal_type="ENV_UNCOMFORTABLE",
+                intensity=1.0 - env.comfort,
+            )
+            agent.record_episode(episode)
+        elif env.comfort > ENV_COMFORTABLE_THRESHOLD and rng.random() < 0.02:
+            episode = factory.create_body_signal_episode(
+                owner_agent_id=agent.id,
+                tick=tick,
+                signal_type="ENV_COMFORTABLE",
+                intensity=env.comfort,
+            )
+            agent.record_episode(episode)
+
+    physical.last_physical_update_tick = current_tick
 
 
 def has_active_or_pending_get_meal_goal(agent: AgentState) -> bool:

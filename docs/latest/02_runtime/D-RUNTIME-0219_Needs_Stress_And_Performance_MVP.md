@@ -161,8 +161,8 @@ def update_stress_and_morale(physical: PhysicalState, needs_pressure: float) -> 
 
 ### 4.2 Integration into physical update
 
-In `update_agent_physical_state`, after hunger/hydration and thirst/hunger
-body signals:
+In the 10-tick cadence `chronic_update_agent_physical_state`, after
+hunger/hydration drift and thirst/hunger body signals:
 
 ```python
 needs_pressure = compute_needs_pressure(agent.physical)
@@ -302,7 +302,7 @@ aggregate effects:
 1. Add `stress_level` and `morale_level` to `PhysicalState` (if missing).
 2. Implement `compute_needs_pressure`.
 3. Implement `update_stress_and_morale` and call it from
-   `update_agent_physical_state`.
+   `chronic_update_agent_physical_state` (run every 10 ticks).
 4. Add extra body-signal episodes for high needs pressure (optional but nice).
 5. Implement `compute_performance_multiplier`.
 6. Apply performance multiplier to `ticks_remaining` in work detail handlers.

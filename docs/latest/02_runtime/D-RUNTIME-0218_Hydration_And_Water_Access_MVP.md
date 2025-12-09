@@ -94,7 +94,7 @@ As hydration falls, occasionally emit body signals (D-MEMORY-0101):
 - At `hydration_level < 0.4`: strong thirst (`"VERY_THIRSTY"`).
 - At `hydration_level < 0.2`: severe thirst (`"EXTREMELY_THIRSTY"`).
 
-Example pseudo-logic in `update_agent_physical_state`:
+Example pseudo-logic in the 10-tick cadence `chronic_update_agent_physical_state`:
 
 ```python
 if physical.hydration_level < 0.2 and rng.random() < 0.05:
