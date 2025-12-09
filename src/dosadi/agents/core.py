@@ -445,6 +445,9 @@ class AgentState:
     last_daily_promotion_tick: int = 0
     last_consolidation_tick: int = 0
 
+    # Cadence tracking for chronic physiological goal updates (meal/water/rest)
+    last_chronic_goal_tick: int = -1500
+
     has_basic_suit: bool = False
     assignment_role: Optional[str] = None
     bunk_location_id: Optional[str] = None

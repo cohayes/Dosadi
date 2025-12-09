@@ -11,6 +11,7 @@ from dosadi.agents.physiology import (
     compute_needs_pressure,
     update_stress_and_morale,
 )
+from dosadi.memory.episodes import EpisodeChannel, EpisodeVerb
 from dosadi.memory.episode_factory import EpisodeFactory
 from dosadi.world.environment import get_or_create_place_env
 from dosadi.runtime.config import (
@@ -35,6 +36,26 @@ DRINK_WATER_UNIT: float = 1.0
 
 SLEEP_PRESSURE_GOAL_THRESHOLD: float = 0.6
 MIN_TICKS_BETWEEN_SLEEP_GOALS: int = 40_000
+
+CHRONIC_PHYSIO_GOAL_INTERVAL_TICKS: int = 1_500
+
+MEAL_BODY_SIGNAL_TYPES = {
+    "WEAK_FROM_HUNGER_AND_THIRST",
+    "NEEDS_OVERWHELMING",
+}
+
+WATER_BODY_SIGNAL_TYPES = {
+    "THIRSTY",
+    "VERY_THIRSTY",
+    "EXTREMELY_THIRSTY",
+    "WEAK_FROM_HUNGER_AND_THIRST",
+    "NEEDS_OVERWHELMING",
+}
+
+REST_BODY_SIGNAL_TYPES = {
+    "NEEDS_OVERWHELMING",
+    "WEAK_FROM_HUNGER_AND_THIRST",
+}
 
 ENV_UNCOMFORTABLE_THRESHOLD = 0.3
 ENV_COMFORTABLE_THRESHOLD = 0.7
@@ -231,6 +252,69 @@ def maybe_create_rest_goal(world, agent: AgentState) -> None:
         metadata={},
     )
     agent.goals.append(goal)
+
+
+def _body_signal_types_in_short_term(agent: AgentState) -> set[str]:
+    signal_types: set[str] = set()
+    for episode in agent.episodes.short_term:
+        if episode.channel != EpisodeChannel.BODY_SIGNAL and episode.verb != EpisodeVerb.BODY_SIGNAL:
+            continue
+        details = getattr(episode, "details", {}) or {}
+        signal_type = details.get("signal_type")
+        if isinstance(signal_type, str):
+            signal_types.add(signal_type)
+    return signal_types
+
+
+def _refresh_goal_priority_and_status(goal: Goal, priority: float, urgency: float, tick: int) -> None:
+    goal.priority = max(0.0, min(1.0, priority))
+    goal.urgency = max(0.0, min(1.0, urgency))
+    goal.last_updated_tick = tick
+    if goal.status == GoalStatus.PENDING:
+        goal.status = GoalStatus.ACTIVE
+
+
+def maybe_update_chronic_physiological_goals(world, agent: AgentState) -> None:
+    current_tick = getattr(world, "tick", getattr(world, "current_tick", 0))
+    if current_tick - agent.last_chronic_goal_tick < CHRONIC_PHYSIO_GOAL_INTERVAL_TICKS:
+        return
+
+    agent.last_chronic_goal_tick = current_tick
+    signal_types = _body_signal_types_in_short_term(agent)
+
+    def _has_signal(match_set: set[str]) -> bool:
+        return any(sig in match_set for sig in signal_types)
+
+    if _has_signal(MEAL_BODY_SIGNAL_TYPES):
+        maybe_create_get_meal_goal(world, agent)
+        hunger_priority = min(1.0, max(0.0, agent.physical.hunger_level / HUNGER_MAX))
+        for goal in agent.goals:
+            if goal.goal_type == GoalType.GET_MEAL_TODAY and goal.status in (
+                GoalStatus.PENDING,
+                GoalStatus.ACTIVE,
+            ):
+                _refresh_goal_priority_and_status(goal, hunger_priority, hunger_priority, current_tick)
+
+    if _has_signal(WATER_BODY_SIGNAL_TYPES):
+        maybe_create_get_water_goal(world, agent)
+        hydration_priority = min(1.0, max(0.0, 1.0 - agent.physical.hydration_level))
+        for goal in agent.goals:
+            if goal.goal_type == GoalType.GET_WATER_TODAY and goal.status in (
+                GoalStatus.PENDING,
+                GoalStatus.ACTIVE,
+            ):
+                _refresh_goal_priority_and_status(goal, hydration_priority, hydration_priority, current_tick)
+
+    if _has_signal(REST_BODY_SIGNAL_TYPES):
+        maybe_create_rest_goal(world, agent)
+        rest_priority = max(agent.physical.sleep_pressure, 0.6)
+        rest_urgency = max(0.0, min(1.0, agent.physical.sleep_pressure))
+        for goal in agent.goals:
+            if goal.goal_type == GoalType.REST_TONIGHT and goal.status in (
+                GoalStatus.PENDING,
+                GoalStatus.ACTIVE,
+            ):
+                _refresh_goal_priority_and_status(goal, rest_priority, rest_urgency, current_tick)
 
 
 def maybe_create_supervisor_report_goal(world, agent: AgentState) -> None:
