@@ -25,6 +25,7 @@ from .runtime.work_details import WorkDetailType
 from .world.environment import PlaceEnvironmentState
 from .world.survey_map import SurveyMap
 from .world.construction import ProjectLedger
+from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
 from .world.water import WellState
 from typing import TYPE_CHECKING
 
@@ -860,6 +861,10 @@ class WorldState:
     last_promotion_check_tick: int = 0
     projects: ProjectLedger = field(default_factory=ProjectLedger)
     stockpiles: Dict[str, float] = field(default_factory=dict)
+    expansion_planner_cfg: ExpansionPlannerConfig = field(default_factory=ExpansionPlannerConfig)
+    expansion_planner_state: ExpansionPlannerState = field(
+        default_factory=lambda: ExpansionPlannerState(next_plan_day=0)
+    )
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
