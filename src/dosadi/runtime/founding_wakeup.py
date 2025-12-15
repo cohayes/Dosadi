@@ -86,7 +86,8 @@ class FoundingWakeupReport:
 
 
 def _step_agent_movement(world: WorldState) -> None:
-    for agent in world.agents.values():
+    for agent_id in sorted(world.agents):
+        agent = world.agents[agent_id]
         if getattr(agent, "is_asleep", False):
             continue
         step_agent_movement_toward_target(agent, world)
@@ -127,7 +128,8 @@ def step_world_once(world: WorldState) -> None:
     memory_config = getattr(world, "memory_config", None) or MemoryConfig()
     world.memory_config = memory_config
 
-    for agent in world.agents.values():
+    for agent_id in sorted(world.agents):
+        agent = world.agents[agent_id]
         step_agent_sleep_wake(world, agent, tick, memory_config)
         step_agent_memory_maintenance(world, agent, tick, memory_config)
         chronic_update_agent_physical_state(world, agent)
@@ -469,6 +471,7 @@ def evaluate_founding_wakeup_success(
 def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> FoundingWakeupReport:
     """Run the documented Founding Wakeup MVP loop and evaluate milestones."""
 
+    random.seed(seed)
     world = generate_founding_wakeup_mvp(num_agents=num_agents, seed=seed)
     runtime_cfg = RuntimeConfig(max_ticks=max_ticks)
     world.runtime_config = runtime_cfg
