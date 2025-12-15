@@ -9,6 +9,7 @@ from .founding_wakeup import (
     run_founding_wakeup_mvp,
     step_world_once,
 )
+from .evolve import EvolveConfig, collect_kpis, evolve_seed
 from .protocol_authoring import handle_protocol_authoring, maybe_author_movement_protocols
 from .timewarp import TimewarpConfig, select_awake_set, step_day, step_to_day
 from .wakeup_prime import WakeupPrimeRuntimeConfig, run_wakeup_prime, step_wakeup_prime_once
@@ -20,6 +21,9 @@ __all__ = [
     "build_founding_wakeup_report",
     "run_founding_wakeup_from_config",
     "run_founding_wakeup_mvp",
+    "EvolveConfig",
+    "collect_kpis",
+    "evolve_seed",
     "run_wakeup_prime",
     "WakeupPrimeRuntimeConfig",
     "step_world_once",
