@@ -22,6 +22,8 @@ from dosadi.runtime.eating import (
     HUNGER_RATE_PER_TICK,
     HYDRATION_DECAY_PER_TICK,
 )
+from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
+from dosadi.runtime.scouting_config import ScoutConfig
 from dosadi.runtime.facility_updates import update_facilities_for_day
 from dosadi.world.construction import apply_project_work
 from dosadi.world.expansion_planner import (
@@ -134,10 +136,13 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
     cfg = cfg or TimewarpConfig()
     ticks_per_day = _get_ticks_per_day(world)
     elapsed_ticks = max(0, int(days)) * ticks_per_day
+    total_days = max(1, int(days))
 
     awake_ids = select_awake_set(world, cfg)
     awake_set = set(awake_ids)
-    ambient_ids = [aid for aid in sorted(getattr(world, "agents", {}).keys()) if aid not in awake_set]
+    ambient_ids = [
+        aid for aid in sorted(getattr(world, "agents", {}).keys()) if aid not in awake_set
+    ]
 
     for agent_id in awake_ids:
         agent = world.agents[agent_id]
@@ -160,15 +165,16 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
     )
 
     current_day = getattr(world, "day", 0)
-    update_facilities_for_day(world, day=current_day, days=max(1, int(days)))
-    for offset in range(max(1, int(days))):
+    planner_cfg = getattr(world, "expansion_planner_cfg", ExpansionPlannerConfig())
+    planner_state = getattr(world, "expansion_planner_state", ExpansionPlannerState(next_plan_day=0))
+    world.expansion_planner_cfg = planner_cfg
+    world.expansion_planner_state = planner_state
+    scout_cfg = getattr(world, "scout_cfg", None) or ScoutConfig()
+    for offset in range(total_days):
         world.day = current_day + offset
-        planner_cfg = getattr(world, "expansion_planner_cfg", ExpansionPlannerConfig())
-        planner_state = getattr(
-            world, "expansion_planner_state", ExpansionPlannerState(next_plan_day=0)
-        )
-        world.expansion_planner_cfg = planner_cfg
-        world.expansion_planner_state = planner_state
+        maybe_create_scout_missions(world, cfg=scout_cfg)
+        step_scout_missions_for_day(world, day=world.day, cfg=scout_cfg)
+        update_facilities_for_day(world, day=world.day, days=1)
         maybe_plan(world, cfg=planner_cfg, state=planner_state)
 
     _advance_clock(world, elapsed_ticks=elapsed_ticks, ticks_per_day=ticks_per_day)

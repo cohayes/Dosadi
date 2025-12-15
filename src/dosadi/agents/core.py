@@ -451,6 +451,8 @@ class AgentState:
     last_chronic_goal_tick: int = -1500
 
     has_basic_suit: bool = False
+    is_on_mission: bool = False
+    last_scout_day: int = -1
     assignment_role: Optional[str] = None
     bunk_location_id: Optional[str] = None
 

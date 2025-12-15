@@ -20,10 +20,12 @@ from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
 from .world.facilities import FacilityLedger
 from .world.logistics import LogisticsLedger
+from .world.scout_missions import ScoutMissionLedger
 from .simulation.snapshots import serialize_state
 from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from .runtime.work_details import WorkDetailType
+from .runtime.scouting_config import ScoutConfig
 from .world.environment import PlaceEnvironmentState
 from .world.survey_map import SurveyMap
 from .world.construction import ProjectLedger
@@ -872,6 +874,9 @@ class WorldState:
     expansion_planner_state: ExpansionPlannerState = field(
         default_factory=lambda: ExpansionPlannerState(next_plan_day=0)
     )
+    scout_missions: ScoutMissionLedger = field(default_factory=ScoutMissionLedger)
+    scout_cfg: ScoutConfig = field(default_factory=ScoutConfig)
+    next_mission_seq: int = 0
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

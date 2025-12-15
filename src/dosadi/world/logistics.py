@@ -87,7 +87,7 @@ def estimate_travel_ticks(origin: str, dest: str, survey_map: SurveyMap) -> int:
         except (TypeError, ValueError):
             ticks = 10
         return ticks
-    return 10
+    return 1
 
 
 def _has_stock(stock: MutableMapping[str, float], items: Mapping[str, float]) -> bool:
