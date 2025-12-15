@@ -22,6 +22,7 @@ from dosadi.runtime.eating import (
     HUNGER_RATE_PER_TICK,
     HYDRATION_DECAY_PER_TICK,
 )
+from dosadi.world.construction import apply_project_work
 
 DEFAULT_TICKS_PER_DAY = 144_000
 
@@ -144,6 +145,8 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         if cfg.physiology_enabled:
             _integrate_agent_over_interval(agent, elapsed_ticks=elapsed_ticks, substeps=1)
         agent.physical.last_physical_update_tick = getattr(world, "tick", 0) + elapsed_ticks
+
+    apply_project_work(world, elapsed_hours=(elapsed_ticks / ticks_per_day) * 24.0, tick=getattr(world, "tick", 0) + elapsed_ticks)
 
     _advance_clock(world, elapsed_ticks=elapsed_ticks, ticks_per_day=ticks_per_day)
 
