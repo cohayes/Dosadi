@@ -24,10 +24,16 @@ def _to_jsonable_config(config: Any) -> Mapping[str, Any]:
         return {}
     if isinstance(config, Mapping):
         return dict(config)
+    if isinstance(config, Path):
+        return str(config)
     if is_dataclass(config):
-        return asdict(config)
+        return {k: _to_jsonable_config(v) for k, v in asdict(config).items()}
     if hasattr(config, "__dict__"):
-        return {key: value for key, value in vars(config).items() if not key.startswith("_")}
+        return {
+            key: _to_jsonable_config(value)
+            for key, value in vars(config).items()
+            if not key.startswith("_")
+        }
     return {"value": str(config)}
 
 

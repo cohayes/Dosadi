@@ -16,6 +16,7 @@ def test_evolve_seed_generates_milestones(tmp_path: Path) -> None:
         save_every_days=200,
         timewarp_cfg=TimewarpConfig(max_awake_agents=10),
         vault_dir=tmp_path / "vault",
+        runs_dir=tmp_path / "runs",
         seed_prefix="test-empire",
     )
 
@@ -35,6 +36,7 @@ def test_evolve_from_snapshot_resumes(tmp_path: Path) -> None:
         save_every_days=365,
         timewarp_cfg=TimewarpConfig(max_awake_agents=5),
         vault_dir=tmp_path / "vault",
+        runs_dir=tmp_path / "runs",
         seed_prefix="base-empire",
     )
     base_summary = evolve_seed(scenario_id="founding_wakeup_mvp", seed=3, cfg=base_cfg)
@@ -51,6 +53,7 @@ def test_evolve_from_snapshot_resumes(tmp_path: Path) -> None:
         save_every_days=365,
         timewarp_cfg=TimewarpConfig(max_awake_agents=5),
         vault_dir=tmp_path / "vault",
+        runs_dir=tmp_path / "runs",
         seed_prefix="resume-empire",
     )
 
