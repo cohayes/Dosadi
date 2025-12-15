@@ -388,6 +388,8 @@ class PhysicalState:
     is_sleeping: bool = False
     sleep_pressure: float = 0.0
     last_sleep_tick: int = 0
+    # Cadence control for chronic physiological updates (seeded for 10-tick cadence)
+    last_physical_update_tick: int = -10
 
 
 @dataclass
@@ -444,6 +446,9 @@ class AgentState:
     last_short_term_maintenance_tick: int = 0
     last_daily_promotion_tick: int = 0
     last_consolidation_tick: int = 0
+
+    # Cadence tracking for chronic physiological goal updates (meal/water/rest)
+    last_chronic_goal_tick: int = -1500
 
     has_basic_suit: bool = False
     assignment_role: Optional[str] = None

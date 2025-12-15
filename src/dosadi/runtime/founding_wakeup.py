@@ -22,11 +22,9 @@ from dosadi.runtime.agent_navigation import (
     step_agent_movement_toward_target,
 )
 from dosadi.runtime.eating import (
-    maybe_create_get_meal_goal,
-    maybe_create_get_water_goal,
-    maybe_create_rest_goal,
     maybe_create_supervisor_report_goal,
-    update_agent_physical_state,
+    maybe_update_chronic_physiological_goals,
+    chronic_update_agent_physical_state,
 )
 from dosadi.runtime.council_metrics import update_council_metrics_and_staffing
 from dosadi.memory.config import MemoryConfig
@@ -132,13 +130,11 @@ def step_world_once(world: WorldState) -> None:
     for agent in world.agents.values():
         step_agent_sleep_wake(world, agent, tick, memory_config)
         step_agent_memory_maintenance(world, agent, tick, memory_config)
-        update_agent_physical_state(world, agent)
+        chronic_update_agent_physical_state(world, agent)
         if not agent.physical.is_sleeping:
             agent.total_ticks_employed += 1.0
         maybe_update_desired_work_type(world, agent)
-        maybe_create_get_meal_goal(world, agent)
-        maybe_create_get_water_goal(world, agent)
-        maybe_create_rest_goal(world, agent)
+        maybe_update_chronic_physiological_goals(world, agent)
         maybe_create_supervisor_report_goal(world, agent)
 
     _step_agent_movement(world)
