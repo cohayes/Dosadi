@@ -24,6 +24,7 @@ from .world.scout_missions import ScoutMissionLedger
 from .simulation.snapshots import serialize_state
 from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
+from .runtime.staffing import StaffingState
 from .runtime.work_details import WorkDetailType
 from .runtime.scouting_config import ScoutConfig
 from .world.environment import PlaceEnvironmentState
@@ -31,6 +32,7 @@ from .world.survey_map import SurveyMap
 from .world.construction import ProjectLedger
 from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
 from .world.water import WellState
+from .world.workforce import WorkforceLedger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -877,6 +879,8 @@ class WorldState:
     scout_missions: ScoutMissionLedger = field(default_factory=ScoutMissionLedger)
     scout_cfg: ScoutConfig = field(default_factory=ScoutConfig)
     next_mission_seq: int = 0
+    workforce: WorkforceLedger = field(default_factory=WorkforceLedger)
+    staffing_state: StaffingState = field(default_factory=StaffingState)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
