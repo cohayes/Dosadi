@@ -1,54 +1,83 @@
 from __future__ import annotations
+from typing import Any, Iterable, Mapping
 
-from typing import Any, Dict
 
-
-def _ticks_per_day(world: Any) -> int:
-    ticks_per_day = getattr(world, "ticks_per_day", None)
+def _ticks_per_day(world) -> int:
+    ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", None)
     if ticks_per_day is None:
-        ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", None)
+        ticks_per_day = getattr(world, "ticks_per_day", 144_000)
     try:
-        ticks_per_day = int(ticks_per_day) if ticks_per_day is not None else None
-    except (TypeError, ValueError):
-        ticks_per_day = None
-    return max(1, ticks_per_day or 144_000)
+        return max(1, int(ticks_per_day))
+    except Exception:
+        return 144_000
 
 
-def collect_kpis(world: Any) -> Dict[str, object]:
+def _iter_agents(world) -> Iterable:
+    agents = getattr(world, "agents", None)
+    if isinstance(agents, Mapping):
+        return agents.values()
+    if agents is None:
+        return []
+    return agents
+
+
+def _mean_attr(agents: Iterable[Any], attr: str, *, fallback_attr: str | None = None) -> float:
+    values = []
+    for agent in agents:
+        target = getattr(agent, "physical", agent)
+        value = getattr(target, attr, None)
+        if value is None and fallback_attr:
+            value = getattr(target, fallback_attr, None)
+        if value is None:
+            continue
+        try:
+            values.append(float(value))
+        except Exception:
+            continue
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
+def collect_kpis(world) -> dict[str, Any]:
+    """Collect a stable, lightweight KPI snapshot from the world."""
+
+    tick = getattr(world, "tick", 0)
     ticks_per_day = _ticks_per_day(world)
-    day = getattr(world, "day", getattr(world, "tick", 0) // ticks_per_day)
+    day = tick // ticks_per_day
     year = day // 365
 
-    agents = getattr(world, "agents", {}) or {}
+    agents = list(_iter_agents(world))
     facilities = getattr(world, "facilities", {}) or {}
     groups = getattr(world, "groups", []) or []
-    protocols_registry = getattr(world, "protocols", None)
-    protocols_total = len(getattr(protocols_registry, "protocols_by_id", {}) or {})
+    protocols = getattr(getattr(world, "protocols", None), "protocols_by_id", {}) or {}
+    wards = getattr(world, "wards", {}) or {}
+    queues = getattr(world, "queues", {}) or {}
+    well = getattr(world, "well", None)
 
-    hunger_levels = []
-    hydration_levels = []
-    fatigue_levels = []
-    for agent in agents.values():
-        physical = getattr(agent, "physical", None)
-        if physical is None:
-            continue
-        hunger_levels.append(getattr(physical, "hunger_level", 0.0))
-        hydration_levels.append(getattr(physical, "hydration_level", 0.0))
-        fatigue_levels.append(getattr(physical, "sleep_pressure", 0.0))
-
-    def _avg(values):
-        return float(sum(values) / len(values)) if values else 0.0
+    agents_alive = 0
+    for agent in agents:
+        physical = getattr(agent, "physical", agent)
+        is_alive = getattr(physical, "is_alive", getattr(agent, "is_alive", True))
+        if is_alive is None:
+            is_alive = True
+        agents_alive += 1 if is_alive else 0
 
     return {
         "agents_total": len(agents),
-        "facilities_total": len(facilities),
+        "agents_alive": agents_alive,
         "groups_total": len(groups),
-        "protocols_total": protocols_total,
-        "avg_hunger": _avg(hunger_levels),
-        "avg_hydration": _avg(hydration_levels),
-        "avg_fatigue": _avg(fatigue_levels),
+        "facilities_total": len(facilities),
+        "protocols_total": len(protocols),
+        "wards_total": len(wards),
+        "queues_total": len(queues),
+        "avg_hunger": _mean_attr(agents, "hunger_level"),
+        "avg_thirst": _mean_attr(agents, "hydration_level", fallback_attr="thirst"),
+        "avg_fatigue": _mean_attr(agents, "fatigue", fallback_attr="sleep_pressure"),
+        "water_total": getattr(well, "daily_capacity", 0.0) if well is not None else 0.0,
         "day": day,
         "year": year,
+        "tick": tick,
     }
 
 
