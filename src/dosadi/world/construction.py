@@ -13,6 +13,12 @@ from hashlib import sha256
 from typing import Dict, MutableMapping, Optional
 
 from dosadi.world.facilities import Facility, FacilityLedger, ensure_facility_ledger
+from dosadi.world.logistics import (
+    DeliveryRequest,
+    DeliveryStatus,
+    ensure_logistics,
+    process_logistics_until,
+)
 
 
 class ProjectStatus(Enum):
@@ -106,24 +112,40 @@ def _agent_skill_factor(world, agent_id: str) -> float:
     return max(0.1, (getattr(attrs, "INT", 10) + getattr(attrs, "END", 10)) / 20.0)
 
 
-def _can_reserve_materials(stock: MutableMapping[str, float], required: Dict[str, float]) -> bool:
-    for material, qty in required.items():
-        if stock.get(material, 0.0) < qty:
-            return False
-    return True
+def _materials_met(project: ConstructionProject) -> bool:
+    return all(
+        project.materials_delivered.get(material, 0.0) >= qty
+        for material, qty in project.cost.materials.items()
+    )
+
+
+def _ensure_delivery_request(world, project: ConstructionProject, tick: int) -> DeliveryRequest:
+    logistics = ensure_logistics(world)
+    delivery_id = f"delivery:{project.project_id}:v1"
+    if delivery_id in logistics.deliveries:
+        return logistics.deliveries[delivery_id]
+
+    origin = getattr(world, "central_depot_node_id", "loc:depot-water-1")
+    delivery = DeliveryRequest(
+        delivery_id=delivery_id,
+        project_id=project.project_id,
+        origin_node_id=origin,
+        dest_node_id=project.site_node_id,
+        items=dict(project.cost.materials),
+        status=DeliveryStatus.REQUESTED,
+        created_tick=tick,
+    )
+    logistics.add(delivery)
+    return delivery
 
 
 def stage_project_if_ready(world, project: ConstructionProject, tick: int) -> bool:
-    if project.status != ProjectStatus.APPROVED:
+    if project.status not in {ProjectStatus.APPROVED, ProjectStatus.STAGED}:
         return False
 
-    stockpiles: MutableMapping[str, float] = getattr(world, "stockpiles", {})
-    if not _can_reserve_materials(stockpiles, project.cost.materials):
+    _ensure_delivery_request(world, project, tick)
+    if not _materials_met(project):
         return False
-
-    for material, qty in project.cost.materials.items():
-        stockpiles[material] = stockpiles.get(material, 0.0) - qty
-        project.materials_delivered[material] = project.materials_delivered.get(material, 0.0) + qty
 
     project.status = ProjectStatus.STAGED
     project.last_tick = tick
@@ -178,9 +200,14 @@ def _maybe_complete(world, project: ConstructionProject, tick: int) -> None:
 
 
 def process_projects(world, *, tick: Optional[int] = None) -> None:
-    current_tick = tick if tick is not None else getattr(world, "tick", 0)
-    hours = _hours_per_tick(world)
+    base_tick = getattr(world, "tick", 0)
+    current_tick = tick if tick is not None else base_tick
     ledger: ProjectLedger = getattr(world, "projects", ProjectLedger())
+    for project in ledger.projects.values():
+        if project.status == ProjectStatus.APPROVED:
+            _ensure_delivery_request(world, project, base_tick)
+    process_logistics_until(world, target_tick=current_tick, current_tick=base_tick)
+    hours = _hours_per_tick(world)
 
     for project in ledger.projects.values():
         if project.status == ProjectStatus.CANCELED:
@@ -198,8 +225,13 @@ def process_projects(world, *, tick: Optional[int] = None) -> None:
 
 
 def apply_project_work(world, *, elapsed_hours: float, tick: Optional[int] = None) -> None:
-    current_tick = tick if tick is not None else getattr(world, "tick", 0)
+    base_tick = getattr(world, "tick", 0)
+    current_tick = tick if tick is not None else base_tick
     ledger: ProjectLedger = getattr(world, "projects", ProjectLedger())
+    for project in ledger.projects.values():
+        if project.status == ProjectStatus.APPROVED:
+            _ensure_delivery_request(world, project, base_tick)
+    process_logistics_until(world, target_tick=current_tick, current_tick=base_tick)
 
     for project in ledger.projects.values():
         if project.status in {ProjectStatus.CANCELED, ProjectStatus.COMPLETE}:

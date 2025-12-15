@@ -19,6 +19,7 @@ from .admin_log import AdminEventLog
 from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
 from .world.facilities import FacilityLedger
+from .world.logistics import LogisticsLedger
 from .simulation.snapshots import serialize_state
 from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
@@ -858,6 +859,11 @@ class WorldState:
     runtime_config: Any = None
     basic_suit_stock: int = 0
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
+    logistics: LogisticsLedger = field(default_factory=LogisticsLedger)
+    delivery_due_queue: List[tuple[int, str]] = field(default_factory=list)
+    carriers_available: int = 1
+    next_carrier_seq: int = 0
+    central_depot_node_id: str = "loc:depot-water-1"
     last_proto_council_tuning_day: int = -1
     last_promotion_check_tick: int = 0
     projects: ProjectLedger = field(default_factory=ProjectLedger)

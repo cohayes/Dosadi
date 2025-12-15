@@ -43,6 +43,7 @@ def test_state_machine_progression() -> None:
     world.config.tick_seconds = 3600.0
     world.stockpiles = {"polymer": 60.0, "metal": 30.0}
     world.projects = ProjectLedger()
+    world.central_depot_node_id = "loc:survey-1"
 
     agent = _make_agent("a-1")
     world.agents[agent.agent_id] = agent
@@ -51,8 +52,7 @@ def test_state_machine_progression() -> None:
     project.status = ProjectStatus.APPROVED
     world.projects.add_project(project)
 
-    assert stage_project_if_ready(world, project, 0)
-    assert world.stockpiles["polymer"] == 10.0
+    assert not stage_project_if_ready(world, project, 0)
     project.assigned_agents.append(agent.agent_id)
 
     for tick in range(12):
@@ -68,7 +68,7 @@ def test_resource_nonnegativity() -> None:
     project = _make_project()
     project.status = ProjectStatus.APPROVED
 
-    assert not stage_project_if_ready(world, project, 0)
+    process_projects(world, tick=0)
     assert world.stockpiles["polymer"] == 10.0
     assert project.status == ProjectStatus.APPROVED
 
@@ -78,6 +78,7 @@ def test_deterministic_signature() -> None:
     base_world.config.tick_seconds = 1800.0
     base_world.stockpiles = {"polymer": 80.0, "metal": 40.0}
     base_world.projects = ProjectLedger()
+    base_world.central_depot_node_id = "loc:survey-1"
     agent = _make_agent("a-1")
     base_world.agents[agent.agent_id] = agent
 
@@ -106,6 +107,7 @@ def test_snapshot_roundtrip_continues_build() -> None:
     world.config.tick_seconds = 3600.0
     world.stockpiles = {"polymer": 60.0, "metal": 20.0}
     world.projects = ProjectLedger()
+    world.central_depot_node_id = "loc:survey-1"
     agent = _make_agent("a-1")
     world.agents[agent.agent_id] = agent
 
