@@ -7,6 +7,7 @@ from dosadi.agents.core import AgentState
 from dosadi.runtime.eating import chronic_update_agent_physical_state
 from dosadi.runtime.timewarp import step_day
 from dosadi.state import WorldState
+from dosadi.testing.kpis import collect_kpis
 
 
 def _build_world(seed: int, agent_count: int) -> WorldState:
@@ -24,21 +25,6 @@ def _build_world(seed: int, agent_count: int) -> WorldState:
     return world
 
 
-def _collect_kpis(world: WorldState) -> dict:
-    agents = list(world.agents.values())
-    hunger_values = [a.physical.hunger_level for a in agents]
-    hydration_values = [a.physical.hydration_level for a in agents]
-    sleep_pressures = [a.physical.sleep_pressure for a in agents]
-
-    return {
-        "tick": world.tick,
-        "total_agents": len(agents),
-        "avg_hunger": sum(hunger_values) / len(hunger_values),
-        "avg_hydration": sum(hydration_values) / len(hydration_values),
-        "avg_sleep_pressure": sum(sleep_pressures) / len(sleep_pressures),
-    }
-
-
 def test_timewarp_step_day_matches_tick_mode_kpis_small_world():
     world_tick = _build_world(seed=42, agent_count=4)
     ticks_per_day = world_tick.config.ticks_per_day
@@ -49,15 +35,15 @@ def test_timewarp_step_day_matches_tick_mode_kpis_small_world():
             chronic_update_agent_physical_state(world_tick, world_tick.agents[agent_id], world_tick.rng)
     world_tick.tick = ticks_per_day
 
-    baseline_kpis = _collect_kpis(world_tick)
+    baseline_kpis = collect_kpis(world_tick)
 
     world_macro = _build_world(seed=42, agent_count=4)
     step_day(world_macro, days=1)
 
-    macro_kpis = _collect_kpis(world_macro)
+    macro_kpis = collect_kpis(world_macro)
 
     assert world_macro.tick == ticks_per_day
-    assert macro_kpis["total_agents"] == baseline_kpis["total_agents"]
+    assert macro_kpis["agents_total"] == baseline_kpis["agents_total"]
     assert macro_kpis["tick"] == baseline_kpis["tick"]
     assert macro_kpis["avg_hunger"] == pytest.approx(baseline_kpis["avg_hunger"], abs=0.02)
     assert macro_kpis["avg_hydration"] == pytest.approx(baseline_kpis["avg_hydration"], abs=0.02)

@@ -11,6 +11,7 @@ from dosadi.runtime.snapshot import (
     save_snapshot,
     snapshot_world,
 )
+from dosadi.testing.kpis import collect_kpis
 
 
 def _manifest_path(vault_dir: Path) -> Path:
@@ -42,20 +43,7 @@ def list_seeds(vault_dir: Path) -> List[Dict[str, Any]]:
 
 
 def _compute_kpis(world) -> Dict[str, Any]:
-    ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", None)
-    if ticks_per_day is None:
-        ticks_per_day = getattr(world, "ticks_per_day", 144_000)
-    ticks_per_day = max(1, int(ticks_per_day))
-
-    return {
-        "agents_total": len(getattr(world, "agents", {})),
-        "groups_total": len(getattr(world, "groups", [])),
-        "protocols_total": len(getattr(getattr(world, "protocols", None), "protocols_by_id", {})),
-        "facilities_total": len(getattr(world, "facilities", {})),
-        "water_total": getattr(getattr(world, "well", None), "daily_capacity", 0.0),
-        "ward_count": len(getattr(world, "wards", {})),
-        "day": getattr(world, "tick", 0) // ticks_per_day,
-    }
+    return collect_kpis(world)
 
 
 def save_seed(
