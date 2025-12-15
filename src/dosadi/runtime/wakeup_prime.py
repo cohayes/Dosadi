@@ -166,6 +166,7 @@ def run_wakeup_prime(
 ) -> WakeupPrimeReport:
     """Generate and run Wakeup Scenario Prime."""
 
+    random.seed(seed)
     scenario_config = WakeupPrimeScenarioConfig(
         num_agents=num_agents,
         seed=seed,

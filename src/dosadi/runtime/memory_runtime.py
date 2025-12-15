@@ -123,11 +123,23 @@ def step_agent_sleep_wake(
     Toggle agent sleep/wake based on next_sleep_tick / next_wake_tick,
     and trigger consolidation when entering sleep.
     """
-    if agent.physical.is_sleeping:
-        agent.is_asleep = True
+    if agent.is_asleep and tick >= agent.next_wake_tick:
+        agent.is_asleep = False
+        agent.physical.is_sleeping = False
+        agent.next_sleep_tick = tick + config.wake_duration_ticks
+        agent.next_wake_tick = agent.next_sleep_tick + config.sleep_duration_ticks
+        agent.physical.last_sleep_tick = tick
         return
 
-    agent.is_asleep = False
+    if tick >= agent.next_sleep_tick and tick < agent.next_wake_tick:
+        agent.is_asleep = True
+        agent.physical.is_sleeping = True
+        agent.physical.last_sleep_tick = tick
+        promote_daily_memory(agent, tick, config, force=True)
+        run_sleep_consolidation(agent, tick, config)
+        return
+
+    agent.is_asleep = getattr(agent.physical, "is_sleeping", False)
 
 
 def run_sleep_consolidation(
