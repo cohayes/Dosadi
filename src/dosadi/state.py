@@ -24,6 +24,7 @@ from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from .runtime.work_details import WorkDetailType
 from .world.environment import PlaceEnvironmentState
 from .world.survey_map import SurveyMap
+from .world.construction import ProjectLedger
 from .world.water import WellState
 from typing import TYPE_CHECKING
 
@@ -857,6 +858,8 @@ class WorldState:
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
     last_proto_council_tuning_day: int = -1
     last_promotion_check_tick: int = 0
+    projects: ProjectLedger = field(default_factory=ProjectLedger)
+    stockpiles: Dict[str, float] = field(default_factory=dict)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

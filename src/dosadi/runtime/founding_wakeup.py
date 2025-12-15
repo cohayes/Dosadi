@@ -38,6 +38,7 @@ from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 from dosadi.runtime.protocols import update_protocol_adoption_metrics
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
+from dosadi.world.construction import process_projects
 from dosadi.runtime.work_details import ensure_scout_detail_for_gather_goal
 from dosadi.state import WorldState
 from dosadi.world.scenarios.founding_wakeup import generate_founding_wakeup_mvp
@@ -150,6 +151,7 @@ def step_world_once(world: WorldState) -> None:
     _maybe_run_proto_council(world, tick)
     update_protocol_adoption_metrics(world, tick)
     update_council_metrics_and_staffing(world)
+    process_projects(world, tick=tick)
 
     world.tick += 1
 

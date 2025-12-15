@@ -21,6 +21,7 @@ from dosadi.law import FacilityProtocolTuning
 from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
 from dosadi.state import WorldState
+from dosadi.world.construction import ProjectLedger
 from dosadi.world.layout_prime import DEFAULT_PODS, build_habitat_layout_prime
 
 
@@ -186,6 +187,9 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
     )
     world = WorldState(seed=config.seed)
     world.rng.seed(config.seed)
+
+    # Initialize construction ledger for expansion tasks
+    world.projects = ProjectLedger()
 
     memory_config = MemoryConfig()
     world.memory_config = memory_config

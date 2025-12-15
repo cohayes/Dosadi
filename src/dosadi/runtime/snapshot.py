@@ -258,6 +258,14 @@ def world_signature(world: Any) -> str:
         "active": sum(1 for p in protocols.values() if getattr(p, "status", None) == ProtocolStatus.ACTIVE),
     }
 
+    projects = getattr(world, "projects", None)
+    project_signature = ""
+    if projects is not None and hasattr(projects, "signature"):
+        try:
+            project_signature = projects.signature()
+        except Exception:
+            project_signature = ""
+
     canonical = {
         "tick": getattr(world, "tick", 0),
         "seed": getattr(world, "seed", 0),
@@ -266,6 +274,7 @@ def world_signature(world: Any) -> str:
         "protocols": protocol_summary,
         "groups": len(getattr(world, "groups", [])),
         "wards": len(getattr(world, "wards", {})),
+        "projects": project_signature,
     }
     return sha256(_canonical_dumps(canonical).encode("utf-8")).hexdigest()
 
