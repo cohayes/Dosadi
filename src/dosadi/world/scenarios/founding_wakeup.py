@@ -20,6 +20,7 @@ from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueS
 from ...state import FactionState, WorldState
 from ..environment import get_or_create_place_env
 from ..constants import WATER_DAILY_CAPACITY
+from ..survey_map import SurveyNode
 
 
 @dataclass(frozen=True)
@@ -257,6 +258,9 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
 
     world = WorldState(seed=seed)
     world.rng.seed(seed)
+    planner_cfg = world.expansion_planner_cfg
+    planner_state = world.expansion_planner_state
+    planner_state.next_plan_day = seed % max(1, planner_cfg.planning_interval_days)
     memory_config = MemoryConfig()
     world.memory_config = memory_config
     world.well.daily_capacity = WATER_DAILY_CAPACITY
@@ -329,6 +333,20 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
             "risk_protocol_feedback",
         ),
     }
+
+    world.survey_map.upsert_node(
+        SurveyNode(
+            node_id="loc:survey-outpost-1",
+            kind="outpost_site",
+            ward_id=WELL_CORE_ID,
+            water=5.0,
+            hazard=0.1,
+            tags=("resource_rich",),
+            confidence=0.8,
+            last_seen_tick=world.tick,
+        ),
+        confidence_delta=0.2,
+    )
 
     initialize_environment_for_founding_wakeup(world)
 

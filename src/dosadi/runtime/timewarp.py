@@ -23,6 +23,11 @@ from dosadi.runtime.eating import (
     HYDRATION_DECAY_PER_TICK,
 )
 from dosadi.world.construction import apply_project_work
+from dosadi.world.expansion_planner import (
+    ExpansionPlannerConfig,
+    ExpansionPlannerState,
+    maybe_plan,
+)
 
 DEFAULT_TICKS_PER_DAY = 144_000
 
@@ -147,6 +152,17 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         agent.physical.last_physical_update_tick = getattr(world, "tick", 0) + elapsed_ticks
 
     apply_project_work(world, elapsed_hours=(elapsed_ticks / ticks_per_day) * 24.0, tick=getattr(world, "tick", 0) + elapsed_ticks)
+
+    current_day = getattr(world, "day", 0)
+    for offset in range(max(1, int(days))):
+        world.day = current_day + offset
+        planner_cfg = getattr(world, "expansion_planner_cfg", ExpansionPlannerConfig())
+        planner_state = getattr(
+            world, "expansion_planner_state", ExpansionPlannerState(next_plan_day=0)
+        )
+        world.expansion_planner_cfg = planner_cfg
+        world.expansion_planner_state = planner_state
+        maybe_plan(world, cfg=planner_cfg, state=planner_state)
 
     _advance_clock(world, elapsed_ticks=elapsed_ticks, ticks_per_day=ticks_per_day)
 
