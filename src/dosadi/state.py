@@ -23,6 +23,7 @@ from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from .runtime.work_details import WorkDetailType
 from .world.environment import PlaceEnvironmentState
+from .world.survey_map import SurveyMap
 from .world.water import WellState
 from typing import TYPE_CHECKING
 
@@ -818,6 +819,7 @@ class WorldState:
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
     facilities: MutableMapping[str, Any] = field(default_factory=dict)
     places: MutableMapping[str, Any] = field(default_factory=dict)
+    survey_map: SurveyMap = field(default_factory=SurveyMap)
     crews: Dict[str, CrewState] = field(default_factory=dict)
     water_tap_sources: Dict[str, str] = field(default_factory=dict)
     facility_queues: MutableMapping[str, "FacilityQueueState"] = field(default_factory=dict)

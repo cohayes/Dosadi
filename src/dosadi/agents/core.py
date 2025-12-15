@@ -1317,6 +1317,7 @@ def _handle_scout_interior(
     rng: random.Random,
 ) -> None:
     from dosadi.memory.episode_factory import EpisodeFactory
+    from dosadi.world.survey_map import SurveyMap
 
     work_type = WorkDetailType.SCOUT_INTERIOR
 
@@ -1358,6 +1359,7 @@ def _handle_scout_interior(
     gather_goal_meta["ticks_active"] = gather_goal_meta.get("ticks_active", 0) + 1
 
     target_edges = []
+    previous_location_id = agent.location_id
     if hasattr(goal, "metadata"):
         target_edges = list(goal.metadata.get("target_edges", []))
     if not target_edges and gather_goal is not None:
@@ -1367,6 +1369,7 @@ def _handle_scout_interior(
     neighbors = _neighbors_for_location(world, agent.location_id)
     chosen_neighbor = None
     chosen_edge_id = None
+    chosen_edge = None
     targeted_neighbors: List[Tuple[str, str]] = []
     for loc in neighbors:
         edge = _edge_lookup(agent.location_id, loc, topology)
@@ -1378,13 +1381,26 @@ def _handle_scout_interior(
         chosen_neighbor, chosen_edge_id = rng.choice(targeted_neighbors)
     elif neighbors:
         chosen_neighbor = rng.choice(neighbors)
-        edge = _edge_lookup(agent.location_id, chosen_neighbor, topology)
-        chosen_edge_id = edge.get("id") if edge else None
+    if chosen_neighbor:
+        chosen_edge = _edge_lookup(agent.location_id, chosen_neighbor, topology)
+        chosen_edge_id = chosen_edge.get("id") if chosen_edge else chosen_edge_id
 
     if chosen_neighbor:
         agent.location_id = chosen_neighbor
 
     current_tick = getattr(world, "tick", 0)
+    survey_map = getattr(world, "survey_map", None)
+    if survey_map is None:
+        survey_map = SurveyMap()
+    _record_scout_observation(
+        world=world,
+        survey=survey_map,
+        current_location_id=agent.location_id,
+        previous_location_id=previous_location_id if chosen_neighbor else None,
+        edge_data=chosen_edge,
+        tick=current_tick,
+    )
+    world.survey_map = survey_map
     factory = EpisodeFactory(world=world)
 
     if chosen_edge_id and chosen_edge_id in target_edges:
@@ -1428,6 +1444,60 @@ def _handle_scout_interior(
             estimated_wait_ticks=0,
         )
         agent.record_episode(episode)
+
+
+def _record_scout_observation(
+    *,
+    world: "WorldState",
+    survey: "SurveyMap",
+    current_location_id: str,
+    previous_location_id: Optional[str],
+    edge_data: Optional[Mapping[str, Any]],
+    tick: int,
+) -> None:
+    discovered_nodes = []
+
+    def node_payload(node_id: str) -> Mapping[str, object]:
+        place = getattr(world, "places", {}).get(node_id) or getattr(world, "nodes", {}).get(node_id)
+        kind = getattr(place, "kind", None) or getattr(place, "type", None) or "unknown"
+        tags = tuple(getattr(place, "tags", ()) or ())
+        ward_id = getattr(place, "ward_id", None)
+        hazard = float(getattr(place, "base_hazard_prob", 0.0))
+        water = float(getattr(place, "water_capacity", getattr(place, "water_stock", 0.0)) or 0.0)
+        return {
+            "node_id": node_id,
+            "kind": kind,
+            "ward_id": ward_id,
+            "tags": tags,
+            "hazard": hazard,
+            "water": water,
+            "confidence_delta": 0.1,
+        }
+
+    if previous_location_id and previous_location_id != current_location_id:
+        discovered_nodes.append(node_payload(previous_location_id))
+    discovered_nodes.append(node_payload(current_location_id))
+
+    discovered_edges = []
+    if previous_location_id and previous_location_id != current_location_id:
+        hazard = float(edge_data.get("base_hazard_prob", 0.0)) if edge_data else 0.0
+        distance = float(edge_data.get("distance_m", 1.0)) if edge_data else 1.0
+        travel_cost = float(edge_data.get("travel_cost", distance * (1.0 + hazard)))
+        discovered_edges.append(
+            {
+                "a": previous_location_id,
+                "b": current_location_id,
+                "distance_m": distance,
+                "travel_cost": travel_cost,
+                "hazard": hazard,
+                "confidence_delta": 0.1,
+            }
+        )
+
+    survey.merge_observation(
+        {"discovered_nodes": discovered_nodes, "discovered_edges": discovered_edges},
+        tick=tick,
+    )
 
 
 def _move_one_step_random_interior(
