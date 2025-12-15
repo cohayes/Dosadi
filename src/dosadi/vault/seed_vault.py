@@ -42,6 +42,10 @@ def list_seeds(vault_dir: Path) -> List[Dict[str, Any]]:
     return list(manifest.get("seeds", []))
 
 
+def _compute_kpis(world) -> Dict[str, Any]:
+    return collect_kpis(world)
+
+
 def save_seed(
     vault_dir: Path,
     world,
