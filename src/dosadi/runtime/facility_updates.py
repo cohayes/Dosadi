@@ -6,6 +6,7 @@ from typing import MutableMapping
 
 from dosadi.world.facilities import Facility, FacilityLedger, ensure_facility_ledger, get_facility_behavior
 from dosadi.world import stocks
+from dosadi.world.workforce import AssignmentKind, ensure_workforce
 
 
 def _effective_days(facility: Facility, *, day: int, days: int) -> int:
@@ -16,8 +17,11 @@ def _effective_days(facility: Facility, *, day: int, days: int) -> int:
     return target_end - start + 1
 
 
-def _apply_outputs(world, facility: Facility, behavior, days: int) -> None:
-    total_outputs = {item: qty * days for item, qty in behavior.outputs_per_day.items()}
+def _apply_outputs(world, facility: Facility, behavior, days: int, *, labor_ratio: float = 1.0) -> None:
+    total_outputs = {
+        item: qty * days * labor_ratio
+        for item, qty in behavior.outputs_per_day.items()
+    }
     for item, qty in total_outputs.items():
         stocks.add(world, item, qty)
 
@@ -40,6 +44,23 @@ def _consume_inputs(world, behavior, days: int) -> bool:
     return True
 
 
+def _staffing_ratio(world, facility: Facility, behavior) -> float:
+    if not getattr(behavior, "requires_labor", False):
+        return 1.0
+
+    target = max(1, getattr(behavior, "labor_agents", 1))
+    ledger = ensure_workforce(world)
+    assigned = sum(
+        1
+        for assignment in ledger.assignments.values()
+        if assignment.kind is AssignmentKind.FACILITY_STAFF
+        and assignment.target_id == facility.facility_id
+    )
+    if assigned <= 0:
+        return 0.0
+    return min(1.0, assigned / target)
+
+
 def update_facilities_for_day(world, *, day: int, days: int = 1) -> None:
     ledger: FacilityLedger = ensure_facility_ledger(world)
 
@@ -58,7 +79,9 @@ def update_facilities_for_day(world, *, day: int, days: int = 1) -> None:
 
         produced = _consume_inputs(world, behavior, active_days)
         if produced:
-            _apply_outputs(world, facility, behavior, active_days)
+            labor_ratio = _staffing_ratio(world, facility, behavior)
+            if labor_ratio > 0:
+                _apply_outputs(world, facility, behavior, active_days, labor_ratio=labor_ratio)
 
         facility.last_update_day = day + active_days - 1
 

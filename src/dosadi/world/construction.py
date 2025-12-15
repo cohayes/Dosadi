@@ -19,6 +19,7 @@ from dosadi.world.logistics import (
     ensure_logistics,
     process_logistics_until,
 )
+from dosadi.world.workforce import AssignmentKind, ensure_workforce
 
 
 class ProjectStatus(Enum):
@@ -112,6 +113,14 @@ def _agent_skill_factor(world, agent_id: str) -> float:
     return max(0.1, (getattr(attrs, "INT", 10) + getattr(attrs, "END", 10)) / 20.0)
 
 
+def _project_workers(ledger: WorkforceLedger, project_id: str) -> list[str]:
+    return sorted(
+        agent_id
+        for agent_id, assignment in ledger.assignments.items()
+        if assignment.kind is AssignmentKind.PROJECT_WORK and assignment.target_id == project_id
+    )
+
+
 def _materials_met(project: ConstructionProject) -> bool:
     return all(
         project.materials_delivered.get(material, 0.0) >= qty
@@ -152,11 +161,18 @@ def stage_project_if_ready(world, project: ConstructionProject, tick: int) -> bo
     return True
 
 
+def _sync_project_assignments(world, project: ConstructionProject) -> None:
+    ledger = ensure_workforce(world)
+    project.assigned_agents = _project_workers(ledger, project.project_id)
+
+
 def _apply_labor(world, project: ConstructionProject, elapsed_hours: float, tick: int) -> None:
     if elapsed_hours <= 0.0 or project.status != ProjectStatus.BUILDING:
         return
 
     labor_delta = 0.0
+    ledger = ensure_workforce(world)
+    project.assigned_agents = _project_workers(ledger, project.project_id)
     for agent_id in project.assigned_agents:
         labor_delta += elapsed_hours * _agent_skill_factor(world, agent_id)
 
@@ -197,6 +213,13 @@ def _maybe_complete(world, project: ConstructionProject, tick: int) -> None:
         _create_facility_stub(world, project)
         project.status = ProjectStatus.COMPLETE
         project.last_tick = tick
+        ledger = ensure_workforce(world)
+        for agent_id, assignment in list(ledger.assignments.items()):
+            if (
+                assignment.kind is AssignmentKind.PROJECT_WORK
+                and assignment.target_id == project.project_id
+            ):
+                ledger.unassign(agent_id)
 
 
 def process_projects(world, *, tick: Optional[int] = None) -> None:
@@ -216,6 +239,7 @@ def process_projects(world, *, tick: Optional[int] = None) -> None:
         if project.status == ProjectStatus.APPROVED:
             stage_project_if_ready(world, project, current_tick)
 
+        _sync_project_assignments(world, project)
         project.ensure_building()
 
         if project.status == ProjectStatus.BUILDING:
@@ -240,6 +264,7 @@ def apply_project_work(world, *, elapsed_hours: float, tick: Optional[int] = Non
         if project.status == ProjectStatus.APPROVED:
             stage_project_if_ready(world, project, current_tick)
 
+        _sync_project_assignments(world, project)
         project.ensure_building()
 
         if project.status == ProjectStatus.BUILDING:
