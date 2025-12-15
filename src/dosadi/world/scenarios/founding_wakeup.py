@@ -19,6 +19,7 @@ from dosadi.runtime.work_details import WorkDetailType
 from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
 from ...state import FactionState, WorldState
 from ..environment import get_or_create_place_env
+from ..facilities import Facility, FacilityLedger
 from ..constants import WATER_DAILY_CAPACITY
 from ..survey_map import SurveyNode
 
@@ -282,19 +283,25 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
     }
     world.nodes = {node.id: node for node in BASE_NODES}
     world.edges = {edge.id: edge for edge in BASE_EDGES}
-    world.facilities = {}
+    world.facilities = FacilityLedger()
     for node in BASE_NODES:
         if getattr(node, "kind", None):
-            world.facilities[node.id] = FacilityState(
-                id=node.id,
-                name=node.name,
-                type=node.type,
+            facility = Facility(
+                facility_id=node.id,
                 kind=node.kind,
-                location_id=node.id,
-                tags=node.tags,
-                water_stock=node.water_stock,
-                water_capacity=node.water_capacity,
+                site_node_id=node.id,
+                created_tick=world.tick,
+                state={
+                    "id": node.id,
+                    "name": node.name,
+                    "type": node.type,
+                    "location_id": node.id,
+                    "tags": node.tags,
+                    "water_stock": node.water_stock,
+                    "water_capacity": node.water_capacity,
+                },
             )
+            world.facilities.add(facility)
 
     for fac_id in world.facilities.keys():
         world.facility_protocol_tuning.setdefault(fac_id, FacilityProtocolTuning(facility_id=fac_id))

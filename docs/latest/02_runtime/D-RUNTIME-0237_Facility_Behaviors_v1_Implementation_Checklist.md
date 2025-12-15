@@ -22,6 +22,11 @@ v1 adds a minimal, deterministic **daily production/service** loop for a small s
 
 Designed to be handed directly to Codex.
 
+### Scope guardrails
+- v1 is about **outputs showing up** in the world loop, not about fine-tuned realism.
+- Prefer explicit, per-kind behaviors over a generic rule engine so macro determinism is obvious.
+- Lean on existing world structures (construction, stocks, macro-step) rather than inventing new ones.
+
 ---
 
 ## 0) Non-negotiables
@@ -109,6 +114,7 @@ If you already have a stock system, adapt facility updates to call it.
        - partial production (optional; v1 can be all-or-nothing)
     2) Consume inputs
     3) Produce outputs
+  - Maintain a simple per-kind metrics counter if useful for debugging (e.g., `world.metrics["facility_outputs"]`).
 
 ### C2. Integrate into runtime
 - Tick-mode: call `update_facilities_for_day` when day boundary passes.
@@ -167,6 +173,7 @@ Create `tests/test_facility_behaviors.py`.
 
 ### T4. Snapshot roundtrip
 - Save mid-run, load, run another day, compare to straight-through.
+  - Freeze RNG seeds inside the fixture to prove determinism survives serialization.
 
 ### T5. Integration with expansion planner
 - Run a short evolve where planner builds at least one facility.
