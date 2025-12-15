@@ -22,6 +22,7 @@ from dosadi.runtime.eating import (
     HUNGER_RATE_PER_TICK,
     HYDRATION_DECAY_PER_TICK,
 )
+from dosadi.runtime.facility_updates import update_facilities_for_day
 from dosadi.world.construction import apply_project_work
 from dosadi.world.expansion_planner import (
     ExpansionPlannerConfig,
@@ -151,9 +152,14 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
             _integrate_agent_over_interval(agent, elapsed_ticks=elapsed_ticks, substeps=1)
         agent.physical.last_physical_update_tick = getattr(world, "tick", 0) + elapsed_ticks
 
-    apply_project_work(world, elapsed_hours=(elapsed_ticks / ticks_per_day) * 24.0, tick=getattr(world, "tick", 0) + elapsed_ticks)
+    apply_project_work(
+        world,
+        elapsed_hours=(elapsed_ticks / ticks_per_day) * 24.0,
+        tick=getattr(world, "tick", 0) + elapsed_ticks,
+    )
 
     current_day = getattr(world, "day", 0)
+    update_facilities_for_day(world, day=current_day, days=max(1, int(days)))
     for offset in range(max(1, int(days))):
         world.day = current_day + offset
         planner_cfg = getattr(world, "expansion_planner_cfg", ExpansionPlannerConfig())

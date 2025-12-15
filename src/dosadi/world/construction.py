@@ -12,6 +12,8 @@ import json
 from hashlib import sha256
 from typing import Dict, MutableMapping, Optional
 
+from dosadi.world.facilities import Facility, FacilityLedger, ensure_facility_ledger
+
 
 class ProjectStatus(Enum):
     PROPOSED = "PROPOSED"
@@ -142,15 +144,16 @@ def _apply_labor(world, project: ConstructionProject, elapsed_hours: float, tick
 
 def _create_facility_stub(world, project: ConstructionProject) -> str:
     facility_id = f"fac:{project.project_id}"
-    facilities: MutableMapping[str, object] = getattr(world, "facilities", {})
+    facilities: FacilityLedger = ensure_facility_ledger(world)
     if facility_id not in facilities:
-        stub = {
-            "id": facility_id,
-            "kind": project.kind,
-            "site_node_id": project.site_node_id,
-            "project_id": project.project_id,
-        }
-        facilities[facility_id] = stub
+        facility = Facility(
+            facility_id=facility_id,
+            kind=project.kind,
+            site_node_id=project.site_node_id,
+            created_tick=project.created_tick,
+            state={"project_id": project.project_id},
+        )
+        facilities.add(facility)
         nodes: MutableMapping[str, object] = getattr(world, "nodes", {})
         nodes.setdefault(
             facility_id,

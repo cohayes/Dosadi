@@ -22,6 +22,7 @@ from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
 from dosadi.state import WorldState
 from dosadi.world.construction import ProjectLedger
+from dosadi.world.facilities import Facility, FacilityLedger
 from dosadi.world.layout_prime import DEFAULT_PODS, build_habitat_layout_prime
 
 
@@ -198,11 +199,24 @@ def generate_wakeup_scenario_prime(config: WakeupPrimeScenarioConfig) -> WakeupP
     world.nodes = layout.nodes
     world.edges = layout.edges
 
-    world.facilities = {
-        node_id: node
-        for node_id, node in layout.nodes.items()
-        if getattr(node, "kind", None) == "facility"
-    }
+    world.facilities = FacilityLedger()
+    for node_id, node in layout.nodes.items():
+        if getattr(node, "kind", None) == "facility":
+            facility = Facility(
+                facility_id=node_id,
+                kind=getattr(node, "kind", "facility"),
+                site_node_id=getattr(node, "site_node_id", node_id),
+                created_tick=world.tick,
+                state={
+                    "name": getattr(node, "name", node_id),
+                    "type": getattr(node, "type", "facility"),
+                    "tags": getattr(node, "tags", ()),
+                    "location_id": getattr(node, "location_id", node_id),
+                    "water_stock": getattr(node, "water_stock", 0.0),
+                    "water_capacity": getattr(node, "water_capacity", 0.0),
+                },
+            )
+            world.facilities.add(facility)
 
     world.service_facilities.setdefault("suit_issue", []).append("fac:suit-issue-1")
     world.service_facilities.setdefault("assignment_hall", []).append("fac:assign-hall-1")

@@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional,
 from .admin_log import AdminEventLog
 from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
+from .world.facilities import FacilityLedger
 from .simulation.snapshots import serialize_state
 from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
@@ -819,7 +820,7 @@ class WorldState:
     rumors: MutableMapping[str, RumorState] = field(default_factory=dict)
     events_outbox: List[str] = field(default_factory=list)
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
-    facilities: MutableMapping[str, Any] = field(default_factory=dict)
+    facilities: MutableMapping[str, Any] = field(default_factory=FacilityLedger)
     places: MutableMapping[str, Any] = field(default_factory=dict)
     survey_map: SurveyMap = field(default_factory=SurveyMap)
     crews: Dict[str, CrewState] = field(default_factory=dict)
