@@ -29,6 +29,7 @@ from dosadi.world.expansion_planner import (
     ExpansionPlannerState,
     maybe_plan,
 )
+from dosadi.world.logistics import process_logistics_until
 
 DEFAULT_TICKS_PER_DAY = 144_000
 
