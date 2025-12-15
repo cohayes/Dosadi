@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Mapping
+
+from dosadi.runtime.snapshot import (
+    WorldSnapshotV1,
+    load_snapshot,
+    restore_world,
+    save_snapshot,
+    snapshot_world,
+)
+
+
+def _manifest_path(vault_dir: Path) -> Path:
+    return vault_dir / "seeds" / "manifest.json"
+
+
+def _snapshots_dir(vault_dir: Path) -> Path:
+    return vault_dir / "seeds" / "snapshots"
+
+
+def load_manifest(vault_dir: Path) -> Dict[str, Any]:
+    path = _manifest_path(vault_dir)
+    if not path.exists():
+        return {"schema": "seed_vault_v1", "seeds": []}
+    with open(path, "r", encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def write_manifest(vault_dir: Path, manifest: Mapping[str, Any]) -> None:
+    path = _manifest_path(vault_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fp:
+        json.dump(manifest, fp, indent=2, sort_keys=True)
+
+
+def list_seeds(vault_dir: Path) -> List[Dict[str, Any]]:
+    manifest = load_manifest(vault_dir)
+    return list(manifest.get("seeds", []))
+
+
+def _compute_kpis(world) -> Dict[str, Any]:
+    ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", None)
+    if ticks_per_day is None:
+        ticks_per_day = getattr(world, "ticks_per_day", 144_000)
+    ticks_per_day = max(1, int(ticks_per_day))
+
+    return {
+        "agents_total": len(getattr(world, "agents", {})),
+        "groups_total": len(getattr(world, "groups", [])),
+        "protocols_total": len(getattr(getattr(world, "protocols", None), "protocols_by_id", {})),
+        "facilities_total": len(getattr(world, "facilities", {})),
+        "water_total": getattr(getattr(world, "well", None), "daily_capacity", 0.0),
+        "ward_count": len(getattr(world, "wards", {})),
+        "day": getattr(world, "tick", 0) // ticks_per_day,
+    }
+
+
+def save_seed(
+    vault_dir: Path,
+    world,
+    *,
+    seed_id: str,
+    scenario_id: str,
+    meta: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    manifest = load_manifest(vault_dir)
+    manifest.setdefault("seeds", [])
+
+    snapshot = snapshot_world(world, scenario_id=scenario_id)
+    snapshot_path = _snapshots_dir(vault_dir) / f"{seed_id}.json.gz"
+    snapshot_sha = save_snapshot(snapshot, snapshot_path, gzip_output=True)
+
+    entry = {
+        "seed_id": seed_id,
+        "scenario_id": scenario_id,
+        "parent_seed_id": meta.get("parent_seed_id") if meta else None,
+        "created_tick": snapshot.tick,
+        "elapsed_ticks": snapshot.tick,
+        "snapshot_path": str(snapshot_path.relative_to(vault_dir)),
+        "snapshot_sha256": snapshot_sha,
+        "kpis": _compute_kpis(world),
+    }
+    if meta:
+        entry.update({k: v for k, v in meta.items() if k not in entry})
+
+    manifest["schema"] = manifest.get("schema", "seed_vault_v1")
+    manifest["seeds"] = [s for s in manifest["seeds"] if s.get("seed_id") != seed_id]
+    manifest["seeds"].append(entry)
+    write_manifest(vault_dir, manifest)
+    return entry
+
+
+def load_seed(vault_dir: Path, *, seed_id: str):
+    manifest = load_manifest(vault_dir)
+    seeds = {entry.get("seed_id"): entry for entry in manifest.get("seeds", [])}
+    if seed_id not in seeds:
+        raise KeyError(f"seed '{seed_id}' not found in manifest")
+
+    entry = seeds[seed_id]
+    snapshot_path = vault_dir / entry["snapshot_path"]
+    snapshot = load_snapshot(snapshot_path)
+    world = restore_world(snapshot)
+    return world, snapshot, snapshot_path
+
+
+__all__ = [
+    "list_seeds",
+    "load_manifest",
+    "load_seed",
+    "save_seed",
+    "write_manifest",
+]
