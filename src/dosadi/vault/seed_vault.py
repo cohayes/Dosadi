@@ -69,7 +69,7 @@ def save_seed(
         "elapsed_ticks": snapshot.tick,
         "snapshot_path": str(snapshot_path.relative_to(vault_dir)),
         "snapshot_sha256": snapshot_sha,
-        "kpis": _compute_kpis(world),
+        "kpis": collect_kpis(world),
     }
     if meta:
         entry.update({k: v for k, v in meta.items() if k not in entry})
