@@ -1,0 +1,158 @@
+"""Timewarp / MacroStep helpers.
+
+Implements the first Timewarp slice (DayStep v1) described in
+D-RUNTIME-0232_Timewarp_MacroStep_Implementation_Checklist.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Optional
+
+from dosadi.agents.core import AgentState
+from dosadi.agents.physiology import (
+    SLEEP_BASE_ACCUM_PER_TICK,
+    SLEEP_HUNGER_MODIFIER,
+    SLEEP_STRESS_MODIFIER,
+    compute_needs_pressure,
+    update_stress_and_morale,
+)
+from dosadi.runtime.eating import (
+    HUNGER_MAX,
+    HUNGER_RATE_PER_TICK,
+    HYDRATION_DECAY_PER_TICK,
+)
+
+DEFAULT_TICKS_PER_DAY = 144_000
+
+
+@dataclass(slots=True)
+class TimewarpConfig:
+    max_awake_agents: int = 200
+    physiology_enabled: bool = True
+    economy_enabled: bool = False
+    memory_enabled: bool = False
+    health_enabled: bool = False
+    governance_enabled: bool = False
+
+
+def _get_ticks_per_day(world) -> int:
+    ticks_per_day = getattr(world, "ticks_per_day", None)
+    if ticks_per_day is None:
+        ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", None)
+    if ticks_per_day is None:
+        ticks_per_day = DEFAULT_TICKS_PER_DAY
+    try:
+        ticks_per_day = int(ticks_per_day)
+    except (TypeError, ValueError):
+        ticks_per_day = DEFAULT_TICKS_PER_DAY
+    return max(1, ticks_per_day)
+
+
+def _advance_clock(world, *, elapsed_ticks: int, ticks_per_day: int) -> None:
+    world.tick = getattr(world, "tick", 0) + elapsed_ticks
+    if hasattr(world, "day"):
+        world.day = world.tick // ticks_per_day
+
+
+def integrate_needs(agent: AgentState, *, elapsed_ticks: int) -> None:
+    physical = agent.physical
+    physical.hunger_level = min(
+        HUNGER_MAX, physical.hunger_level + HUNGER_RATE_PER_TICK * elapsed_ticks
+    )
+
+    hydration = physical.hydration_level - HYDRATION_DECAY_PER_TICK * elapsed_ticks
+    if hydration < 0.0:
+        hydration = 0.0
+    elif hydration > 1.0:
+        hydration = 1.0
+    physical.hydration_level = hydration
+
+
+def integrate_physiology(agent: AgentState, *, elapsed_ticks: int) -> None:
+    if elapsed_ticks <= 0:
+        return
+
+    integrate_needs(agent, elapsed_ticks=elapsed_ticks)
+
+    physical = agent.physical
+    needs_pressure = compute_needs_pressure(physical)
+    update_stress_and_morale(physical, needs_pressure)
+
+    # Accumulate sleep pressure using a coarse approximation of the per-tick rule.
+    base_sleep = elapsed_ticks * SLEEP_BASE_ACCUM_PER_TICK
+    hunger_term = max(0.0, physical.hunger_level) * SLEEP_HUNGER_MODIFIER
+    stress_term = max(0.0, physical.stress_level) * SLEEP_STRESS_MODIFIER
+    sleep_delta = base_sleep + (hunger_term + stress_term) * SLEEP_BASE_ACCUM_PER_TICK * elapsed_ticks
+
+    physical.sleep_pressure += sleep_delta
+    if physical.sleep_pressure > 1.0:
+        physical.sleep_pressure = 1.0
+
+
+def integrate_health(agent: AgentState, *, elapsed_days: int) -> None:
+    # Placeholder for future rollups.
+    return None
+
+
+def integrate_memory(agent: AgentState, *, elapsed_days: int) -> None:
+    # Placeholder for future rollups.
+    return None
+
+
+def select_awake_set(world, cfg: TimewarpConfig) -> List[str]:
+    agent_ids = sorted(getattr(world, "agents", {}).keys())
+    if len(agent_ids) <= cfg.max_awake_agents:
+        return agent_ids
+    return agent_ids[: cfg.max_awake_agents]
+
+
+def _integrate_agent_over_interval(
+    agent: AgentState, *, elapsed_ticks: int, substeps: int
+) -> None:
+    if elapsed_ticks <= 0:
+        return
+
+    step_ticks = max(1, elapsed_ticks // max(1, substeps))
+    remaining = elapsed_ticks
+
+    while remaining > 0:
+        step = min(step_ticks, remaining)
+        integrate_physiology(agent, elapsed_ticks=step)
+        remaining -= step
+
+
+def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> None:
+    cfg = cfg or TimewarpConfig()
+    ticks_per_day = _get_ticks_per_day(world)
+    elapsed_ticks = max(0, int(days)) * ticks_per_day
+
+    awake_ids = select_awake_set(world, cfg)
+    awake_set = set(awake_ids)
+    ambient_ids = [aid for aid in sorted(getattr(world, "agents", {}).keys()) if aid not in awake_set]
+
+    for agent_id in awake_ids:
+        agent = world.agents[agent_id]
+        if cfg.physiology_enabled:
+            _integrate_agent_over_interval(
+                agent, elapsed_ticks=elapsed_ticks, substeps=max(1, days * 24)
+            )
+        agent.physical.last_physical_update_tick = getattr(world, "tick", 0) + elapsed_ticks
+
+    for agent_id in ambient_ids:
+        agent = world.agents[agent_id]
+        if cfg.physiology_enabled:
+            _integrate_agent_over_interval(agent, elapsed_ticks=elapsed_ticks, substeps=1)
+        agent.physical.last_physical_update_tick = getattr(world, "tick", 0) + elapsed_ticks
+
+    _advance_clock(world, elapsed_ticks=elapsed_ticks, ticks_per_day=ticks_per_day)
+
+
+def step_to_day(world, *, target_day: int, cfg: Optional[TimewarpConfig] = None) -> None:
+    ticks_per_day = _get_ticks_per_day(world)
+    current_day = getattr(world, "tick", 0) // ticks_per_day
+    if target_day <= current_day:
+        return
+
+    days = target_day - current_day
+    step_day(world, days=days, cfg=cfg)

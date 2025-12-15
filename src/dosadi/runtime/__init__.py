@@ -10,6 +10,7 @@ from .founding_wakeup import (
     step_world_once,
 )
 from .protocol_authoring import handle_protocol_authoring, maybe_author_movement_protocols
+from .timewarp import TimewarpConfig, select_awake_set, step_day, step_to_day
 from .wakeup_prime import WakeupPrimeRuntimeConfig, run_wakeup_prime, step_wakeup_prime_once
 
 __all__ = [
@@ -25,4 +26,8 @@ __all__ = [
     "step_wakeup_prime_once",
     "handle_protocol_authoring",
     "maybe_author_movement_protocols",
+    "TimewarpConfig",
+    "select_awake_set",
+    "step_day",
+    "step_to_day",
 ]
