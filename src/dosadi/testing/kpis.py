@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
+from dosadi.runtime.snapshot import world_signature
+
 
 def _ticks_per_day(world) -> int:
     ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", None)
@@ -63,7 +65,7 @@ def collect_kpis(world) -> dict[str, Any]:
             is_alive = True
         agents_alive += 1 if is_alive else 0
 
-    return {
+    kpis = {
         "agents_total": len(agents),
         "agents_alive": agents_alive,
         "groups_total": len(groups),
@@ -72,6 +74,10 @@ def collect_kpis(world) -> dict[str, Any]:
         "wards_total": len(wards),
         "queues_total": len(queues),
         "avg_hunger": _mean_attr(agents, "hunger_level"),
+        "avg_hydration": _mean_attr(agents, "hydration_level", fallback_attr="thirst"),
+        "avg_sleep_pressure": _mean_attr(
+            agents, "sleep_pressure", fallback_attr="fatigue"
+        ),
         "avg_thirst": _mean_attr(agents, "hydration_level", fallback_attr="thirst"),
         "avg_fatigue": _mean_attr(agents, "fatigue", fallback_attr="sleep_pressure"),
         "water_total": getattr(well, "daily_capacity", 0.0) if well is not None else 0.0,
@@ -79,6 +85,12 @@ def collect_kpis(world) -> dict[str, Any]:
         "year": year,
         "tick": tick,
     }
+
+    runtime_cfg = getattr(world, "runtime_config", None)
+    if getattr(runtime_cfg, "kpi_signatures_enabled", False):
+        kpis["world_signature"] = world_signature(world)
+
+    return kpis
 
 
 __all__ = ["collect_kpis"]
