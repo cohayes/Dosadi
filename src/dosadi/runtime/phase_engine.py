@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from dosadi.world.construction import ProjectLedger, ProjectStatus
+from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
 from dosadi.world.facilities import FacilityLedger, get_facility_behavior
 from dosadi.world.logistics import DeliveryStatus, LogisticsLedger
 from dosadi.world.phases import KPISnapshot, PhaseConfig, PhaseState, WorldPhase
@@ -72,6 +73,14 @@ def update_kpi_ring(state: PhaseState, snap: KPISnapshot, *, max_len: int = 120)
         state.kpi_ring[:] = state.kpi_ring[-max_len:]
 
 
+def _ensure_event_log(world) -> WorldEventLog:
+    log: WorldEventLog | None = getattr(world, "event_log", None)
+    if not isinstance(log, WorldEventLog):
+        log = WorldEventLog(max_len=5000)
+        world.event_log = log
+    return log
+
+
 def _signals_for_phase0(cfg: PhaseConfig, snap: KPISnapshot) -> list[str]:
     signals: list[str] = []
     if snap.water_per_capita < cfg.water_per_capita_p0_to_p1:
@@ -102,6 +111,20 @@ def _apply_phase_policies(world, *, phase: WorldPhase) -> None:
     )
     apply_phase_to_logistics(world, phase)
     apply_phase_to_facilities(world, phase)
+
+
+def _emit_phase_event(world, *, day: int, prior: WorldPhase, new: WorldPhase) -> None:
+    log = _ensure_event_log(world)
+    event = WorldEvent(
+        event_id="",
+        day=day,
+        kind=EventKind.PHASE_TRANSITION,
+        subject_kind="phase",
+        subject_id=f"{int(prior)}->{int(new)}",
+        severity=0.0,
+        payload={"from": int(prior), "to": int(new)},
+    )
+    log.append(event)
 
 
 def maybe_advance_phase(world, *, day: int) -> KPISnapshot:
@@ -139,6 +162,7 @@ def maybe_advance_phase(world, *, day: int) -> KPISnapshot:
         })
         state.phase_day = day
         _apply_phase_policies(world, phase=state.phase)
+        _emit_phase_event(world, day=day, prior=current_phase, new=state.phase)
 
     world.phase_state = state
     return snap

@@ -19,6 +19,9 @@ from dosadi.agents.work_history import (
     ticks_to_proficiency,
     update_work_preference_after_shift,
 )
+from dosadi.agent.memory_crumbs import CrumbStore
+from dosadi.agent.memory_episodes import EpisodeBuffer
+from dosadi.agent.memory_stm import STMBoringWinner
 from dosadi.memory.episodes import EpisodeBuffers, EpisodeChannel
 from dosadi.memory.sleep_consolidation import consolidate_sleep_for_agent
 from dosadi.runtime.admin_log import AdminLogEntry, create_admin_log_id
@@ -458,6 +461,9 @@ class AgentState:
 
     goals: List[Goal] = field(default_factory=list)
     episodes: EpisodeBuffers = field(default_factory=EpisodeBuffers)
+    crumbs: CrumbStore = field(default_factory=CrumbStore)
+    episodes_daily: EpisodeBuffer = field(default_factory=EpisodeBuffer)
+    stm: STMBoringWinner = field(default_factory=lambda: STMBoringWinner(k=24))
 
     place_beliefs: Dict[str, PlaceBelief] = field(default_factory=dict)
 

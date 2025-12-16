@@ -10,6 +10,7 @@ from dosadi.world.facilities import FacilityLedger, ensure_facility_ledger
 from dosadi.world.incidents import Incident, IncidentKind, IncidentLedger
 from dosadi.world.logistics import DeliveryStatus, LogisticsLedger, _release_carrier
 from dosadi.world.phases import WorldPhase
+from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
 
 
 @dataclass(slots=True)
@@ -49,10 +50,12 @@ def _ensure_ledger(world: Any) -> IncidentLedger:
     return ledger
 
 
-def _ensure_event_log(world: Any) -> List[Dict[str, object]]:
-    events: List[Dict[str, object]] = getattr(world, "events", None) or []
-    world.events = events
-    return events
+def _ensure_event_log(world: Any) -> WorldEventLog:
+    log: WorldEventLog | None = getattr(world, "event_log", None)
+    if not isinstance(log, WorldEventLog):
+        log = WorldEventLog(max_len=5000)
+        world.event_log = log
+    return log
 
 
 def _phase(world: Any) -> WorldPhase:
@@ -99,18 +102,37 @@ def _add_history(ledger: IncidentLedger, inc_id: str, *, history_limit: int) -> 
 
 
 def _emit_event(world: Any, incident: Incident) -> None:
-    events = _ensure_event_log(world)
-    events.append(
-        {
-            "day": getattr(world, "day", 0),
-            "kind": "INCIDENT",
+    log = _ensure_event_log(world)
+    event = WorldEvent(
+        event_id="",
+        day=getattr(world, "day", 0),
+        kind=EventKind.INCIDENT,
+        subject_kind=incident.target_kind,
+        subject_id=incident.target_id,
+        severity=incident.severity,
+        payload={
             "incident_id": incident.incident_id,
             "incident_kind": incident.kind.value,
             "target_kind": incident.target_kind,
             "target_id": incident.target_id,
             "severity": incident.severity,
-        }
+        },
     )
+    log.append(event)
+    legacy_events = getattr(world, "events", None)
+    if isinstance(legacy_events, list):
+        legacy_events.append(
+            {
+                "day": event.day,
+                "kind": event.kind.value,
+                "incident_id": incident.incident_id,
+                "incident_kind": incident.kind.value,
+                "target_kind": incident.target_kind,
+                "target_id": incident.target_id,
+                "severity": incident.severity,
+            }
+        )
+        world.events = legacy_events
 
 
 def _schedule_delivery_incidents(
