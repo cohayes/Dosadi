@@ -26,6 +26,7 @@ from dosadi.runtime.belief_formation import run_belief_formation_for_day
 from dosadi.runtime.event_to_memory_router import run_router_for_day
 from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
 from dosadi.runtime.scouting_config import ScoutConfig
+from dosadi.runtime.staffing import StaffingConfig, StaffingState, run_staffing_policy
 from dosadi.runtime.facility_updates import update_facilities_for_day
 from dosadi.runtime.incident_engine import run_incident_engine_for_day
 from dosadi.world.construction import apply_project_work
@@ -172,16 +173,21 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
     planner_state = getattr(world, "expansion_planner_state", ExpansionPlannerState(next_plan_day=0))
     world.expansion_planner_cfg = planner_cfg
     world.expansion_planner_state = planner_state
+    staffing_cfg = getattr(world, "staffing_cfg", StaffingConfig())
+    staffing_state = getattr(world, "staffing_state", StaffingState())
+    world.staffing_cfg = staffing_cfg
+    world.staffing_state = staffing_state
     scout_cfg = getattr(world, "scout_cfg", None) or ScoutConfig()
     for offset in range(total_days):
         world.day = current_day + offset
         maybe_create_scout_missions(world, cfg=scout_cfg)
         step_scout_missions_for_day(world, day=world.day, cfg=scout_cfg)
         update_facilities_for_day(world, day=world.day, days=1)
-        maybe_plan(world, cfg=planner_cfg, state=planner_state)
         run_incident_engine_for_day(world, day=world.day)
         run_router_for_day(world, day=world.day)
         run_belief_formation_for_day(world, day=world.day)
+        maybe_plan(world, cfg=planner_cfg, state=planner_state)
+        run_staffing_policy(world, day=world.day, cfg=staffing_cfg, state=staffing_state)
 
     _advance_clock(world, elapsed_ticks=elapsed_ticks, ticks_per_day=ticks_per_day)
 

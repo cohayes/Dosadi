@@ -20,12 +20,12 @@ from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
 from .world.events import WorldEventLog
 from .world.facilities import FacilityLedger
-from .world.logistics import LogisticsLedger
+from .world.logistics import LogisticsConfig, LogisticsLedger
 from .world.scout_missions import ScoutMissionLedger
 from .simulation.snapshots import serialize_state
 from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
-from .runtime.staffing import StaffingState
+from .runtime.staffing import StaffingConfig, StaffingState
 from .runtime.work_details import WorkDetailType
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
@@ -879,6 +879,7 @@ class WorldState:
     basic_suit_stock: int = 0
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
     logistics: LogisticsLedger = field(default_factory=LogisticsLedger)
+    logistics_cfg: LogisticsConfig = field(default_factory=LogisticsConfig)
     delivery_due_queue: List[tuple[int, str]] = field(default_factory=list)
     carriers_available: int = 1
     next_carrier_seq: int = 0
@@ -898,6 +899,7 @@ class WorldState:
     scout_cfg: ScoutConfig = field(default_factory=ScoutConfig)
     next_mission_seq: int = 0
     workforce: WorkforceLedger = field(default_factory=WorkforceLedger)
+    staffing_cfg: StaffingConfig = field(default_factory=StaffingConfig)
     staffing_state: StaffingState = field(default_factory=StaffingState)
     incidents: IncidentLedger = field(default_factory=IncidentLedger)
     incident_cfg: IncidentConfig = field(default_factory=IncidentConfig)
