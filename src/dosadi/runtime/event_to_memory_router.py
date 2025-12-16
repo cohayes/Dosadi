@@ -55,6 +55,14 @@ def _bounded(items: Iterable[str], limit: int) -> List[str]:
     return unique[: max(0, limit)]
 
 
+def _ensure_agents_with_new_signals(world: Any) -> set[str]:
+    signaled = getattr(world, "agents_with_new_signals", None)
+    if not isinstance(signaled, set):
+        signaled = set(signaled or [])
+        setattr(world, "agents_with_new_signals", signaled)
+    return signaled
+
+
 def _resolve_delivery_stakeholders(
     *,
     world: Any,
@@ -219,6 +227,7 @@ def _ensure_agent_memory(agent: Any, cfg: RouterConfig) -> tuple[CrumbStore, Epi
 
 def _process_event_for_agent(
     *,
+    world: Any,
     agent_id: str,
     agent: Any,
     event: WorldEvent,
@@ -247,6 +256,9 @@ def _process_event_for_agent(
         )
         episodes_daily.add(episode)
         stm.consider(episode)
+
+    signaled = _ensure_agents_with_new_signals(world)
+    signaled.add(agent_id)
 
 
 def run_router_for_day(world: Any, *, day: int) -> None:
@@ -277,6 +289,7 @@ def run_router_for_day(world: Any, *, day: int) -> None:
             if agent is None:
                 continue
             _process_event_for_agent(
+                world=world,
                 agent_id=agent_id,
                 agent=agent,
                 event=event,
