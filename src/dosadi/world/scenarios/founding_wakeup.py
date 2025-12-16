@@ -18,6 +18,7 @@ from dosadi.memory.config import MemoryConfig
 from dosadi.runtime.work_details import WorkDetailType
 from dosadi.runtime.queues import QueueLifecycleState, QueuePriorityRule, QueueState
 from ...state import FactionState, WorldState
+from ..phases import PhaseState, WorldPhase
 from ..environment import get_or_create_place_env
 from ..facilities import Facility, FacilityLedger
 from ..constants import WATER_DAILY_CAPACITY
@@ -259,6 +260,8 @@ def generate_founding_wakeup_mvp(num_agents: int, seed: int) -> WorldState:
 
     world = WorldState(seed=seed)
     world.rng.seed(seed)
+    world.phase_state = PhaseState(phase=WorldPhase.PHASE0, phase_day=world.day)
+    world.logistics_loss_rate = 0.0
     planner_cfg = world.expansion_planner_cfg
     planner_state = world.expansion_planner_state
     planner_state.next_plan_day = seed % max(1, planner_cfg.planning_interval_days)

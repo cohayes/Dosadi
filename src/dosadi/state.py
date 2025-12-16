@@ -28,6 +28,7 @@ from .runtime.staffing import StaffingState
 from .runtime.work_details import WorkDetailType
 from .runtime.scouting_config import ScoutConfig
 from .world.environment import PlaceEnvironmentState
+from .world.phases import PhaseConfig, PhaseState
 from .world.survey_map import SurveyMap
 from .world.construction import ProjectLedger
 from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
@@ -872,6 +873,9 @@ class WorldState:
     last_promotion_check_tick: int = 0
     projects: ProjectLedger = field(default_factory=ProjectLedger)
     stockpiles: Dict[str, float] = field(default_factory=dict)
+    phase_cfg: PhaseConfig = field(default_factory=PhaseConfig)
+    phase_state: PhaseState = field(default_factory=PhaseState)
+    logistics_loss_rate: float = 0.0
     expansion_planner_cfg: ExpansionPlannerConfig = field(default_factory=ExpansionPlannerConfig)
     expansion_planner_state: ExpansionPlannerState = field(
         default_factory=lambda: ExpansionPlannerState(next_plan_day=0)

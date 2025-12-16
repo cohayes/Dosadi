@@ -163,7 +163,10 @@ def stage_project_if_ready(world, project: ConstructionProject, tick: int) -> bo
 
 def _sync_project_assignments(world, project: ConstructionProject) -> None:
     ledger = ensure_workforce(world)
-    project.assigned_agents = _project_workers(ledger, project.project_id)
+    assigned = _project_workers(ledger, project.project_id)
+    if not assigned and project.assigned_agents:
+        assigned = list(project.assigned_agents)
+    project.assigned_agents = assigned
 
 
 def _apply_labor(world, project: ConstructionProject, elapsed_hours: float, tick: int) -> None:
@@ -172,7 +175,10 @@ def _apply_labor(world, project: ConstructionProject, elapsed_hours: float, tick
 
     labor_delta = 0.0
     ledger = ensure_workforce(world)
-    project.assigned_agents = _project_workers(ledger, project.project_id)
+    assigned = _project_workers(ledger, project.project_id)
+    if not assigned and project.assigned_agents:
+        assigned = list(project.assigned_agents)
+    project.assigned_agents = assigned
     for agent_id in project.assigned_agents:
         labor_delta += elapsed_hours * _agent_skill_factor(world, agent_id)
 
