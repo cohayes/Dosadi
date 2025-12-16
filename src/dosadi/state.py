@@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional,
 from .admin_log import AdminEventLog
 from .law import FacilityProtocolTuning
 from .memory.facility_summary import FacilityBeliefSummary
+from .world.events import WorldEventLog
 from .world.facilities import FacilityLedger
 from .world.logistics import LogisticsLedger
 from .world.scout_missions import ScoutMissionLedger
@@ -28,6 +29,9 @@ from .runtime.staffing import StaffingState
 from .runtime.work_details import WorkDetailType
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
+from .agent.memory_crumbs import CrumbStore
+from .agent.memory_episodes import EpisodeBuffer
+from .agent.memory_stm import STMBoringWinner
 from .world.environment import PlaceEnvironmentState
 from .world.phases import PhaseConfig, PhaseState
 from .world.survey_map import SurveyMap
@@ -631,6 +635,9 @@ class AgentState:
     )
     social: SocialState = field(default_factory=SocialState)
     memory: MemoryState = field(default_factory=MemoryState)
+    crumbs: CrumbStore = field(default_factory=CrumbStore)
+    episodes_daily: EpisodeBuffer = field(default_factory=EpisodeBuffer)
+    stm: STMBoringWinner = field(default_factory=lambda: STMBoringWinner(k=24))
     drives: DriveState = field(default_factory=DriveState)
     affect: AffectState = field(default_factory=AffectState)
     techniques: List[str] = field(default_factory=lambda: ["Barter", "Observe", "Labor"])
@@ -828,6 +835,7 @@ class WorldState:
     rumors: MutableMapping[str, RumorState] = field(default_factory=dict)
     events_outbox: List[str] = field(default_factory=list)
     events: List[Dict[str, object]] = field(default_factory=list)
+    event_log: WorldEventLog = field(default_factory=lambda: WorldEventLog(max_len=5000))
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
     facilities: MutableMapping[str, Any] = field(default_factory=FacilityLedger)
     places: MutableMapping[str, Any] = field(default_factory=dict)
