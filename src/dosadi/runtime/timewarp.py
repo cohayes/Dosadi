@@ -22,6 +22,7 @@ from dosadi.runtime.eating import (
     HUNGER_RATE_PER_TICK,
     HYDRATION_DECAY_PER_TICK,
 )
+from dosadi.runtime.belief_formation import run_belief_formation_for_day
 from dosadi.runtime.event_to_memory_router import run_router_for_day
 from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
 from dosadi.runtime.scouting_config import ScoutConfig
@@ -180,6 +181,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         maybe_plan(world, cfg=planner_cfg, state=planner_state)
         run_incident_engine_for_day(world, day=world.day)
         run_router_for_day(world, day=world.day)
+        run_belief_formation_for_day(world, day=world.day)
 
     _advance_clock(world, elapsed_ticks=elapsed_ticks, ticks_per_day=ticks_per_day)
 

@@ -19,6 +19,7 @@ from dosadi.agents.work_history import (
     ticks_to_proficiency,
     update_work_preference_after_shift,
 )
+from dosadi.agent.beliefs import BeliefStore
 from dosadi.agent.memory_crumbs import CrumbStore
 from dosadi.agent.memory_episodes import EpisodeBuffer
 from dosadi.agent.memory_stm import STMBoringWinner
@@ -464,6 +465,7 @@ class AgentState:
     crumbs: CrumbStore = field(default_factory=CrumbStore)
     episodes_daily: EpisodeBuffer = field(default_factory=EpisodeBuffer)
     stm: STMBoringWinner = field(default_factory=lambda: STMBoringWinner(k=24))
+    beliefs: BeliefStore = field(default_factory=lambda: BeliefStore(max_items=64))
 
     place_beliefs: Dict[str, PlaceBelief] = field(default_factory=dict)
 

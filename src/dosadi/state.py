@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import random
 
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Set, Tuple
 
 from .admin_log import AdminEventLog
 from .law import FacilityProtocolTuning
@@ -873,6 +873,9 @@ class WorldState:
     well: WellState = field(default_factory=WellState)
     place_environment: Dict[str, PlaceEnvironmentState] = field(default_factory=dict)
     runtime_config: Any = None
+    belief_config: Any = None
+    belief_state: Any = None
+    agents_with_new_signals: Set[str] = field(default_factory=set)
     basic_suit_stock: int = 0
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
     logistics: LogisticsLedger = field(default_factory=LogisticsLedger)
