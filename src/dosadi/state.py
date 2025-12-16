@@ -26,6 +26,7 @@ from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from .runtime.staffing import StaffingState
 from .runtime.work_details import WorkDetailType
+from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
 from .world.environment import PlaceEnvironmentState
 from .world.phases import PhaseConfig, PhaseState
@@ -34,6 +35,7 @@ from .world.construction import ProjectLedger
 from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
 from .world.water import WellState
 from .world.workforce import WorkforceLedger
+from .world.incidents import IncidentLedger
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -825,6 +827,7 @@ class WorldState:
     cases: MutableMapping[str, CaseState] = field(default_factory=dict)
     rumors: MutableMapping[str, RumorState] = field(default_factory=dict)
     events_outbox: List[str] = field(default_factory=list)
+    events: List[Dict[str, object]] = field(default_factory=list)
     routes: MutableMapping[str, RouteState] = field(default_factory=dict)
     facilities: MutableMapping[str, Any] = field(default_factory=FacilityLedger)
     places: MutableMapping[str, Any] = field(default_factory=dict)
@@ -885,6 +888,9 @@ class WorldState:
     next_mission_seq: int = 0
     workforce: WorkforceLedger = field(default_factory=WorkforceLedger)
     staffing_state: StaffingState = field(default_factory=StaffingState)
+    incidents: IncidentLedger = field(default_factory=IncidentLedger)
+    incident_cfg: IncidentConfig = field(default_factory=IncidentConfig)
+    incident_state: IncidentState = field(default_factory=IncidentState)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
