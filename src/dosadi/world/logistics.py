@@ -8,7 +8,16 @@ from hashlib import sha256
 import random
 from typing import Dict, Mapping, MutableMapping, Optional
 
+import math
+
+from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
+
 from .survey_map import SurveyMap, edge_key
+
+
+@dataclass(slots=True)
+class LogisticsConfig:
+    route_risk_cost_weight: float = 0.30
 
 
 class DeliveryStatus(Enum):
@@ -75,20 +84,63 @@ def ensure_logistics(world) -> LogisticsLedger:
         world.carriers_available = 1
     if getattr(world, "next_carrier_seq", None) is None:
         world.next_carrier_seq = 0
+    if getattr(world, "logistics_cfg", None) is None:
+        world.logistics_cfg = LogisticsConfig()
     return ledger
 
 
-def estimate_travel_ticks(origin: str, dest: str, survey_map: SurveyMap) -> int:
+def _edge_neighbors(survey_map: SurveyMap, node: str) -> list[tuple[str, float, str]]:
+    neighbors: list[tuple[str, float, str]] = []
+    for key, edge in survey_map.edges.items():
+        if edge.a == node:
+            neighbors.append((edge.b, max(edge.distance_m, edge.travel_cost), key))
+        elif edge.b == node:
+            neighbors.append((edge.a, max(edge.distance_m, edge.travel_cost), key))
+    return neighbors
+
+
+def _route_cost(world, edge_key_str: str, base_cost: float) -> float:
+    agent = planner_perspective_agent(world)
+    risk = belief_score(agent, f"route-risk:{edge_key_str}", 0.5)
+    cfg: LogisticsConfig = getattr(world, "logistics_cfg", LogisticsConfig())
+    weight = getattr(cfg, "route_risk_cost_weight", 0.0)
+    return base_cost * (1.0 + weight * (risk - 0.5))
+
+
+def estimate_travel_ticks(origin: str, dest: str, survey_map: SurveyMap, world=None) -> int:
     if origin == dest:
         return 0
-    edge = survey_map.edges.get(edge_key(origin, dest))
-    if edge:
-        try:
-            ticks = int(max(1.0, edge.distance_m))
-        except (TypeError, ValueError):
-            ticks = 10
-        return ticks
-    return 1
+
+    if not survey_map.edges:
+        return 1
+
+    # Dijkstra with small graphs; deterministic ordering through sorted neighbors
+    frontier: list[tuple[float, str]] = [(0.0, origin)]
+    visited: set[str] = set()
+    costs: dict[str, float] = {origin: 0.0}
+
+    while frontier:
+        frontier.sort()
+        cost, node = frontier.pop(0)
+        if node in visited:
+            continue
+        visited.add(node)
+        if node == dest:
+            break
+        for neighbor, base_cost, key in sorted(_edge_neighbors(survey_map, node), key=lambda n: n[0]):
+            adjusted = _route_cost(world, key, base_cost) if world is not None else base_cost
+            next_cost = cost + adjusted
+            if neighbor not in costs or next_cost < costs[neighbor]:
+                costs[neighbor] = next_cost
+                frontier.append((next_cost, neighbor))
+
+    final_cost = costs.get(dest)
+    if final_cost is None:
+        return 1
+    try:
+        return max(1, int(math.ceil(final_cost)))
+    except (TypeError, ValueError):
+        return 1
 
 
 def _has_stock(stock: MutableMapping[str, float], items: Mapping[str, float]) -> bool:
@@ -135,7 +187,12 @@ def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
     delivery.pickup_tick = tick
 
     _consume_stock(stockpiles, delivery.items)
-    travel_ticks = estimate_travel_ticks(delivery.origin_node_id, delivery.dest_node_id, getattr(world, "survey_map", SurveyMap()))
+    travel_ticks = estimate_travel_ticks(
+        delivery.origin_node_id,
+        delivery.dest_node_id,
+        getattr(world, "survey_map", SurveyMap()),
+        world,
+    )
     delivery.deliver_tick = tick + travel_ticks
     delivery.status = DeliveryStatus.IN_TRANSIT
     logistics.add(delivery)

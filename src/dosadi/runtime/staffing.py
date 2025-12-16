@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Tuple
 
+from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
 from dosadi.world.construction import ProjectStatus
 from dosadi.world.facilities import Facility, get_facility_behavior
 from dosadi.world.scout_missions import MissionStatus
@@ -17,6 +18,9 @@ class StaffingConfig:
     project_workers_default: int = 6
     facility_staff_default: int = 2
     prefer_keep_assignments: bool = True
+    extra_idle_reserve: int = 4
+    project_worker_risk_scalar: float = 0.2
+    facility_staff_risk_scalar: float = 0.2
 
 
 @dataclass(slots=True)
@@ -67,6 +71,29 @@ def _candidate_sort_key(agent, kind: AssignmentKind) -> Tuple[int, float, str]:
     return (_role_priority(role), -_score(agent, kind), getattr(agent, "id", ""))
 
 
+def _risk_posture(world) -> float:
+    agent = planner_perspective_agent(world)
+    if agent is None:
+        return 0.0
+
+    store = getattr(agent, "beliefs", None)
+    route_scores = []
+    facility_scores = []
+    for key in getattr(getattr(store, "items", {}), "keys", lambda: [])():
+        if key.startswith("route-risk:"):
+            route_scores.append(belief_score(agent, key, 0.5))
+        if key.startswith("facility-reliability:"):
+            facility_scores.append(belief_score(agent, key, 0.5))
+
+    if not route_scores and not facility_scores:
+        return 0.0
+
+    avg_route = sum(route_scores) / len(route_scores) if route_scores else 0.5
+    avg_facility = sum(facility_scores) / len(facility_scores) if facility_scores else 0.5
+    avg_risk = (avg_route + avg_facility) / 2.0
+    return max(0.0, min(1.0, 0.5 + (avg_risk - 0.5)))
+
+
 def _active_assignments_for_target(
     ledger: WorkforceLedger, *, kind: AssignmentKind, target_id: str | None
 ) -> List[str]:
@@ -104,6 +131,7 @@ def _assign_agents(
     cfg: StaffingConfig,
     day: int,
     changes_left: int,
+    min_idle_agents: int,
 ) -> int:
     idle_agents = [
         agent
@@ -112,7 +140,7 @@ def _assign_agents(
     ]
 
     total_agents = len(world.agents)
-    available = max(0, total_agents - cfg.min_idle_agents)
+    available = max(0, total_agents - min_idle_agents)
     for kind, target_id, needed_count in requests:
         if changes_left <= 0 or available <= 0:
             break
@@ -146,7 +174,13 @@ def _assign_agents(
     return changes_left
 
 
-def _requested_staffing(world, cfg: StaffingConfig) -> List[tuple[AssignmentKind, str | None, int]]:
+def _requested_staffing(
+    world,
+    cfg: StaffingConfig,
+    *,
+    project_workers: int,
+    facility_staff: int,
+) -> List[tuple[AssignmentKind, str | None, int]]:
     requests: List[tuple[AssignmentKind, str | None, int]] = []
 
     missions = getattr(world, "scout_missions", None)
@@ -165,7 +199,7 @@ def _requested_staffing(world, cfg: StaffingConfig) -> List[tuple[AssignmentKind
             if project.status not in {ProjectStatus.STAGED, ProjectStatus.BUILDING}:
                 continue
             requests.append(
-                (AssignmentKind.PROJECT_WORK, project.project_id, cfg.project_workers_default)
+                (AssignmentKind.PROJECT_WORK, project.project_id, project_workers)
             )
 
     facilities = getattr(getattr(world, "facilities", None), "values", None)
@@ -183,7 +217,7 @@ def _requested_staffing(world, cfg: StaffingConfig) -> List[tuple[AssignmentKind
                 (
                     AssignmentKind.FACILITY_STAFF,
                     facility.facility_id,
-                    cfg.facility_staff_default,
+                    facility_staff,
                 )
             )
 
@@ -195,8 +229,23 @@ def run_staffing_policy(world, *, day: int, cfg: StaffingConfig, state: Staffing
         return
 
     ledger = ensure_workforce(world)
+    posture = _risk_posture(world)
+    effective_min_idle = cfg.min_idle_agents + round(posture * cfg.extra_idle_reserve)
+    project_workers = max(
+        1,
+        int(round(cfg.project_workers_default * (1.0 - cfg.project_worker_risk_scalar * posture))),
+    )
+    facility_staff = max(
+        1,
+        int(round(cfg.facility_staff_default * (1.0 + cfg.facility_staff_risk_scalar * posture))),
+    )
 
-    requests = _requested_staffing(world, cfg)
+    requests = _requested_staffing(
+        world,
+        cfg,
+        project_workers=project_workers,
+        facility_staff=facility_staff,
+    )
     active_targets = {
         kind: {target_id for req_kind, target_id, _ in requests if req_kind is kind}
         for kind in {req[0] for req in requests}
@@ -213,6 +262,7 @@ def run_staffing_policy(world, *, day: int, cfg: StaffingConfig, state: Staffing
         cfg=cfg,
         day=day,
         changes_left=changes_left,
+        min_idle_agents=effective_min_idle,
     )
 
     state.last_run_day = day
