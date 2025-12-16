@@ -5,6 +5,7 @@ from enum import Enum
 import heapq
 import json
 from hashlib import sha256
+import random
 from typing import Dict, Mapping, MutableMapping, Optional
 
 from .survey_map import SurveyMap, edge_key
@@ -106,6 +107,17 @@ def _release_carrier(world) -> None:
     world.carriers_available = getattr(world, "carriers_available", 0) + 1
 
 
+def _delivery_should_fail(world, delivery_id: str, day: int) -> bool:
+    loss_rate = float(getattr(world, "logistics_loss_rate", 0.0) or 0.0)
+    if loss_rate <= 0.0:
+        return False
+
+    seed_blob = f"{delivery_id}:{day}:{getattr(world, 'seed', 0)}"
+    seed_int = int(sha256(seed_blob.encode("utf-8")).hexdigest(), 16) % (2**32)
+    rng = random.Random(seed_int)
+    return rng.random() < loss_rate
+
+
 def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
     logistics = ensure_logistics(world)
     stockpiles: MutableMapping[str, float] = getattr(world, "stockpiles", {})
@@ -172,6 +184,12 @@ def process_due_deliveries(world, *, tick: int) -> None:
         if delivery is None:
             continue
         if delivery.status != DeliveryStatus.IN_TRANSIT:
+            continue
+        if _delivery_should_fail(world, delivery_id, getattr(world, "day", 0)):
+            delivery.status = DeliveryStatus.FAILED
+            delivery.deliver_tick = tick
+            delivery.notes["failure"] = "phase_loss"
+            _release_carrier(world)
             continue
         _deliver(world, delivery, tick)
 
