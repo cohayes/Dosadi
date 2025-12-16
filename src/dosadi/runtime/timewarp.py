@@ -25,6 +25,7 @@ from dosadi.runtime.eating import (
 from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
 from dosadi.runtime.scouting_config import ScoutConfig
 from dosadi.runtime.facility_updates import update_facilities_for_day
+from dosadi.runtime.incident_engine import run_incident_engine_for_day
 from dosadi.world.construction import apply_project_work
 from dosadi.world.expansion_planner import (
     ExpansionPlannerConfig,
@@ -176,6 +177,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         step_scout_missions_for_day(world, day=world.day, cfg=scout_cfg)
         update_facilities_for_day(world, day=world.day, days=1)
         maybe_plan(world, cfg=planner_cfg, state=planner_state)
+        run_incident_engine_for_day(world, day=world.day)
 
     _advance_clock(world, elapsed_ticks=elapsed_ticks, ticks_per_day=ticks_per_day)
 
