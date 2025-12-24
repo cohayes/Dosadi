@@ -47,6 +47,10 @@ class ScoutMission:
 
     discoveries: list[dict[str, object]]
     notes: dict[str, str] = field(default_factory=dict)
+    discovery_budget_nodes: int = 0
+    discovery_budget_edges: int = 0
+    discovered_nodes: list[str] = field(default_factory=list)
+    discovered_edges: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -78,6 +82,10 @@ class ScoutMissionLedger:
                 "elapsed": mission.days_elapsed,
                 "discoveries": [dict(sorted(d.items())) for d in mission.discoveries],
                 "notes": dict(sorted(mission.notes.items())),
+                "discovery_budget_nodes": mission.discovery_budget_nodes,
+                "discovery_budget_edges": mission.discovery_budget_edges,
+                "discovered_nodes": list(mission.discovered_nodes),
+                "discovered_edges": list(mission.discovered_edges),
             }
             for mission_id, mission in sorted(self.missions.items())
         }

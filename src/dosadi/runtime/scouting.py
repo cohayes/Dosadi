@@ -7,6 +7,7 @@ from typing import Iterable, Sequence
 
 from dosadi.agents.core import AgentState
 from dosadi.runtime.scouting_config import ScoutConfig
+from dosadi.world.discovery import DiscoveryConfig, expand_frontier
 from dosadi.world.survey_map import SurveyEdge, SurveyMap, SurveyNode, edge_key
 from dosadi.world.scout_missions import (
     MissionIntent,
@@ -112,75 +113,49 @@ def _advance_mission(
     day: int,
     cfg: ScoutConfig,
     rng: random.Random,
+    discovery_cfg: DiscoveryConfig,
 ) -> TravelOutcome:
     tick = _day_to_tick(world, day)
-    choose_new_node = rng.random() < cfg.new_node_chance
-    next_node_id: str | None = None
     discovery: dict[str, object] | None = None
     created_node: SurveyNode | None = None
     created_edge: SurveyEdge | None = None
+    next_node_id = mission.current_node_id
 
-    neighbor = _choose_neighbor(mission.current_node_id, survey, rng)
-    if neighbor and not choose_new_node and rng.random() < cfg.new_edge_chance:
-        next_node_id = neighbor
-
-    if next_node_id is None:
-        next_node_id = _derive_node_id(mission.mission_id, day, survey)
-        created_node = SurveyNode(
-            node_id=next_node_id,
-            kind="scouted",
-            ward_id=None,
-            tags=("scouted",),
-            hazard=0.0,
-            water=0.0,
-            confidence=cfg.confidence_new_node,
-            last_seen_tick=tick,
+    if discovery_cfg.enabled:
+        node_budget = min(mission.discovery_budget_nodes, discovery_cfg.max_new_nodes_per_day)
+        edge_budget = min(mission.discovery_budget_edges, discovery_cfg.max_new_edges_per_day)
+        new_nodes = expand_frontier(
+            world,
+            from_node=mission.current_node_id,
+            budget_nodes=node_budget,
+            budget_edges=edge_budget,
+            day=day,
+            mission_id=mission.mission_id,
+            cfg=discovery_cfg,
         )
-        created_edge = _create_edge(
-            mission.current_node_id, next_node_id, rng, tick=tick, cfg=cfg
-        )
-        discovery = {
-            "day": day,
-            "kind": "NEW_NODE",
-            "node_id": next_node_id,
-            "confidence": cfg.confidence_new_node,
-        }
-        survey.upsert_node(created_node, confidence_delta=0.0)
-        survey.upsert_edge(created_edge, confidence_delta=0.0)
-    else:
-        revisit = survey.nodes.get(next_node_id)
-        if revisit:
-            boosted = min(cfg.confidence_cap, revisit.confidence + cfg.confidence_gain_on_revisit)
-            updated = SurveyNode(
-                node_id=revisit.node_id,
-                kind=revisit.kind,
-                ward_id=revisit.ward_id,
-                tags=revisit.tags,
-                hazard=revisit.hazard,
-                water=revisit.water,
-                confidence=boosted,
-                last_seen_tick=tick,
-            )
-            survey.upsert_node(updated, confidence_delta=0.0)
+        if new_nodes:
+            next_node_id = new_nodes[0]
+            created_node = survey.nodes.get(next_node_id)
+            created_edge = survey.edges.get(edge_key(mission.current_node_id, next_node_id))
             discovery = {
                 "day": day,
-                "kind": "REVISIT",
+                "kind": "DISCOVERY_NODE",
                 "node_id": next_node_id,
-                "confidence": boosted,
+                "from": mission.current_node_id,
+                "confidence": getattr(created_node, "confidence", 0.0),
+                "tags": list(getattr(created_node, "resource_tags", ())),
             }
-        edge = survey.edges.get(edge_key(mission.current_node_id, next_node_id))
-        if edge:
-            bumped_conf = min(cfg.confidence_cap, edge.confidence + cfg.confidence_gain_on_revisit)
-            updated_edge = SurveyEdge(
-                a=edge.a,
-                b=edge.b,
-                distance_m=edge.distance_m,
-                travel_cost=edge.travel_cost,
-                hazard=edge.hazard,
-                confidence=bumped_conf,
-                last_seen_tick=tick,
-            )
-            survey.upsert_edge(updated_edge, confidence_delta=0.0)
+            mission.discovery_budget_nodes = max(0, mission.discovery_budget_nodes - len(new_nodes))
+            mission.discovery_budget_edges = max(0, mission.discovery_budget_edges - len(new_nodes))
+            mission.discovered_nodes.extend(new_nodes)
+            if created_edge:
+                mission.discovered_edges.append(created_edge.key)
+    else:
+        neighbor = _choose_neighbor(mission.current_node_id, survey, rng)
+        if neighbor and rng.random() < cfg.new_edge_chance:
+            next_node_id = neighbor
+        else:
+            next_node_id = mission.current_node_id
     return TravelOutcome(
         next_node_id=next_node_id,
         created_node=created_node,
@@ -201,6 +176,8 @@ def _mark_agents(world, mission: ScoutMission, *, on_mission: bool, day: int) ->
 def maybe_create_scout_missions(world, cfg: ScoutConfig | None = None) -> list[str]:
     cfg = cfg or getattr(world, "scout_cfg", None) or ScoutConfig()
     world.scout_cfg = cfg
+    discovery_cfg: DiscoveryConfig = getattr(world, "discovery_cfg", None) or DiscoveryConfig()
+    world.discovery_cfg = discovery_cfg
     ledger = ensure_scout_missions(world)
     survey: SurveyMap = getattr(world, "survey_map", SurveyMap())
     day = getattr(world, "day", 0)
@@ -243,6 +220,8 @@ def maybe_create_scout_missions(world, cfg: ScoutConfig | None = None) -> list[s
             last_step_day=day - 1,
             days_elapsed=0,
             discoveries=[],
+            discovery_budget_nodes=discovery_cfg.max_frontier_expansions_per_mission,
+            discovery_budget_edges=discovery_cfg.max_new_edges_per_day,
         )
 
         ledger.add(mission)
@@ -275,6 +254,8 @@ def _finalize_mission(
 def step_scout_missions_for_day(world, day: int | None = None, cfg: ScoutConfig | None = None) -> None:
     cfg = cfg or getattr(world, "scout_cfg", None) or ScoutConfig()
     world.scout_cfg = cfg
+    discovery_cfg: DiscoveryConfig = getattr(world, "discovery_cfg", None) or DiscoveryConfig()
+    world.discovery_cfg = discovery_cfg
     ledger = ensure_scout_missions(world)
     survey: SurveyMap = getattr(world, "survey_map", SurveyMap())
     day = getattr(world, "day", 0) if day is None else day
@@ -290,7 +271,15 @@ def step_scout_missions_for_day(world, day: int | None = None, cfg: ScoutConfig 
         mission.last_step_day = day
 
         rng = rng_for(mission.mission_id, day, getattr(world, "seed", 0))
-        outcome = _advance_mission(world, mission, survey, day=day, cfg=cfg, rng=rng)
+        outcome = _advance_mission(
+            world,
+            mission,
+            survey,
+            day=day,
+            cfg=cfg,
+            rng=rng,
+            discovery_cfg=discovery_cfg,
+        )
         mission.current_node_id = outcome.next_node_id
         if outcome.discovery:
             mission.discoveries.append(dict(outcome.discovery))

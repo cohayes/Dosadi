@@ -2,6 +2,7 @@ from dosadi.agents.core import AgentState
 from dosadi.runtime.timewarp import TimewarpConfig, step_day
 from dosadi.runtime.scouting_config import ScoutConfig
 from dosadi.state import WorldState
+from dosadi.world.discovery import DiscoveryConfig
 from dosadi.world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
 from dosadi.world.survey_map import SurveyNode
 
@@ -33,7 +34,8 @@ def _seed_world() -> WorldState:
         min_site_confidence=0.5,
     )
     world.expansion_planner_state = ExpansionPlannerState(next_plan_day=0)
-    world.scout_cfg = ScoutConfig(max_active_missions=1, party_size=1, max_days_per_mission=3, new_node_chance=1.0)
+    world.scout_cfg = ScoutConfig(max_active_missions=1, party_size=1, max_days_per_mission=3)
+    world.discovery_cfg = DiscoveryConfig(enabled=True)
     return world
 
 
