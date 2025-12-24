@@ -36,6 +36,7 @@ from .agent.memory_stm import STMBoringWinner
 from .world.environment import PlaceEnvironmentState
 from .world.phases import PhaseConfig, PhaseState
 from .world.discovery import DiscoveryConfig
+from .world.extraction import ExtractionLedger
 from .world.survey_map import SurveyMap
 from .world.construction import ProjectLedger
 from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
@@ -44,6 +45,7 @@ from .world.water import WellState
 from .world.workforce import WorkforceLedger
 from .world.incidents import IncidentLedger
 from .runtime.focus_mode import FocusConfig, FocusState
+from .runtime.extraction_runtime import ExtractionConfig, ExtractionState
 from .runtime.maintenance import MaintenanceConfig, MaintenanceLedger, MaintenanceState
 from .runtime.suit_wear import SuitRepairLedger, SuitWearConfig, SuitWearState
 from .agent.suits import SuitState
@@ -907,6 +909,9 @@ class WorldState:
     maintenance: MaintenanceLedger = field(default_factory=MaintenanceLedger)
     mat_cfg: object | None = None
     mat_state: object | None = None
+    extraction: ExtractionLedger = field(default_factory=ExtractionLedger)
+    extract_cfg: ExtractionConfig = field(default_factory=ExtractionConfig)
+    extract_state: ExtractionState = field(default_factory=ExtractionState)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

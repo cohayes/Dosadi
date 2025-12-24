@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import Iterable, Mapping
 
+from .extraction import create_sites_for_node
 from .survey_map import SurveyEdge, SurveyMap, SurveyNode, edge_key
 
 
@@ -129,6 +130,8 @@ def expand_frontier(
         survey.upsert_edge(edge)
 
         discoveries.append((hashed_unit_float(*(*base_parts, "order")), node_id))
+
+        create_sites_for_node(world, node, day=day)
 
         discovery_metrics["nodes_added"] = discovery_metrics.get("nodes_added", 0) + 1
         discovery_metrics["edges_added"] = discovery_metrics.get("edges_added", 0) + 1
