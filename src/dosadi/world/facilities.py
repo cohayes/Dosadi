@@ -3,20 +3,46 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 import json
 from hashlib import sha256
-from typing import Any, Dict, Iterator, MutableMapping
+from typing import Any, Dict, Iterator, MutableMapping, Set
+
+
+class FacilityKind(str, Enum):
+    DEPOT = "DEPOT"
+    WORKSHOP = "WORKSHOP"
+    RECYCLER = "RECYCLER"
+    REFINERY = "REFINERY"
+    WATER_WORKS = "WATER_WORKS"
+
+
+def coerce_facility_kind(raw: object) -> FacilityKind:
+    if isinstance(raw, FacilityKind):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return FacilityKind[raw.upper()]
+        except KeyError:
+            for kind in FacilityKind:
+                if raw.lower() == kind.value.lower():
+                    return kind
+    return FacilityKind.DEPOT
 
 
 @dataclass(slots=True)
 class Facility:
     facility_id: str
-    kind: str
-    site_node_id: str
-    created_tick: int
+    kind: FacilityKind = FacilityKind.DEPOT
+    site_node_id: str = ""
+    created_tick: int = 0
     status: str = "ACTIVE"
     state: dict = field(default_factory=dict)
     last_update_day: int = -1
+    min_staff: int = 0
+    is_operational: bool = True
+    down_until_day: int = -1
+    tags: Set[str] = field(default_factory=set)
 
     def __getattr__(self, name: str) -> Any:  # pragma: no cover - trivial passthrough
         if name == "state":
@@ -37,13 +63,13 @@ class FacilityLedger:
     def get(self, facility_id: str):
         return self.facilities.get(facility_id)
 
-    def list_by_kind(self, kind: str) -> list[Facility]:
+    def list_by_kind(self, kind: FacilityKind) -> list[Facility]:
         return [f for f in self.facilities.values() if f.kind == kind]
 
     def signature(self) -> str:
         canonical = {
             fid: {
-                "kind": fac.kind,
+                "kind": fac.kind.value if isinstance(fac.kind, FacilityKind) else str(fac.kind),
                 "site": fac.site_node_id,
                 "status": fac.status,
                 "last_day": fac.last_update_day,
@@ -128,25 +154,44 @@ def ensure_facility_ledger(world) -> FacilityLedger:
             elif isinstance(fac, MutableMapping):
                 facilities[fid] = Facility(
                     facility_id=fid,
-                    kind=str(fac.get("kind", fac.get("type", "unknown"))),
+                    kind=coerce_facility_kind(fac.get("kind", fac.get("type", FacilityKind.DEPOT.value))),
                     site_node_id=str(fac.get("site_node_id", fid)),
                     created_tick=int(fac.get("created_tick", 0)),
                     status=str(fac.get("status", "ACTIVE")),
                     state=dict(fac),
                     last_update_day=int(fac.get("last_update_day", -1)),
+                    min_staff=int(fac.get("min_staff", 0)),
+                    is_operational=bool(fac.get("is_operational", True)),
+                    down_until_day=int(fac.get("down_until_day", -1)),
+                    tags=set(fac.get("tags", []) if isinstance(fac.get("tags", []), (list, set, tuple)) else []),
                 )
             else:
                 facilities[fid] = Facility(
                     facility_id=fid,
-                    kind=str(getattr(fac, "kind", "unknown")),
+                    kind=coerce_facility_kind(getattr(fac, "kind", FacilityKind.DEPOT)),
                     site_node_id=str(getattr(fac, "site_node_id", fid)),
                     created_tick=int(getattr(fac, "created_tick", 0)),
                     status=str(getattr(fac, "status", "ACTIVE")),
                     state=fac.__dict__ if hasattr(fac, "__dict__") else {},
                     last_update_day=int(getattr(fac, "last_update_day", -1)),
+                    min_staff=int(getattr(fac, "min_staff", 0)),
+                    is_operational=bool(getattr(fac, "is_operational", True)),
+                    down_until_day=int(getattr(fac, "down_until_day", -1)),
+                    tags=set(getattr(fac, "tags", set()) or set()),
                 )
         ledger = FacilityLedger(facilities=facilities)
 
     setattr(world, "facilities", ledger)
     return ledger
+
+
+__all__ = [
+    "Facility",
+    "FacilityBehavior",
+    "FacilityLedger",
+    "FacilityKind",
+    "coerce_facility_kind",
+    "ensure_facility_ledger",
+    "get_facility_behavior",
+]
 

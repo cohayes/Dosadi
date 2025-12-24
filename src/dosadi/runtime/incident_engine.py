@@ -135,6 +135,20 @@ def _emit_event(world: Any, incident: Incident) -> None:
         world.events = legacy_events
 
 
+def _emit_facility_state_event(world: Any, *, facility_id: str, kind: EventKind, payload: Dict[str, object]) -> None:
+    log = _ensure_event_log(world)
+    event = WorldEvent(
+        event_id="",
+        day=getattr(world, "day", 0),
+        kind=kind,
+        subject_kind="facility",
+        subject_id=facility_id,
+        severity=float(payload.get("severity", 0.0)),
+        payload=payload,
+    )
+    log.append(event)
+
+
 def _schedule_delivery_incidents(
     *,
     world: Any,
@@ -328,17 +342,45 @@ def _resolve_facility_downtime(
     downtime_days = cfg.downtime_days_min + int(incident.severity * downtime_range)
     downtime_days = max(cfg.downtime_days_min, min(cfg.downtime_days_max, downtime_days))
     incident.payload["downtime_days"] = downtime_days
+    down_until = day + downtime_days
     facility.status = "INACTIVE"
-    facility.state["reactivate_day"] = day + downtime_days
+    facility.is_operational = False
+    facility.down_until_day = down_until
+    facility.state["reactivate_day"] = down_until
+    _emit_facility_state_event(
+        world,
+        facility_id=facility.facility_id,
+        kind=EventKind.FACILITY_DOWNTIME,
+        payload={
+            "incident_id": incident.incident_id,
+            "downtime_days": downtime_days,
+            "severity": incident.severity,
+            "target_id": facility.facility_id,
+        },
+    )
 
 
 def _reactivate_facilities(world: Any, *, day: int) -> None:
     facilities: FacilityLedger = ensure_facility_ledger(world)
     for facility in facilities.values():
         reactivate_day = facility.state.get("reactivate_day") if isinstance(facility.state, dict) else None
+        down_until = facility.down_until_day
+        should_reactivate = False
         if reactivate_day is not None and day >= reactivate_day:
+            should_reactivate = True
+        if down_until >= 0 and day > down_until:
+            should_reactivate = True
+        if should_reactivate:
             facility.state.pop("reactivate_day", None)
             facility.status = "ACTIVE"
+            facility.is_operational = True
+            facility.down_until_day = -1
+            _emit_facility_state_event(
+                world,
+                facility_id=facility.facility_id,
+                kind=EventKind.FACILITY_REACTIVATED,
+                payload={"target_id": facility.facility_id, "severity": 0.0},
+            )
 
 
 def run_incident_engine_for_day(world: Any, *, day: int) -> None:
