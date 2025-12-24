@@ -25,6 +25,7 @@ from .world.scout_missions import ScoutMissionLedger
 from .simulation.snapshots import serialize_state
 from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
+from .runtime.escort_protocols import EscortConfig, EscortState
 from .runtime.staffing import StaffingConfig, StaffingState
 from .runtime.work_details import WorkDetailType
 from .runtime.incident_engine import IncidentConfig, IncidentState
@@ -881,6 +882,8 @@ class WorldState:
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
     logistics: LogisticsLedger = field(default_factory=LogisticsLedger)
     logistics_cfg: LogisticsConfig = field(default_factory=LogisticsConfig)
+    escort_cfg: EscortConfig = field(default_factory=EscortConfig)
+    escort_state: EscortState = field(default_factory=EscortState)
     delivery_due_queue: List[tuple[int, str]] = field(default_factory=list)
     carriers_available: int = 1
     next_carrier_seq: int = 0
