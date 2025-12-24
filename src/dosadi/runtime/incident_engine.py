@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, MutableMapping
 
 from dosadi.world.facilities import FacilityLedger, ensure_facility_ledger
 from dosadi.world.incidents import Incident, IncidentKind, IncidentLedger
-from dosadi.world.logistics import DeliveryStatus, LogisticsLedger, _release_carrier
+from dosadi.world.logistics import DeliveryStatus, LogisticsLedger, release_courier
 from dosadi.world.phases import WorldPhase
 from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
 
@@ -279,7 +279,7 @@ def _resolve_delivery_loss(world: Any, *, incident: Incident, day: int) -> None:
 
     if delivery.status in {DeliveryStatus.ASSIGNED, DeliveryStatus.PICKED_UP, DeliveryStatus.IN_TRANSIT}:
         if delivery.assigned_carrier_id:
-            _release_carrier(world)
+            release_courier(world, delivery.assigned_carrier_id)
         delivery.status = DeliveryStatus.FAILED
         delivery.deliver_tick = None
         fraction = max(0.0, min(1.0, incident.severity))
