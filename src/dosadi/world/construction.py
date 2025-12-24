@@ -12,6 +12,7 @@ import json
 from hashlib import sha256
 from typing import Dict, MutableMapping, Optional
 
+from dosadi.world.materials import Material, normalize_bom
 from dosadi.world.facilities import Facility, FacilityLedger, ensure_facility_ledger
 from dosadi.world.logistics import (
     DeliveryRequest,
@@ -51,6 +52,10 @@ class ConstructionProject:
     assigned_agents: list[str]
     deadline_tick: Optional[int] = None
     notes: Dict[str, str] = field(default_factory=dict)
+    bom: Dict[Material, int] = field(default_factory=dict)
+    blocked_for_materials: bool = False
+    bom_consumed: bool = False
+    pending_material_delivery_ids: list[str] = field(default_factory=list)
 
     def ensure_building(self) -> None:
         if self.status == ProjectStatus.STAGED and self.assigned_agents:
@@ -87,6 +92,15 @@ class ProjectLedger:
                 "materials": dict(sorted(project.materials_delivered.items())),
                 "labor": round(project.labor_applied_hours, 6),
                 "assigned": sorted(project.assigned_agents),
+                "bom": {
+                    m.name: int(q)
+                    for m, q in sorted(
+                        normalize_bom(project.bom).items(), key=lambda item: item[0].name
+                    )
+                },
+                "blocked": project.blocked_for_materials,
+                "bom_consumed": project.bom_consumed,
+                "pending": sorted(project.pending_material_delivery_ids),
             }
             for project_id, project in sorted(self.projects.items())
         }
@@ -149,6 +163,11 @@ def _ensure_delivery_request(world, project: ConstructionProject, tick: int) -> 
 
 
 def stage_project_if_ready(world, project: ConstructionProject, tick: int) -> bool:
+    if not project.bom:
+        project.bom = normalize_bom(project.cost.materials)
+    mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False))
+    if mat_enabled and (project.blocked_for_materials or not project.bom_consumed):
+        return False
     if project.status not in {ProjectStatus.APPROVED, ProjectStatus.STAGED}:
         return False
 
