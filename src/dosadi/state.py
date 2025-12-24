@@ -38,6 +38,7 @@ from .world.phases import PhaseConfig, PhaseState
 from .world.survey_map import SurveyMap
 from .world.construction import ProjectLedger
 from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
+from .world.materials import InventoryRegistry
 from .world.water import WellState
 from .world.workforce import WorkforceLedger
 from .world.incidents import IncidentLedger
@@ -873,6 +874,7 @@ class WorldState:
     admin_logs: Dict[str, AdminLogEntry] = field(default_factory=dict)
     next_admin_log_seq: int = 0
     well: WellState = field(default_factory=WellState)
+    inventories: InventoryRegistry = field(default_factory=InventoryRegistry)
     place_environment: Dict[str, PlaceEnvironmentState] = field(default_factory=dict)
     runtime_config: Any = None
     belief_config: Any = None
@@ -910,6 +912,8 @@ class WorldState:
     incident_state: IncidentState = field(default_factory=IncidentState)
     focus_cfg: FocusConfig = field(default_factory=FocusConfig)
     focus_state: FocusState = field(default_factory=FocusState)
+    mat_cfg: object | None = None
+    mat_state: object | None = None
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

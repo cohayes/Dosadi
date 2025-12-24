@@ -141,6 +141,10 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     from dosadi.runtime.facility_updates import update_facilities_for_day
     from dosadi.runtime.incident_engine import run_incident_engine_for_day
     from dosadi.runtime.local_interactions import run_interactions_for_day
+    from dosadi.runtime.materials_economy import (
+        evaluate_project_materials,
+        run_materials_production_for_day,
+    )
     from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
     from dosadi.runtime.staffing import StaffingConfig, StaffingState, run_staffing_policy
     from dosadi.world.expansion_planner import (
@@ -159,6 +163,8 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     world.staffing_cfg = staffing_cfg
     world.staffing_state = staffing_state
     scout_cfg = getattr(world, "scout_cfg", None)
+    run_materials_production_for_day(world, day=day)
+    evaluate_project_materials(world, day=day)
     maybe_create_scout_missions(world, cfg=scout_cfg)
     step_scout_missions_for_day(world, day=day, cfg=scout_cfg)
     update_facilities_for_day(world, day=day, days=1)
@@ -179,11 +185,31 @@ def _deliver(world: Any, delivery: DeliveryRequest, tick: int) -> None:
     if agent is not None:
         agent.location_id = delivery.dest_node_id
 
+    mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False))
+    dest_owner_id = getattr(delivery, "dest_owner_id", None)
+    if mat_enabled and dest_owner_id:
+        from dosadi.world.materials import ensure_inventory_registry, normalize_bom
+
+        inventory = ensure_inventory_registry(world)
+        bom = normalize_bom(delivery.items)
+        inv = inventory.inv(dest_owner_id)
+        for material, qty in bom.items():
+            inv.add(material, qty)
+        metrics = getattr(world, "metrics", {})
+        if isinstance(metrics, dict):
+            mat_metrics = metrics.setdefault("materials", {})
+            if isinstance(mat_metrics, dict):
+                mat_metrics["deliveries_completed"] = mat_metrics.get("deliveries_completed", 0.0) + 1.0
+
     projects = getattr(world, "projects", None)
     if projects and delivery.project_id in projects.projects:
         project = projects.projects[delivery.project_id]
         for item, qty in delivery.items.items():
             project.materials_delivered[item] = project.materials_delivered.get(item, 0.0) + qty
+        if mat_enabled and delivery.delivery_id in project.pending_material_delivery_ids:
+            project.pending_material_delivery_ids = [
+                pid for pid in project.pending_material_delivery_ids if pid != delivery.delivery_id
+            ]
 
 
 def _awake_agent_step(world: Any, agent_id: str, tick: int, *, budget: int) -> None:

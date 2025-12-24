@@ -23,6 +23,7 @@ from dosadi.runtime.local_interactions import (
     enqueue_interaction_opportunity,
     ensure_interaction_config,
 )
+from dosadi.world.materials import ensure_inventory_registry, material_from_key
 
 from .routing import Route, compute_route
 from .survey_map import SurveyEdge, SurveyMap, edge_key
@@ -65,6 +66,8 @@ class DeliveryRequest:
     remaining_edge_ticks: int = 0
     next_edge_complete_tick: int | None = None
     escort_agent_ids: list[str] = field(default_factory=list)
+    origin_owner_id: str | None = None
+    dest_owner_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -90,6 +93,8 @@ class LogisticsLedger:
                 "due": delivery.due_tick,
                 "deliver": delivery.deliver_tick,
                 "escorts": list(sorted(delivery.escort_agent_ids)),
+                "origin_owner": delivery.origin_owner_id,
+                "dest_owner": delivery.dest_owner_id,
             }
             for delivery_id, delivery in sorted(self.deliveries.items())
         }
@@ -195,6 +200,16 @@ def _maybe_enqueue_courier_opportunity(
         payload={},
     )
     enqueue_interaction_opportunity(world, opp)
+
+
+def _material_bom(items: Mapping[str, float]) -> dict:
+    bom: dict = {}
+    for key, qty in items.items():
+        material = material_from_key(key)
+        if material is None:
+            continue
+        bom[material] = bom.get(material, 0) + int(qty)
+    return bom
 
 
 def _schedule_next_edge(world, delivery: DeliveryRequest, start_tick: int) -> None:
@@ -381,11 +396,21 @@ def _delivery_should_fail(world, delivery_id: str, day: int) -> bool:
 def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
     logistics = ensure_logistics(world)
     stockpiles: MutableMapping[str, float] = getattr(world, "stockpiles", {})
+    mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False))
+    origin_owner_id = getattr(delivery, "origin_owner_id", None)
+    bom = _material_bom(delivery.items)
 
-    if not _has_stock(stockpiles, delivery.items):
-        delivery.status = DeliveryStatus.FAILED
-        delivery.notes["failure"] = "insufficient_stock"
-        return
+    if mat_enabled and origin_owner_id:
+        inventory = ensure_inventory_registry(world)
+        origin_inventory = inventory.inv(origin_owner_id)
+        if not origin_inventory.can_afford(bom):
+            return
+
+    if not mat_enabled or origin_owner_id is None:
+        if not _has_stock(stockpiles, delivery.items):
+            delivery.status = DeliveryStatus.FAILED
+            delivery.notes["failure"] = "insufficient_stock"
+            return
 
     cfg: LogisticsConfig = getattr(world, "logistics_cfg", LogisticsConfig())
     use_agent_couriers = getattr(cfg, "use_agent_couriers", False)
@@ -434,6 +459,9 @@ def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
     delivery.status = DeliveryStatus.PICKED_UP
     delivery.pickup_tick = tick
 
+    if mat_enabled and origin_owner_id:
+        origin_inventory.apply_bom(bom)
+
     _consume_stock(stockpiles, delivery.items)
     if not _init_delivery_route(world, delivery, tick=tick):
         return
@@ -475,11 +503,29 @@ def _deliver(world, delivery: DeliveryRequest, tick: int) -> None:
     if agent is not None:
         agent.location_id = delivery.dest_node_id
 
+    mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False))
+    dest_owner_id = getattr(delivery, "dest_owner_id", None)
+    if mat_enabled and dest_owner_id:
+        inventory = ensure_inventory_registry(world)
+        bom = _material_bom(delivery.items)
+        inv = inventory.inv(dest_owner_id)
+        for material, qty in bom.items():
+            inv.add(material, qty)
+        metrics = getattr(world, "metrics", {})
+        if isinstance(metrics, dict):
+            mat_metrics = metrics.setdefault("materials", {})
+            if isinstance(mat_metrics, dict):
+                mat_metrics["deliveries_completed"] = mat_metrics.get("deliveries_completed", 0.0) + 1.0
+
     projects = getattr(world, "projects", None)
     if projects and delivery.project_id in projects.projects:
         project = projects.projects[delivery.project_id]
         for item, qty in delivery.items.items():
             project.materials_delivered[item] = project.materials_delivered.get(item, 0.0) + qty
+        if mat_enabled and delivery.delivery_id in project.pending_material_delivery_ids:
+            project.pending_material_delivery_ids = [
+                pid for pid in project.pending_material_delivery_ids if pid != delivery.delivery_id
+            ]
 
 
 def process_due_deliveries(world, *, tick: int) -> None:
