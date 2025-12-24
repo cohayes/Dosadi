@@ -12,6 +12,7 @@ class AssignmentKind(Enum):
     SCOUT_MISSION = "scout_mission"
     LOGISTICS_COURIER = "logistics_courier"
     LOGISTICS_ESCORT = "logistics_escort"
+    MAINTENANCE = "maintenance"
 
 
 @dataclass(slots=True)

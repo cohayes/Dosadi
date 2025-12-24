@@ -42,6 +42,9 @@ class Facility:
     min_staff: int = 0
     is_operational: bool = True
     down_until_day: int = -1
+    wear: float = 0.0
+    maintenance_due: bool = False
+    maintenance_job_id: str | None = None
     tags: Set[str] = field(default_factory=set)
 
     def __getattr__(self, name: str) -> Any:  # pragma: no cover - trivial passthrough
@@ -163,6 +166,9 @@ def ensure_facility_ledger(world) -> FacilityLedger:
                     min_staff=int(fac.get("min_staff", 0)),
                     is_operational=bool(fac.get("is_operational", True)),
                     down_until_day=int(fac.get("down_until_day", -1)),
+                    wear=float(fac.get("wear", 0.0)),
+                    maintenance_due=bool(fac.get("maintenance_due", False)),
+                    maintenance_job_id=fac.get("maintenance_job_id"),
                     tags=set(fac.get("tags", []) if isinstance(fac.get("tags", []), (list, set, tuple)) else []),
                 )
             else:
@@ -177,6 +183,9 @@ def ensure_facility_ledger(world) -> FacilityLedger:
                     min_staff=int(getattr(fac, "min_staff", 0)),
                     is_operational=bool(getattr(fac, "is_operational", True)),
                     down_until_day=int(getattr(fac, "down_until_day", -1)),
+                    wear=float(getattr(fac, "wear", 0.0)),
+                    maintenance_due=bool(getattr(fac, "maintenance_due", False)),
+                    maintenance_job_id=getattr(fac, "maintenance_job_id", None),
                     tags=set(getattr(fac, "tags", set()) or set()),
                 )
         ledger = FacilityLedger(facilities=facilities)

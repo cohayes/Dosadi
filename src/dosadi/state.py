@@ -43,6 +43,7 @@ from .world.water import WellState
 from .world.workforce import WorkforceLedger
 from .world.incidents import IncidentLedger
 from .runtime.focus_mode import FocusConfig, FocusState
+from .runtime.maintenance import MaintenanceConfig, MaintenanceLedger, MaintenanceState
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -912,6 +913,9 @@ class WorldState:
     incident_state: IncidentState = field(default_factory=IncidentState)
     focus_cfg: FocusConfig = field(default_factory=FocusConfig)
     focus_state: FocusState = field(default_factory=FocusState)
+    maint_cfg: MaintenanceConfig = field(default_factory=MaintenanceConfig)
+    maint_state: MaintenanceState = field(default_factory=MaintenanceState)
+    maintenance: MaintenanceLedger = field(default_factory=MaintenanceLedger)
     mat_cfg: object | None = None
     mat_state: object | None = None
 
