@@ -60,6 +60,7 @@ class SurveyEdge:
     hazard: float = 0.0
     confidence: float = 0.0
     last_seen_tick: int = 0
+    closed_until_day: int | None = None
 
     @property
     def key(self) -> str:
@@ -87,6 +88,7 @@ class SurveyMap:
     nodes: Dict[str, SurveyNode] = field(default_factory=dict)
     edges: Dict[str, SurveyEdge] = field(default_factory=dict)
     schema_version: str = "survey_map_v1"
+    adj: Dict[str, list[tuple[str, str]]] = field(default_factory=dict)
 
     def upsert_node(self, node: SurveyNode, *, confidence_delta: float = 0.1) -> None:
         existing = self.nodes.get(node.node_id)
@@ -112,6 +114,7 @@ class SurveyMap:
         else:
             candidate.confidence = min(1.0, max(edge.confidence, confidence_delta))
         self.edges[key] = candidate
+        self._update_adjacency_for_edge(candidate)
 
     def merge_observation(self, obs: Mapping[str, object], *, tick: int) -> None:
         nodes: Iterable[Mapping[str, object]] = obs.get("discovered_nodes", [])  # type: ignore[assignment]
@@ -141,6 +144,7 @@ class SurveyMap:
                 travel_cost=float(raw.get("travel_cost", 0.0)),
                 hazard=float(raw.get("hazard", 0.0)),
                 confidence=float(raw.get("confidence", 0.0)),
+                closed_until_day=raw.get("closed_until_day"),
                 last_seen_tick=tick,
             )
             delta = float(raw.get("confidence_delta", 0.1))
@@ -166,6 +170,7 @@ class SurveyMap:
                 "confidence": edge.confidence,
                 "distance_m": edge.distance_m,
                 "hazard": edge.hazard,
+                "closed_until_day": edge.closed_until_day,
                 "last_seen_tick": edge.last_seen_tick,
                 "travel_cost": edge.travel_cost,
             }
@@ -177,6 +182,15 @@ class SurveyMap:
             "edges": canonical_edges,
         }
         return sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
+
+    def _update_adjacency_for_edge(self, edge: SurveyEdge) -> None:
+        self.adj.setdefault(edge.a, []).append((edge.b, edge.key))
+        self.adj.setdefault(edge.b, []).append((edge.a, edge.key))
+
+    def rebuild_adjacency(self) -> None:
+        self.adj = {}
+        for edge in self.edges.values():
+            self._update_adjacency_for_edge(edge)
 
 
 __all__ = [

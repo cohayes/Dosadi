@@ -9,6 +9,7 @@ from dosadi.world.events import EventKind, WorldEvent
 from dosadi.world.logistics import (
     DeliveryRequest,
     DeliveryStatus,
+    advance_delivery_along_route,
     ensure_logistics,
     process_logistics_until,
     release_courier,
@@ -194,20 +195,7 @@ def _awake_agent_step(world: Any, agent_id: str, tick: int, *, budget: int) -> N
     if delivery is None or delivery.status not in {DeliveryStatus.PICKED_UP, DeliveryStatus.IN_TRANSIT}:
         return
 
-    notes = delivery.notes
-    target_ticks = notes.get("target_ticks")
-    if not isinstance(target_ticks, int):
-        target_ticks = max(1, (delivery.deliver_tick or tick + budget) - tick)
-        notes["target_ticks"] = target_ticks
-
-    progress = int(notes.get("progress_ticks", 0))
-    for _ in range(max(1, budget)):
-        progress += 1
-        if progress >= target_ticks:
-            notes["progress_ticks"] = target_ticks
-            _deliver(world, delivery, tick)
-            return
-    notes["progress_ticks"] = progress
+    advance_delivery_along_route(world, delivery, tick=tick, step_ticks=max(1, budget))
 
 
 def run_ambient_substep(world, *, tick: int) -> None:

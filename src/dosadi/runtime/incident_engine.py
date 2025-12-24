@@ -263,8 +263,9 @@ def _update_delivery_queue(world: Any, delivery: DeliveryRequest) -> None:
     queue: List[tuple[int, str]] = getattr(world, "delivery_due_queue", []) or []
     filtered = [(tick, did) for tick, did in queue if did != delivery.delivery_id]
     heapq.heapify(filtered)
-    if delivery.deliver_tick is not None:
-        heapq.heappush(filtered, (delivery.deliver_tick, delivery.delivery_id))
+    due_tick = delivery.next_edge_complete_tick or delivery.deliver_tick
+    if due_tick is not None:
+        heapq.heappush(filtered, (due_tick, delivery.delivery_id))
     world.delivery_due_queue = filtered
 
 
