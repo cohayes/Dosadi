@@ -35,6 +35,7 @@ from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
 from .world.environment import PlaceEnvironmentState
 from .world.phases import PhaseConfig, PhaseState
+from .world.discovery import DiscoveryConfig
 from .world.survey_map import SurveyMap
 from .world.construction import ProjectLedger
 from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
@@ -828,6 +829,7 @@ class WorldState:
     facilities: MutableMapping[str, Any] = field(default_factory=FacilityLedger)
     places: MutableMapping[str, Any] = field(default_factory=dict)
     survey_map: SurveyMap = field(default_factory=SurveyMap)
+    discovery_cfg: DiscoveryConfig = field(default_factory=DiscoveryConfig)
     crews: Dict[str, CrewState] = field(default_factory=dict)
     water_tap_sources: Dict[str, str] = field(default_factory=dict)
     facility_queues: MutableMapping[str, "FacilityQueueState"] = field(default_factory=dict)

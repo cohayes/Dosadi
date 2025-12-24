@@ -12,6 +12,9 @@ class SiteScoreConfig:
     distance_weight: float = 1.0
     water_weight: float = 1.0
     strategic_tag_weights: Mapping[str, float] = field(default_factory=dict)
+    resource_tag_weights: Mapping[str, float] = field(
+        default_factory=lambda: {"scrap_field": 3.0, "salvage_cache": 2.5}
+    )
     disconnected_penalty: float = 10.0
 
 
@@ -36,6 +39,9 @@ def score_site(
 
     for tag in node.tags:
         score += cfg.strategic_tag_weights.get(tag, 0.0)
+
+    for tag in getattr(node, "resource_tags", ()):  # type: ignore[attr-defined]
+        score += cfg.resource_tag_weights.get(tag, 0.0)
 
     if origin_node_id and origin_node_id != node.node_id:
         key = edge_key(origin_node_id, node.node_id)
