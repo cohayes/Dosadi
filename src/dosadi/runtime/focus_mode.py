@@ -140,6 +140,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     from dosadi.runtime.event_to_memory_router import run_router_for_day
     from dosadi.runtime.facility_updates import update_facilities_for_day
     from dosadi.runtime.incident_engine import run_incident_engine_for_day
+    from dosadi.runtime.local_interactions import run_interactions_for_day
     from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
     from dosadi.runtime.staffing import StaffingConfig, StaffingState, run_staffing_policy
     from dosadi.world.expansion_planner import (
@@ -162,6 +163,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     step_scout_missions_for_day(world, day=day, cfg=scout_cfg)
     update_facilities_for_day(world, day=day, days=1)
     run_incident_engine_for_day(world, day=day)
+    run_interactions_for_day(world, day=day)
     run_router_for_day(world, day=day)
     run_belief_formation_for_day(world, day=day)
     maybe_plan(world, cfg=planner_cfg, state=planner_state)
