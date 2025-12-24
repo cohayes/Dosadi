@@ -27,6 +27,7 @@ from dosadi.runtime.event_to_memory_router import run_router_for_day
 from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
 from dosadi.runtime.scouting_config import ScoutConfig
 from dosadi.runtime.staffing import StaffingConfig, StaffingState, run_staffing_policy
+from dosadi.runtime.maintenance import update_facility_wear
 from dosadi.runtime.facility_updates import update_facilities_for_day
 from dosadi.runtime.incident_engine import run_incident_engine_for_day
 from dosadi.runtime.local_interactions import run_interactions_for_day
@@ -184,6 +185,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         maybe_create_scout_missions(world, cfg=scout_cfg)
         step_scout_missions_for_day(world, day=world.day, cfg=scout_cfg)
         update_facilities_for_day(world, day=world.day, days=1)
+        update_facility_wear(world, day=world.day)
         run_incident_engine_for_day(world, day=world.day)
         run_interactions_for_day(world, day=world.day)
         run_router_for_day(world, day=world.day)
