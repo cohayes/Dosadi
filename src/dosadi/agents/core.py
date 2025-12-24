@@ -28,6 +28,7 @@ from dosadi.memory.sleep_consolidation import consolidate_sleep_for_agent
 from dosadi.runtime.admin_log import AdminLogEntry, create_admin_log_id
 from dosadi.runtime.config import SUPERVISOR_REPORT_INTERVAL_TICKS
 from dosadi.runtime.work_details import WorkDetailType, WORK_DETAIL_CATALOG
+from dosadi.agent.suits import SuitState
 from dosadi.systems.protocols import (
     ProtocolRegistry,
     compute_effective_hazard_prob,
@@ -412,6 +413,7 @@ class AgentState:
     attributes: Attributes = field(default_factory=Attributes)
     personality: Personality = field(default_factory=Personality)
     physical: PhysicalState = field(default_factory=PhysicalState)
+    suit: SuitState = field(default_factory=SuitState)
     work_history: WorkHistory = field(default_factory=WorkHistory)
     work_preferences: WorkPreferences = field(default_factory=WorkPreferences)
 

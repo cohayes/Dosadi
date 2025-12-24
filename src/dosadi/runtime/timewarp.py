@@ -31,6 +31,7 @@ from dosadi.runtime.maintenance import update_facility_wear
 from dosadi.runtime.facility_updates import update_facilities_for_day
 from dosadi.runtime.incident_engine import run_incident_engine_for_day
 from dosadi.runtime.local_interactions import run_interactions_for_day
+from dosadi.runtime.suit_wear import ensure_suit_config, run_suit_wear_for_day, suit_decay_multiplier
 from dosadi.world.construction import apply_project_work
 from dosadi.world.expansion_planner import (
     ExpansionPlannerConfig,
@@ -71,13 +72,14 @@ def _advance_clock(world, *, elapsed_ticks: int, ticks_per_day: int) -> None:
         world.day = world.tick // ticks_per_day
 
 
-def integrate_needs(agent: AgentState, *, elapsed_ticks: int) -> None:
+def integrate_needs(agent: AgentState, *, elapsed_ticks: int, suit_multiplier: float = 1.0) -> None:
     physical = agent.physical
     physical.hunger_level = min(
         HUNGER_MAX, physical.hunger_level + HUNGER_RATE_PER_TICK * elapsed_ticks
     )
 
-    hydration = physical.hydration_level - HYDRATION_DECAY_PER_TICK * elapsed_ticks
+    multiplier = max(1.0, float(suit_multiplier))
+    hydration = physical.hydration_level - HYDRATION_DECAY_PER_TICK * elapsed_ticks * multiplier
     if hydration < 0.0:
         hydration = 0.0
     elif hydration > 1.0:
@@ -85,11 +87,11 @@ def integrate_needs(agent: AgentState, *, elapsed_ticks: int) -> None:
     physical.hydration_level = hydration
 
 
-def integrate_physiology(agent: AgentState, *, elapsed_ticks: int) -> None:
+def integrate_physiology(agent: AgentState, *, elapsed_ticks: int, suit_multiplier: float = 1.0) -> None:
     if elapsed_ticks <= 0:
         return
 
-    integrate_needs(agent, elapsed_ticks=elapsed_ticks)
+    integrate_needs(agent, elapsed_ticks=elapsed_ticks, suit_multiplier=suit_multiplier)
 
     physical = agent.physical
     needs_pressure = compute_needs_pressure(physical)
@@ -124,7 +126,7 @@ def select_awake_set(world, cfg: TimewarpConfig) -> List[str]:
 
 
 def _integrate_agent_over_interval(
-    agent: AgentState, *, elapsed_ticks: int, substeps: int
+    agent: AgentState, *, elapsed_ticks: int, substeps: int, suit_multiplier: float = 1.0
 ) -> None:
     if elapsed_ticks <= 0:
         return
@@ -134,7 +136,7 @@ def _integrate_agent_over_interval(
 
     while remaining > 0:
         step = min(step_ticks, remaining)
-        integrate_physiology(agent, elapsed_ticks=step)
+        integrate_physiology(agent, elapsed_ticks=step, suit_multiplier=suit_multiplier)
         remaining -= step
 
 
@@ -144,6 +146,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
     elapsed_ticks = max(0, int(days)) * ticks_per_day
     total_days = max(1, int(days))
 
+    suit_cfg = ensure_suit_config(world)
     awake_ids = select_awake_set(world, cfg)
     awake_set = set(awake_ids)
     ambient_ids = [
@@ -152,16 +155,27 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
 
     for agent_id in awake_ids:
         agent = world.agents[agent_id]
+        multiplier = 1.0
+        if getattr(suit_cfg, "enabled", False) and getattr(suit_cfg, "apply_physio_penalties", False):
+            multiplier = suit_decay_multiplier(agent, cfg=suit_cfg)
         if cfg.physiology_enabled:
             _integrate_agent_over_interval(
-                agent, elapsed_ticks=elapsed_ticks, substeps=max(1, days * 24)
+                agent,
+                elapsed_ticks=elapsed_ticks,
+                substeps=max(1, days * 24),
+                suit_multiplier=multiplier,
             )
         agent.physical.last_physical_update_tick = getattr(world, "tick", 0) + elapsed_ticks
 
     for agent_id in ambient_ids:
         agent = world.agents[agent_id]
+        multiplier = 1.0
+        if getattr(suit_cfg, "enabled", False) and getattr(suit_cfg, "apply_physio_penalties", False):
+            multiplier = suit_decay_multiplier(agent, cfg=suit_cfg)
         if cfg.physiology_enabled:
-            _integrate_agent_over_interval(agent, elapsed_ticks=elapsed_ticks, substeps=1)
+            _integrate_agent_over_interval(
+                agent, elapsed_ticks=elapsed_ticks, substeps=1, suit_multiplier=multiplier
+            )
         agent.physical.last_physical_update_tick = getattr(world, "tick", 0) + elapsed_ticks
 
     apply_project_work(
@@ -186,6 +200,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         step_scout_missions_for_day(world, day=world.day, cfg=scout_cfg)
         update_facilities_for_day(world, day=world.day, days=1)
         update_facility_wear(world, day=world.day)
+        run_suit_wear_for_day(world, day=world.day)
         run_incident_engine_for_day(world, day=world.day)
         run_interactions_for_day(world, day=world.day)
         run_router_for_day(world, day=world.day)
