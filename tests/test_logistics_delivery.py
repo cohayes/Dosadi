@@ -1,11 +1,13 @@
 from dataclasses import replace
 
-from dosadi.runtime.snapshot import restore_world, snapshot_world
+from dosadi.agents.core import AgentState
+from dosadi.runtime.snapshot import restore_world, snapshot_world, world_signature
 from dosadi.runtime.timewarp import TimewarpConfig, step_day
 from dosadi.state import WorldState
 from dosadi.world.construction import ConstructionProject, ProjectCost, ProjectLedger, ProjectStatus, stage_project_if_ready
-from dosadi.world.logistics import DeliveryStatus, process_logistics_until
+from dosadi.world.logistics import DeliveryStatus, LogisticsConfig, process_logistics_until
 from dosadi.world.survey_map import SurveyEdge
+from dosadi.world.workforce import AssignmentKind, ensure_workforce
 
 
 def _make_project(project_id: str = "proj-1") -> ConstructionProject:
@@ -121,3 +123,84 @@ def test_snapshot_roundtrip_delivery() -> None:
     process_logistics_until(restored, target_tick=deliver_tick, current_tick=mid_tick)
     assert restored.logistics.deliveries["delivery:proj-snap:v1"].status == DeliveryStatus.DELIVERED
     assert restored.projects.get(project.project_id).materials_delivered.get("polymer") == 10.0
+
+
+def test_agent_courier_assignment_deterministic() -> None:
+    world = _seed_world()
+    world.logistics_cfg = LogisticsConfig(use_agent_couriers=True)
+    world.agents = {
+        f"a-{idx}": AgentState(agent_id=f"a-{idx}", name=f"Agent {idx}") for idx in range(1, 4)
+    }
+    project = _make_project("proj-agent")
+    world.projects.add_project(project)
+
+    stage_project_if_ready(world, project, 0)
+    process_logistics_until(world, target_tick=0, current_tick=0)
+
+    delivery = world.logistics.deliveries["delivery:proj-agent:v1"]
+    assert delivery.assigned_carrier_id == "a-1"
+
+    ledger = ensure_workforce(world)
+    assignment = ledger.get("a-1")
+    assert assignment.kind is AssignmentKind.LOGISTICS_COURIER
+    assert assignment.target_id == delivery.delivery_id
+
+
+def test_agent_courier_released_after_delivery() -> None:
+    world = _seed_world()
+    world.logistics_cfg = LogisticsConfig(use_agent_couriers=True)
+    world.agents["a-1"] = AgentState(agent_id="a-1", name="Agent One")
+    project = _make_project("proj-agent-release")
+    world.projects.add_project(project)
+
+    stage_project_if_ready(world, project, 0)
+    process_logistics_until(world, target_tick=0, current_tick=0)
+    delivery = world.logistics.deliveries["delivery:proj-agent-release:v1"]
+    deliver_tick = delivery.deliver_tick or 0
+
+    ledger = ensure_workforce(world)
+    assert ledger.get("a-1").kind is AssignmentKind.LOGISTICS_COURIER
+
+    process_logistics_until(world, target_tick=deliver_tick, current_tick=0)
+
+    assert delivery.status == DeliveryStatus.DELIVERED
+    assert ledger.is_idle("a-1")
+
+
+def test_fallback_to_abstract_carrier_when_no_agents() -> None:
+    world = _seed_world()
+    world.logistics_cfg = LogisticsConfig(use_agent_couriers=True)
+    world.agents.clear()
+    project = _make_project("proj-fallback")
+    world.projects.add_project(project)
+
+    stage_project_if_ready(world, project, 0)
+    process_logistics_until(world, target_tick=0, current_tick=0)
+    delivery = world.logistics.deliveries["delivery:proj-fallback:v1"]
+    assert delivery.assigned_carrier_id is not None
+    assert delivery.assigned_carrier_id.startswith("carrier:")
+    assert world.carriers_available == 0
+
+    process_logistics_until(world, target_tick=delivery.deliver_tick or 0, current_tick=0)
+    assert world.carriers_available == 1
+
+
+def test_snapshot_roundtrip_with_agent_courier() -> None:
+    world = _seed_world()
+    world.logistics_cfg = LogisticsConfig(use_agent_couriers=True)
+    world.agents["a-1"] = AgentState(agent_id="a-1", name="Agent One")
+    project = _make_project("proj-snap-agent")
+    world.projects.add_project(project)
+
+    stage_project_if_ready(world, project, 0)
+    process_logistics_until(world, target_tick=0, current_tick=0)
+    deliver_tick = world.logistics.deliveries["delivery:proj-snap-agent:v1"].deliver_tick or 0
+
+    snapshot = snapshot_world(world, scenario_id="logistics-agent")
+    restored = restore_world(snapshot)
+
+    process_logistics_until(world, target_tick=deliver_tick, current_tick=0)
+    process_logistics_until(restored, target_tick=deliver_tick, current_tick=0)
+
+    assert world_signature(world) == world_signature(restored)
+    assert world.logistics.signature() == restored.logistics.signature()

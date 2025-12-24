@@ -17,6 +17,7 @@ from .survey_map import SurveyMap, edge_key
 
 @dataclass(slots=True)
 class LogisticsConfig:
+    use_agent_couriers: bool = False
     route_risk_cost_weight: float = 0.30
 
 
@@ -155,8 +156,50 @@ def _consume_stock(stock: MutableMapping[str, float], items: Mapping[str, float]
         stock[item] = stock.get(item, 0.0) - qty
 
 
-def _release_carrier(world) -> None:
-    world.carriers_available = getattr(world, "carriers_available", 0) + 1
+def _logistics_metrics(world) -> MutableMapping[str, float]:
+    metrics: MutableMapping[str, float] = getattr(world, "metrics", {})
+    world.metrics = metrics
+    return metrics.setdefault("logistics", {})  # type: ignore[arg-type]
+
+
+def _choose_idle_courier_agent(world, *, day: int, max_candidates: int = 200) -> str | None:
+    agents = getattr(world, "agents", {}) or {}
+    if not agents:
+        return None
+
+    from .workforce import ensure_workforce
+
+    ledger = ensure_workforce(world)
+    ordered_ids = sorted(agents.keys())[: max(0, max_candidates)]
+    for agent_id in ordered_ids:
+        try:
+            if ledger.is_idle(agent_id):
+                return agent_id
+        except Exception:
+            # Best-effort; skip corrupted entries
+            continue
+    return None
+
+
+def release_courier(world, carrier_id: str | None) -> None:
+    if carrier_id is None:
+        return
+
+    if carrier_id.startswith("carrier:"):
+        world.carriers_available = getattr(world, "carriers_available", 0) + 1
+        return
+
+    from .workforce import AssignmentKind, ensure_workforce
+
+    metrics = _logistics_metrics(world)
+    ledger = ensure_workforce(world)
+    assignment = ledger.get(carrier_id)
+    if assignment.kind is not AssignmentKind.LOGISTICS_COURIER:
+        metrics["courier_release_mismatch"] = metrics.get("courier_release_mismatch", 0.0) + 1
+    try:
+        ledger.unassign(carrier_id)
+    except Exception:
+        metrics["courier_release_mismatch"] = metrics.get("courier_release_mismatch", 0.0) + 1
 
 
 def _delivery_should_fail(world, delivery_id: str, day: int) -> bool:
@@ -179,10 +222,51 @@ def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
         delivery.notes["failure"] = "insufficient_stock"
         return
 
-    world.next_carrier_seq = getattr(world, "next_carrier_seq", 0) + 1
-    carrier_id = f"carrier:{world.next_carrier_seq}"
-    world.carriers_available = max(0, getattr(world, "carriers_available", 1) - 1)
-    delivery.assigned_carrier_id = carrier_id
+    cfg: LogisticsConfig = getattr(world, "logistics_cfg", LogisticsConfig())
+    use_agent_couriers = getattr(cfg, "use_agent_couriers", False)
+    metrics = _logistics_metrics(world)
+    assigned_carrier: str | None = None
+
+    if use_agent_couriers:
+        agent_id = _choose_idle_courier_agent(world, day=getattr(world, "day", 0))
+        if agent_id is not None:
+            from .workforce import Assignment, AssignmentKind, ensure_workforce
+
+            ledger = ensure_workforce(world)
+            try:
+                ledger.assign(
+                    Assignment(
+                        agent_id=agent_id,
+                        kind=AssignmentKind.LOGISTICS_COURIER,
+                        target_id=delivery.delivery_id,
+                        start_day=getattr(world, "day", 0),
+                        notes={"role": "courier"},
+                    )
+                )
+                assigned_carrier = agent_id
+                delivery.notes["carrier_kind"] = "agent"
+
+                agent = getattr(world, "agents", {}).get(agent_id)
+                if agent is not None:
+                    agent.navigation_target_id = delivery.dest_node_id
+            except ValueError:
+                assigned_carrier = None
+
+    if assigned_carrier is None:
+        available = getattr(world, "carriers_available", 0)
+        if available <= 0:
+            delivery.status = DeliveryStatus.REQUESTED
+            return
+
+        world.next_carrier_seq = getattr(world, "next_carrier_seq", 0) + 1
+        assigned_carrier = f"carrier:{world.next_carrier_seq}"
+        world.carriers_available = max(0, available - 1)
+        delivery.notes["carrier_kind"] = "abstract"
+        metrics["assigned_abstract_carriers"] = metrics.get("assigned_abstract_carriers", 0.0) + 1
+    else:
+        metrics["assigned_agent_couriers"] = metrics.get("assigned_agent_couriers", 0.0) + 1
+
+    delivery.assigned_carrier_id = assigned_carrier
     delivery.status = DeliveryStatus.PICKED_UP
     delivery.pickup_tick = tick
 
@@ -204,24 +288,30 @@ def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
 
 def assign_pending_deliveries(world, *, tick: int) -> None:
     logistics = ensure_logistics(world)
+    cfg: LogisticsConfig = getattr(world, "logistics_cfg", LogisticsConfig())
+    use_agent_couriers = getattr(cfg, "use_agent_couriers", False)
     available = getattr(world, "carriers_available", 0)
-    if available <= 0:
+    has_agents = use_agent_couriers and bool(getattr(world, "agents", {}))
+    if available <= 0 and not has_agents:
         return
 
     for delivery_id in sorted(logistics.active_ids):
         delivery = logistics.deliveries[delivery_id]
         if delivery.status != DeliveryStatus.REQUESTED:
             continue
-        if getattr(world, "carriers_available", 0) <= 0:
+        if getattr(world, "carriers_available", 0) <= 0 and not has_agents:
             break
-        delivery.status = DeliveryStatus.ASSIGNED
         _assign_carrier(world, delivery, tick)
 
 
 def _deliver(world, delivery: DeliveryRequest, tick: int) -> None:
     delivery.status = DeliveryStatus.DELIVERED
     delivery.deliver_tick = tick
-    _release_carrier(world)
+    release_courier(world, delivery.assigned_carrier_id)
+
+    agent = getattr(world, "agents", {}).get(delivery.assigned_carrier_id)
+    if agent is not None:
+        agent.location_id = delivery.dest_node_id
 
     projects = getattr(world, "projects", None)
     if projects and delivery.project_id in projects.projects:
@@ -246,7 +336,7 @@ def process_due_deliveries(world, *, tick: int) -> None:
             delivery.status = DeliveryStatus.FAILED
             delivery.deliver_tick = tick
             delivery.notes["failure"] = "phase_loss"
-            _release_carrier(world)
+            release_courier(world, delivery.assigned_carrier_id)
             continue
         _deliver(world, delivery, tick)
 
