@@ -11,6 +11,13 @@ from typing import Dict, Mapping, MutableMapping, Optional
 import math
 
 from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
+from dosadi.runtime.escort_protocols import (
+    assign_escorts_for_delivery,
+    ensure_escort_config,
+    ensure_escort_state,
+    has_escort,
+    release_escorts,
+)
 from dosadi.runtime.local_interactions import (
     InteractionOpportunity,
     enqueue_interaction_opportunity,
@@ -18,7 +25,8 @@ from dosadi.runtime.local_interactions import (
 )
 
 from .routing import Route, compute_route
-from .survey_map import SurveyMap, edge_key
+from .survey_map import SurveyEdge, SurveyMap, edge_key
+from .workforce import Assignment, AssignmentKind, WorkforceLedger, ensure_workforce
 
 
 @dataclass(slots=True)
@@ -56,6 +64,7 @@ class DeliveryRequest:
     route_index: int = 0
     remaining_edge_ticks: int = 0
     next_edge_complete_tick: int | None = None
+    escort_agent_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -80,6 +89,7 @@ class LogisticsLedger:
                 "carrier": delivery.assigned_carrier_id,
                 "due": delivery.due_tick,
                 "deliver": delivery.deliver_tick,
+                "escorts": list(sorted(delivery.escort_agent_ids)),
             }
             for delivery_id, delivery in sorted(self.deliveries.items())
         }
@@ -98,6 +108,8 @@ def ensure_logistics(world) -> LogisticsLedger:
         world.next_carrier_seq = 0
     if getattr(world, "logistics_cfg", None) is None:
         world.logistics_cfg = LogisticsConfig()
+    ensure_escort_config(world)
+    ensure_escort_state(world)
     return ledger
 
 
@@ -193,7 +205,12 @@ def _schedule_next_edge(world, delivery: DeliveryRequest, start_tick: int) -> No
     edge = survey_map.edges.get(edge_key_str)
     if _edge_closed(world, edge):
         return
-    delivery.remaining_edge_ticks = _edge_travel_ticks(edge)
+    remaining = _edge_travel_ticks(edge)
+    escort_cfg = ensure_escort_config(world)
+    if getattr(escort_cfg, "enabled", False) and has_escort(world, delivery.delivery_id):
+        penalty = 1.0 + max(0.0, getattr(escort_cfg, "escort_speed_penalty", 0.0))
+        remaining = int(math.ceil(remaining * penalty))
+    delivery.remaining_edge_ticks = remaining
     delivery.next_edge_complete_tick = start_tick + delivery.remaining_edge_ticks
     queue: list[tuple[int, str]] = getattr(world, "delivery_due_queue", [])
     heapq.heapify(queue)
@@ -245,6 +262,8 @@ def _reroute_delivery(world, delivery: DeliveryRequest) -> None:
     if new_route is None:
         delivery.status = DeliveryStatus.FAILED
         delivery.notes["failure"] = "reroute_failed"
+        release_courier(world, delivery.assigned_carrier_id)
+        release_escorts(world, delivery.delivery_id)
         return
     delivery.route_nodes = list(new_route.nodes)
     delivery.route_edge_keys = list(new_route.edge_keys)
@@ -317,8 +336,6 @@ def _choose_idle_courier_agent(world, *, day: int, max_candidates: int = 200) ->
     if not agents:
         return None
 
-    from .workforce import ensure_workforce
-
     ledger = ensure_workforce(world)
     ordered_ids = sorted(agents.keys())[: max(0, max_candidates)]
     for agent_id in ordered_ids:
@@ -338,8 +355,6 @@ def release_courier(world, carrier_id: str | None) -> None:
     if carrier_id.startswith("carrier:"):
         world.carriers_available = getattr(world, "carriers_available", 0) + 1
         return
-
-    from .workforce import AssignmentKind, ensure_workforce
 
     metrics = _logistics_metrics(world)
     ledger = ensure_workforce(world)
@@ -376,12 +391,11 @@ def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
     use_agent_couriers = getattr(cfg, "use_agent_couriers", False)
     metrics = _logistics_metrics(world)
     assigned_carrier: str | None = None
+    day = getattr(world, "day", 0)
 
     if use_agent_couriers:
-        agent_id = _choose_idle_courier_agent(world, day=getattr(world, "day", 0))
+        agent_id = _choose_idle_courier_agent(world, day=day)
         if agent_id is not None:
-            from .workforce import Assignment, AssignmentKind, ensure_workforce
-
             ledger = ensure_workforce(world)
             try:
                 ledger.assign(
@@ -389,7 +403,7 @@ def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
                         agent_id=agent_id,
                         kind=AssignmentKind.LOGISTICS_COURIER,
                         target_id=delivery.delivery_id,
-                        start_day=getattr(world, "day", 0),
+                        start_day=day,
                         notes={"role": "courier"},
                     )
                 )
@@ -423,6 +437,7 @@ def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
     _consume_stock(stockpiles, delivery.items)
     if not _init_delivery_route(world, delivery, tick=tick):
         return
+    assign_escorts_for_delivery(world, delivery.delivery_id, day=day)
     if not delivery.route_edge_keys:
         delivery.status = DeliveryStatus.IN_TRANSIT
         _deliver(world, delivery, tick)
@@ -454,6 +469,7 @@ def _deliver(world, delivery: DeliveryRequest, tick: int) -> None:
     delivery.status = DeliveryStatus.DELIVERED
     delivery.deliver_tick = tick
     release_courier(world, delivery.assigned_carrier_id)
+    release_escorts(world, delivery.delivery_id)
 
     agent = getattr(world, "agents", {}).get(delivery.assigned_carrier_id)
     if agent is not None:
@@ -483,6 +499,7 @@ def process_due_deliveries(world, *, tick: int) -> None:
             delivery.deliver_tick = tick
             delivery.notes["failure"] = "phase_loss"
             release_courier(world, delivery.assigned_carrier_id)
+            release_escorts(world, delivery.delivery_id)
             continue
         delivery.next_edge_complete_tick = None
         advance_delivery_along_route(world, delivery, tick=tick)

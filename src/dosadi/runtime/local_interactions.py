@@ -8,6 +8,7 @@ from typing import Any, Iterable, MutableMapping
 
 from typing import TYPE_CHECKING
 
+from dosadi.runtime.escort_protocols import ensure_escort_config, has_escort
 from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
 from dosadi.world.workforce import AssignmentKind, WorkforceLedger, ensure_workforce
 
@@ -192,6 +193,7 @@ def resolve_candidates(world: Any, opp: InteractionOpportunity, cfg: Interaction
         target_kinds.add(AssignmentKind.FACILITY_STAFF)
     elif opp.kind in {"courier_edge", "courier_arrival"}:
         target_kinds.add(AssignmentKind.LOGISTICS_COURIER)
+        target_kinds.add(AssignmentKind.LOGISTICS_ESCORT)
 
     candidates.update(_candidate_agents_from_assignments(ledger, opp.subject_id, target_kinds))
 
@@ -259,7 +261,12 @@ def _apply_delivery_delay(world: Any, delivery_id: str, delay_ticks: int) -> Non
 
 
 def _fail_delivery(world: Any, delivery_id: str, *, tick: int, reason: str) -> None:
-    from dosadi.world.logistics import DeliveryStatus, ensure_logistics, release_courier
+    from dosadi.world.logistics import (
+        DeliveryStatus,
+        ensure_logistics,
+        release_courier,
+        release_escorts,
+    )
 
     logistics = ensure_logistics(world)
     delivery = logistics.deliveries.get(delivery_id)
@@ -272,6 +279,7 @@ def _fail_delivery(world: Any, delivery_id: str, *, tick: int, reason: str) -> N
     delivery.next_edge_complete_tick = None
     delivery.remaining_edge_ticks = 0
     release_courier(world, delivery.assigned_carrier_id)
+    release_escorts(world, delivery.delivery_id)
 
     queue = getattr(world, "delivery_due_queue", [])
     queue = [(due, did) for due, did in queue if did != delivery_id]
@@ -318,7 +326,10 @@ def _resolve_interaction(
     if actor is None:
         return None
 
+    escort_cfg = ensure_escort_config(world)
     escort_present = bool(opp.payload.get("escort_present"))
+    if opp.kind in {"courier_edge", "courier_arrival"} and opp.subject_id:
+        escort_present = escort_present or has_escort(world, opp.subject_id)
     hazard = 0.0
     survey_map = getattr(world, "survey_map", None)
     if opp.edge_key and survey_map and hasattr(survey_map, "edges"):
@@ -331,9 +342,10 @@ def _resolve_interaction(
     sabotage_thresh = 0.10 + hazard_boost
     conflict_thresh = 0.25 + hazard_boost
     help_thresh = 0.45
-    if escort_present:
-        sabotage_thresh = max(0.0, sabotage_thresh - 0.05)
-        conflict_thresh = max(sabotage_thresh + 0.05, conflict_thresh - 0.05)
+    escort_shift = getattr(escort_cfg, "escort_interaction_shift", 0.0) if escort_present else 0.0
+    if escort_shift > 0:
+        sabotage_thresh = max(0.0, sabotage_thresh - escort_shift)
+        conflict_thresh = max(sabotage_thresh + 0.05, conflict_thresh - escort_shift)
 
     chosen: InteractionKind | None = None
     if draw < sabotage_thresh:
@@ -358,15 +370,18 @@ def _resolve_interaction(
     )
 
     delay_draw = hashed_unit_float("delay", opp.day, opp.kind, opp.subject_id or "-", opp.edge_key or "-", actor)
+    delay_factor = max(0.0, 1.0 - escort_shift)
     if chosen is InteractionKind.HELP:
         base_delay = _bounded_delay(cfg, delay_draw)
         result.delay_ticks = -int(base_delay * cfg.help_reduce_delay_factor)
         if others:
             result.payload["helper_id"] = others[0]
     elif chosen is InteractionKind.CONFLICT:
-        result.delay_ticks = _bounded_delay(cfg, delay_draw, factor=cfg.conflict_delay_factor)
+        result.delay_ticks = _bounded_delay(
+            cfg, delay_draw, factor=cfg.conflict_delay_factor * (delay_factor or 1.0)
+        )
     elif chosen is InteractionKind.SABOTAGE:
-        result.delay_ticks = _bounded_delay(cfg, delay_draw)
+        result.delay_ticks = _bounded_delay(cfg, delay_draw, factor=delay_factor or 1.0)
         success_draw = hashed_unit_float("sabotage", opp.day, opp.kind, opp.subject_id or "-", actor)
         if success_draw < cfg.sabotage_fail_chance:
             fail_draw = hashed_unit_float("sabotage_fail", opp.day, opp.subject_id or "-", actor)
