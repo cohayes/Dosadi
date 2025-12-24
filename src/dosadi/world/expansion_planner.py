@@ -8,6 +8,7 @@ from typing import Iterable, Mapping, MutableMapping
 
 from .construction import ConstructionProject, ProjectCost, ProjectLedger, ProjectStatus, stage_project_if_ready
 from .facilities import FacilityKind
+from .extraction import SiteKind, ensure_extraction
 from .materials import Material, ensure_inventory_registry, normalize_bom
 from .site_scoring import SiteScoreConfig, score_site
 from .survey_map import SurveyMap, SurveyNode, edge_key
@@ -187,6 +188,32 @@ def _facility_failure_risk(agent, world, node: SurveyNode) -> float:
     return 0.5
 
 
+_RESOURCE_WEIGHTS: Mapping[SiteKind, float] = {
+    SiteKind.SCRAP_FIELD: 3.0,
+    SiteKind.SALVAGE_CACHE: 2.5,
+    SiteKind.BRINE_POCKET: 1.0,
+    SiteKind.THERMAL_VENT: 0.5,
+}
+
+
+def _resource_bonus(world, node_id: str) -> tuple[float, Mapping[str, float]]:
+    ledger = ensure_extraction(world)
+    site_ids = ledger.sites_by_node.get(node_id, [])
+    bonus = 0.0
+    breakdown: dict[str, float] = {}
+    for site_id in sorted(site_ids):
+        site = ledger.sites.get(site_id)
+        if site is None:
+            continue
+        weight = _RESOURCE_WEIGHTS.get(site.kind, 0.0)
+        contribution = weight * max(0.0, float(getattr(site, "richness", 0.0)))
+        if contribution <= 0.0:
+            continue
+        breakdown[site.kind.value] = contribution
+        bonus += contribution
+    return bonus, breakdown
+
+
 def _emit_site_ranking(world, *, day: int, proposals: list[ProjectProposal]) -> None:
     top = []
     seen_sites: set[str] = set()
@@ -266,11 +293,13 @@ def maybe_plan(
             route_risk = _route_risk_to_site(planner_agent, origin, node, survey)
             supply_risk = _supply_risk(origin, node, survey)
             facility_risk = _facility_failure_risk(planner_agent, world, node)
+            resource_bonus, resource_components = _resource_bonus(world, node.node_id)
             score = (
                 base_score
                 - cfg.belief_route_weight * route_risk
                 - cfg.belief_supply_weight * supply_risk
                 - cfg.belief_facility_weight * facility_risk
+                + resource_bonus
             )
             proposals.append(
                 ProjectProposal(
@@ -283,9 +312,12 @@ def maybe_plan(
                         "route_risk": route_risk,
                         "supply_risk": supply_risk,
                         "facility_risk": facility_risk,
+                        "resource_bonus": resource_bonus,
                     },
                 )
             )
+            if resource_components:
+                proposals[-1].components["resource_components"] = dict(sorted(resource_components.items()))
 
     proposals.sort(
         key=lambda p: (
