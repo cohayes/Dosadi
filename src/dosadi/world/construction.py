@@ -13,7 +13,12 @@ from hashlib import sha256
 from typing import Dict, MutableMapping, Optional
 
 from dosadi.world.materials import Material, normalize_bom
-from dosadi.world.facilities import Facility, FacilityLedger, ensure_facility_ledger
+from dosadi.world.facilities import (
+    Facility,
+    FacilityLedger,
+    coerce_facility_kind,
+    ensure_facility_ledger,
+)
 from dosadi.world.logistics import (
     DeliveryRequest,
     DeliveryStatus,
@@ -211,7 +216,7 @@ def _create_facility_stub(world, project: ConstructionProject) -> str:
     if facility_id not in facilities:
         facility = Facility(
             facility_id=facility_id,
-            kind=project.kind,
+            kind=coerce_facility_kind(project.kind),
             site_node_id=project.site_node_id,
             created_tick=project.created_tick,
             state={"project_id": project.project_id},

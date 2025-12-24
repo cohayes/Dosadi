@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, Mapping
 
 from dosadi.world.construction import ConstructionProject, ProjectStatus
-from dosadi.world.facilities import FacilityLedger, ensure_facility_ledger
+from dosadi.world.facilities import FacilityLedger, FacilityKind, coerce_facility_kind, ensure_facility_ledger
 from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, ensure_logistics
 from dosadi.world.materials import (
     InventoryRegistry,
@@ -12,6 +12,7 @@ from dosadi.world.materials import (
     ensure_inventory_registry,
     normalize_bom,
 )
+from dosadi.world.recipes import FACILITY_RECIPES, Recipe
 from dosadi.world.workforce import AssignmentKind, ensure_workforce
 
 
@@ -31,12 +32,6 @@ class MaterialsEconomyState:
     last_run_day: int = -1
 
 
-PRODUCTION_RECIPES: Mapping[str, Mapping[Material, int]] = {
-    "facility_kind:workshop": {Material.FASTENERS: 8, Material.SEALANT: 3},
-    "facility_kind:recycler": {Material.SCRAP_METAL: 12, Material.PLASTICS: 6},
-}
-
-
 def _materials_metrics(world) -> Dict[str, float]:
     metrics = getattr(world, "metrics", None)
     if metrics is None:
@@ -50,6 +45,19 @@ def _materials_metrics(world) -> Dict[str, float]:
     return materials_metrics  # type: ignore[return-value]
 
 
+def _facility_metrics(world) -> Dict[str, float]:
+    metrics = getattr(world, "metrics", None)
+    if metrics is None:
+        metrics = {}
+        world.metrics = metrics
+
+    facility_metrics = metrics.get("facilities")
+    if not isinstance(facility_metrics, dict):
+        facility_metrics = {}
+        metrics["facilities"] = facility_metrics
+    return facility_metrics  # type: ignore[return-value]
+
+
 def _facility_staff_count(world, facility_id: str) -> int:
     ledger = ensure_workforce(world)
     return sum(
@@ -57,6 +65,16 @@ def _facility_staff_count(world, facility_id: str) -> int:
         for assignment in ledger.assignments.values()
         if assignment.kind is AssignmentKind.FACILITY_STAFF and assignment.target_id == facility_id
     )
+
+
+def _emit_facility_event(world, event: Mapping[str, object]) -> None:
+    events = getattr(world, "runtime_events", None)
+    if not isinstance(events, list):
+        events = []
+    payload = dict(event)
+    payload.setdefault("day", getattr(world, "day", 0))
+    events.append(payload)
+    world.runtime_events = events
 
 
 def _apply_production(
@@ -76,6 +94,54 @@ def _apply_production(
             continue
         inv.add(material, allowed)
         produced += allowed
+    return produced
+
+
+def _owner_id_for_facility(facility_id: str) -> str:
+    return f"facility:{facility_id}"
+
+
+def _run_recipe(
+    *,
+    world,
+    facility_id: str,
+    recipe: Recipe,
+    inventory: InventoryRegistry,
+    remaining_cap: int,
+    metrics: Dict[str, float],
+) -> int:
+    inv = inventory.inv(_owner_id_for_facility(facility_id))
+    if recipe.inputs and not inv.can_afford(recipe.inputs):
+        metrics["recipes_skipped_inputs"] = metrics.get("recipes_skipped_inputs", 0.0) + 1.0
+        _emit_facility_event(
+            world,
+            {
+                "type": "FACILITY_RECIPE_SKIPPED",
+                "facility_id": facility_id,
+                "recipe_id": recipe.id,
+                "reason": "inputs",
+            },
+        )
+        return 0
+
+    inv.apply_bom(recipe.inputs)
+    produced = _apply_production(
+        inventory,
+        _owner_id_for_facility(facility_id),
+        recipe.outputs,
+        remaining_cap=remaining_cap,
+    )
+    metrics["recipes_ran"] = metrics.get("recipes_ran", 0.0) + 1.0
+    _emit_facility_event(
+        world,
+        {
+            "type": "FACILITY_RECIPE_RAN",
+            "facility_id": facility_id,
+            "recipe_id": recipe.id,
+            "produced": {mat.name: qty for mat, qty in recipe.outputs.items()},
+            "applied_cap": remaining_cap,
+        },
+    )
     return produced
 
 
@@ -100,27 +166,72 @@ def run_materials_production_for_day(world, *, day: int) -> None:
     facilities: FacilityLedger = ensure_facility_ledger(world)
     produced_units = 0
     metrics = _materials_metrics(world)
+    facility_metrics = _facility_metrics(world)
 
     for facility_id in sorted(facilities.keys()):
         facility = facilities[facility_id]
-        recipe_key = f"facility_kind:{facility.kind}"
-        outputs = PRODUCTION_RECIPES.get(recipe_key)
-        if not outputs:
+        facility.kind = coerce_facility_kind(getattr(facility, "kind", FacilityKind.DEPOT))
+        recipes = FACILITY_RECIPES.get(facility.kind, [])
+        if not recipes:
+            continue
+
+        if not facility.is_operational or facility.down_until_day >= day:
+            facility_metrics["downtime_days"] = facility_metrics.get("downtime_days", 0.0) + 1.0
+            _emit_facility_event(
+                world,
+                {
+                    "type": "FACILITY_RECIPE_SKIPPED",
+                    "facility_id": facility_id,
+                    "reason": "downtime",
+                },
+            )
             continue
 
         staff = _facility_staff_count(world, facility_id)
-        if staff <= 0:
+        min_staff = max(0, max(facility.min_staff, *(recipe.min_staff for recipe in recipes or [0])))
+        if staff < min_staff:
+            facility_metrics["recipes_skipped_staff"] = facility_metrics.get("recipes_skipped_staff", 0.0) + 1.0
+            _emit_facility_event(
+                world,
+                {
+                    "type": "FACILITY_RECIPE_SKIPPED",
+                    "facility_id": facility_id,
+                    "reason": "staff",
+                },
+            )
             continue
 
-        produced = _apply_production(
-            registry,
-            f"facility:{facility_id}",
-            outputs,
-            remaining_cap=max(0, int(cfg.daily_production_cap) - produced_units),
-        )
-        produced_units += produced
-        if produced_units >= cfg.daily_production_cap:
-            break
+        for recipe in recipes:
+            if not recipe.enabled:
+                continue
+            if staff < max(facility.min_staff, recipe.min_staff):
+                facility_metrics["recipes_skipped_staff"] = facility_metrics.get("recipes_skipped_staff", 0.0) + 1.0
+                _emit_facility_event(
+                    world,
+                    {
+                        "type": "FACILITY_RECIPE_SKIPPED",
+                        "facility_id": facility_id,
+                        "recipe_id": recipe.id,
+                        "reason": "staff",
+                    },
+                )
+                continue
+
+            remaining_cap = max(0, int(cfg.daily_production_cap) - produced_units)
+            if remaining_cap <= 0:
+                break
+
+            produced = _run_recipe(
+                world=world,
+                facility_id=facility_id,
+                recipe=recipe,
+                inventory=registry,
+                remaining_cap=remaining_cap,
+                metrics=facility_metrics,
+            )
+            produced_units += produced
+            if produced_units >= cfg.daily_production_cap:
+                break
 
     metrics["produced_units"] = metrics.get("produced_units", 0.0) + float(produced_units)
     state.last_run_day = day

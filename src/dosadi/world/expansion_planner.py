@@ -7,6 +7,8 @@ from hashlib import sha256
 from typing import Iterable, Mapping, MutableMapping
 
 from .construction import ConstructionProject, ProjectCost, ProjectLedger, ProjectStatus, stage_project_if_ready
+from .facilities import FacilityKind
+from .materials import Material, ensure_inventory_registry, normalize_bom
 from .site_scoring import SiteScoreConfig, score_site
 from .survey_map import SurveyMap, SurveyNode, edge_key
 
@@ -18,7 +20,7 @@ class ExpansionPlannerConfig:
     max_new_projects_per_cycle: int = 1
     max_active_projects: int = 3
     min_site_confidence: float = 0.5
-    project_kinds: tuple[str, ...] = ("outpost",)
+    project_kinds: tuple[str, ...] = tuple(kind.value for kind in FacilityKind)
     materials_budget: dict[str, float] = field(default_factory=dict)
     labor_pool_size: int = 8
     min_idle_agents: int = 10
@@ -44,13 +46,54 @@ class ProjectProposal:
 
 
 _DEFAULT_COSTS: Mapping[str, ProjectCost] = {
-    "outpost": ProjectCost(materials={"polymer": 10.0, "metal": 5.0}, labor_hours=80.0),
-    "pump_station": ProjectCost(materials={"metal": 8.0, "ceramic": 6.0}, labor_hours=64.0),
+    FacilityKind.DEPOT.value: ProjectCost(materials={}, labor_hours=24.0),
+    FacilityKind.WORKSHOP.value: ProjectCost(
+        materials={"metal": 8.0, "polymer": 6.0}, labor_hours=72.0
+    ),
+    FacilityKind.RECYCLER.value: ProjectCost(
+        materials={"metal": 6.0, "polymer": 4.0}, labor_hours=64.0
+    ),
 }
 
 
 def estimate_cost(kind: str) -> ProjectCost:
     return _DEFAULT_COSTS.get(kind, ProjectCost(materials={}, labor_hours=0.0))
+
+
+def _material_shortages(world, *, top_k: int = 5) -> list[tuple[Material, int]]:
+    registry = ensure_inventory_registry(world)
+    shortages: dict[Material, int] = {}
+    cfg = getattr(world, "mat_cfg", None)
+    default_owner = getattr(cfg, "default_depot_owner_id", "ward:0")
+
+    depot_inv = registry.inv(default_owner)
+    for material in Material:
+        qty = depot_inv.get(material)
+        if qty < 2:
+            shortages[material] = shortages.get(material, 0) + (2 - qty)
+
+    ledger: ProjectLedger = getattr(world, "projects", ProjectLedger())
+    for project in ledger.projects.values():
+        bom = normalize_bom(project.bom) or normalize_bom(project.cost.materials)
+        if not bom:
+            continue
+        inv = registry.inv(f"project:{project.project_id}")
+        for material, qty in bom.items():
+            delivered = inv.get(material)
+            if delivered < qty:
+                shortages[material] = shortages.get(material, 0) + (qty - delivered)
+
+    ordered = sorted(shortages.items(), key=lambda item: (-item[1], item[0].name))
+    return ordered[:top_k]
+
+
+def _kind_for_shortages(shortages: list[tuple[Material, int]]) -> FacilityKind:
+    for material, _ in shortages:
+        if material in {Material.FASTENERS, Material.SEALANT}:
+            return FacilityKind.WORKSHOP
+        if material in {Material.SCRAP_METAL, Material.PLASTICS}:
+            return FacilityKind.RECYCLER
+    return FacilityKind.DEPOT
 
 
 def _materials_available(stock: MutableMapping[str, float], cost: ProjectCost, budget: Mapping[str, float]) -> bool:
@@ -214,9 +257,11 @@ def maybe_plan(
     origin = _origin_node_id(world, survey)
     score_cfg = SiteScoreConfig()
     planner_agent = _planner_agent(world)
+    shortages = _material_shortages(world)
+    chosen_kind = _kind_for_shortages(shortages)
     proposals: list[ProjectProposal] = []
     for node in candidates:
-        for kind in cfg.project_kinds:
+        for kind in (chosen_kind.value,):
             base_score = score_site(node, origin_node_id=origin, survey=survey, cfg=score_cfg)
             route_risk = _route_risk_to_site(planner_agent, origin, node, survey)
             supply_risk = _supply_risk(origin, node, survey)
@@ -246,7 +291,7 @@ def maybe_plan(
         key=lambda p: (
             -p.score,
             p.site_node_id,
-            cfg.project_kinds.index(p.kind) if p.kind in cfg.project_kinds else len(cfg.project_kinds),
+            0,
         )
     )
 
