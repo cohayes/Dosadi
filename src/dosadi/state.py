@@ -40,6 +40,7 @@ from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerSta
 from .world.water import WellState
 from .world.workforce import WorkforceLedger
 from .world.incidents import IncidentLedger
+from .runtime.focus_mode import FocusConfig, FocusState
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -904,6 +905,8 @@ class WorldState:
     incidents: IncidentLedger = field(default_factory=IncidentLedger)
     incident_cfg: IncidentConfig = field(default_factory=IncidentConfig)
     incident_state: IncidentState = field(default_factory=IncidentState)
+    focus_cfg: FocusConfig = field(default_factory=FocusConfig)
+    focus_state: FocusState = field(default_factory=FocusState)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
