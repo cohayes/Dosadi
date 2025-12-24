@@ -44,6 +44,8 @@ from .world.workforce import WorkforceLedger
 from .world.incidents import IncidentLedger
 from .runtime.focus_mode import FocusConfig, FocusState
 from .runtime.maintenance import MaintenanceConfig, MaintenanceLedger, MaintenanceState
+from .runtime.suit_wear import SuitRepairLedger, SuitWearConfig, SuitWearState
+from .agent.suits import SuitState
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -256,24 +258,6 @@ class FactionState:
             "biomass_kg": self.assets.biomass_kg,
             "credits": dict(self.assets.credits),
         }
-
-
-@dataclass(slots=True)
-class SuitState:
-    model: str = "Unknown"
-    caste: str = "MID"
-    integrity: float = 0.9
-    seal: float = 0.9
-    comfort: float = 0.6
-    defense: MutableMapping[str, float] = field(
-        default_factory=lambda: {"blunt": 0.3, "slash": 0.3, "pierce": 0.3}
-    )
-    ratings: MutableMapping[str, float] = field(
-        default_factory=lambda: {"heat": 0.8, "chem": 0.6, "rad": 0.5}
-    )
-    thermal_resistance: float = 0.65
-    environment_tags: Tuple[str, ...] = tuple()
-
 
 @dataclass(slots=True)
 class LoadoutState:
@@ -908,6 +892,9 @@ class WorldState:
     workforce: WorkforceLedger = field(default_factory=WorkforceLedger)
     staffing_cfg: StaffingConfig = field(default_factory=StaffingConfig)
     staffing_state: StaffingState = field(default_factory=StaffingState)
+    suit_cfg: SuitWearConfig = field(default_factory=SuitWearConfig)
+    suit_state: SuitWearState = field(default_factory=SuitWearState)
+    suit_repairs: SuitRepairLedger = field(default_factory=SuitRepairLedger)
     incidents: IncidentLedger = field(default_factory=IncidentLedger)
     incident_cfg: IncidentConfig = field(default_factory=IncidentConfig)
     incident_state: IncidentState = field(default_factory=IncidentState)

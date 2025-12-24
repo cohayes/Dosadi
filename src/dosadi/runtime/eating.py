@@ -18,6 +18,7 @@ from dosadi.runtime.config import (
     MIN_TICKS_AS_SUPERVISOR_BEFORE_REPORT,
     SUPERVISOR_REPORT_INTERVAL_TICKS,
 )
+from dosadi.runtime.suit_wear import ensure_suit_config, suit_decay_multiplier
 
 # Hunger and meal tuning constants (MVP defaults)
 HUNGER_RATE_PER_TICK: float = 1.0 / 50_000.0
@@ -84,6 +85,10 @@ def chronic_update_agent_physical_state(
     rng = rng or getattr(world, "rng", None) or random
     env = get_or_create_place_env(world, agent.location_id)
     factory = EpisodeFactory(world=world)
+    suit_cfg = ensure_suit_config(world)
+    suit_multiplier = 1.0
+    if getattr(suit_cfg, "enabled", False) and getattr(suit_cfg, "apply_physio_penalties", False):
+        suit_multiplier = suit_decay_multiplier(agent, cfg=suit_cfg)
 
     start_tick = max(
         physical.last_physical_update_tick + 1,
@@ -95,7 +100,7 @@ def chronic_update_agent_physical_state(
         if physical.hunger_level > HUNGER_MAX:
             physical.hunger_level = HUNGER_MAX
 
-        physical.hydration_level -= HYDRATION_DECAY_PER_TICK
+        physical.hydration_level -= HYDRATION_DECAY_PER_TICK * max(1.0, suit_multiplier)
         if physical.hydration_level < 0.0:
             physical.hydration_level = 0.0
         elif physical.hydration_level > 1.0:

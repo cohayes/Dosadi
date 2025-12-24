@@ -158,6 +158,14 @@ def _resolve_stakeholders(world: Any, event: WorldEvent, cfg: RouterConfig) -> L
         return _incident_stakeholders(world=world, workforce=workforce, event=event, cfg=cfg)
     if event.kind is EventKind.PHASE_TRANSITION:
         return _resolve_phase_stakeholders(world=world, max_count=cfg.max_stakeholders_per_event)
+    if event.kind in {
+        EventKind.SUIT_WEAR_WARN,
+        EventKind.SUIT_REPAIR_NEEDED,
+        EventKind.SUIT_CRITICAL,
+        EventKind.SUIT_REPAIR_STARTED,
+        EventKind.SUIT_REPAIRED,
+    }:
+        return _bounded([event.subject_id], cfg.max_stakeholders_per_event)
     return []
 
 
@@ -222,6 +230,14 @@ def _crumb_tags(event: WorldEvent) -> List[str]:
         from_phase = event.payload.get("from") if isinstance(event.payload, dict) else "?"
         to_phase = event.payload.get("to") if isinstance(event.payload, dict) else "?"
         tags.append(f"phase:{from_phase}->{to_phase}")
+    elif event.kind in {EventKind.SUIT_WEAR_WARN, EventKind.SUIT_REPAIR_NEEDED}:
+        tags.append("repair-needed")
+    elif event.kind is EventKind.SUIT_CRITICAL:
+        tags.append("suit-critical")
+    elif event.kind is EventKind.SUIT_REPAIRED:
+        facility_id = event.payload.get("facility_id") if isinstance(event.payload, dict) else None
+        if facility_id:
+            tags.append(f"workshop-reliability:{facility_id}")
     return tags
 
 
