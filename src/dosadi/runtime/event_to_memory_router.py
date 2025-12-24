@@ -113,19 +113,27 @@ def _resolve_phase_stakeholders(*, world: Any, max_count: int) -> List[str]:
 def _incident_stakeholders(
     *, world: Any, workforce: WorkforceLedger, event: WorldEvent, cfg: RouterConfig
 ) -> List[str]:
+    stakeholders: Set[str] = set()
+    actors = event.payload.get("actors") if isinstance(event.payload, dict) else []
+    if isinstance(actors, Sequence):
+        stakeholders.update(str(actor) for actor in actors)
     target_kind = event.payload.get("target_kind") or event.subject_kind
     target_id = event.payload.get("target_id") or event.subject_id
     if target_kind == "delivery":
-        return _resolve_delivery_stakeholders(
-            world=world, workforce=workforce, subject_id=str(target_id), max_count=cfg.max_stakeholders_per_event
+        stakeholders.update(
+            _resolve_delivery_stakeholders(
+                world=world, workforce=workforce, subject_id=str(target_id), max_count=cfg.max_stakeholders_per_event
+            )
         )
     if target_kind == "facility":
-        return _resolve_facility_stakeholders(
-            workforce=workforce, facility_id=str(target_id), max_count=cfg.max_stakeholders_per_event
+        stakeholders.update(
+            _resolve_facility_stakeholders(
+                workforce=workforce, facility_id=str(target_id), max_count=cfg.max_stakeholders_per_event
+            )
         )
     if target_kind == "agent":
-        return _bounded([str(target_id)], cfg.max_stakeholders_per_event)
-    return []
+        stakeholders.add(str(target_id))
+    return _bounded(stakeholders, cfg.max_stakeholders_per_event)
 
 
 def _resolve_stakeholders(world: Any, event: WorldEvent, cfg: RouterConfig) -> List[str]:
@@ -199,6 +207,17 @@ def _crumb_tags(event: WorldEvent) -> List[str]:
         incident_kind = event.payload.get("incident_kind") if isinstance(event.payload, dict) else "unknown"
         target_id = event.payload.get("target_id") if isinstance(event.payload, dict) else event.subject_id
         tags.append(f"incident:{incident_kind}:{target_id}")
+        edge_key = event.payload.get("edge_key") if isinstance(event.payload, dict) else None
+        node_id = event.payload.get("node_id") if isinstance(event.payload, dict) else None
+        if incident_kind in {"CONFLICT", "SABOTAGE"} and edge_key:
+            tags.append(f"route-risk:{edge_key}")
+        if incident_kind == "SABOTAGE" and event.payload.get("delivery_failed"):
+            tags.append(f"delivery-fail:{target_id}")
+        if node_id and event.subject_kind in {"project", "facility"}:
+            tags.append(f"site-trouble:{node_id}")
+        helper_id = event.payload.get("helper_id") if isinstance(event.payload, dict) else None
+        if helper_id:
+            tags.append(f"helped-by:{helper_id}")
     elif event.kind is EventKind.PHASE_TRANSITION:
         from_phase = event.payload.get("from") if isinstance(event.payload, dict) else "?"
         to_phase = event.payload.get("to") if isinstance(event.payload, dict) else "?"

@@ -11,6 +11,11 @@ from typing import Dict, Mapping, MutableMapping, Optional
 import math
 
 from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
+from dosadi.runtime.local_interactions import (
+    InteractionOpportunity,
+    enqueue_interaction_opportunity,
+    ensure_interaction_config,
+)
 
 from .routing import Route, compute_route
 from .survey_map import SurveyMap, edge_key
@@ -136,6 +141,50 @@ def _consume_stock(stock: MutableMapping[str, float], items: Mapping[str, float]
         stock[item] = stock.get(item, 0.0) - qty
 
 
+def _day_from_tick(world, tick: int) -> int:
+    if hasattr(world, "day"):
+        try:
+            return int(getattr(world, "day", 0))
+        except Exception:
+            return 0
+    ticks_per_day = getattr(world, "ticks_per_day", None)
+    if ticks_per_day is None:
+        ticks_per_day = getattr(getattr(world, "config", None), "ticks_per_day", 144_000)
+    try:
+        ticks_per_day = int(ticks_per_day)
+    except Exception:
+        ticks_per_day = 144_000
+    return max(0, tick // max(1, ticks_per_day))
+
+
+def _maybe_enqueue_courier_opportunity(
+    world,
+    *,
+    kind: str,
+    node_id: str | None,
+    edge_key: str | None,
+    delivery: DeliveryRequest,
+    tick: int,
+) -> None:
+    cfg = ensure_interaction_config(world)
+    if not getattr(cfg, "enabled", False):
+        return
+
+    day = _day_from_tick(world, tick)
+    opp = InteractionOpportunity(
+        day=day,
+        tick=tick,
+        kind=kind,
+        node_id=node_id,
+        edge_key=edge_key,
+        primary_agent_id=delivery.assigned_carrier_id,
+        subject_id=delivery.delivery_id,
+        severity=float(getattr(world, "logistics_loss_rate", 0.0) or 0.0),
+        payload={},
+    )
+    enqueue_interaction_opportunity(world, opp)
+
+
 def _schedule_next_edge(world, delivery: DeliveryRequest, start_tick: int) -> None:
     survey_map: SurveyMap = getattr(world, "survey_map", SurveyMap())
     if delivery.route_index >= len(delivery.route_edge_keys):
@@ -229,8 +278,32 @@ def advance_delivery_along_route(world, delivery: DeliveryRequest, *, tick: int,
         delivery.remaining_edge_ticks -= consume
         remaining -= consume
         if delivery.remaining_edge_ticks <= 0:
+            current_edge_key = None
+            if delivery.route_index < len(delivery.route_edge_keys):
+                current_edge_key = delivery.route_edge_keys[delivery.route_index]
+            dest_node = None
+            if delivery.route_index + 1 < len(delivery.route_nodes):
+                dest_node = delivery.route_nodes[delivery.route_index + 1]
+            if current_edge_key:
+                _maybe_enqueue_courier_opportunity(
+                    world,
+                    kind="courier_edge",
+                    node_id=dest_node,
+                    edge_key=current_edge_key,
+                    delivery=delivery,
+                    tick=tick,
+                )
             delivery.route_index += 1
             if delivery.route_index >= len(delivery.route_edge_keys):
+                final_node = delivery.route_nodes[-1] if delivery.route_nodes else None
+                _maybe_enqueue_courier_opportunity(
+                    world,
+                    kind="courier_arrival",
+                    node_id=final_node,
+                    edge_key=current_edge_key,
+                    delivery=delivery,
+                    tick=tick,
+                )
                 _deliver(world, delivery, tick)
                 return
             delivery.next_edge_complete_tick = None
