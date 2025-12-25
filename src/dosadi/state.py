@@ -913,6 +913,7 @@ class WorldState:
     maintenance: MaintenanceLedger = field(default_factory=MaintenanceLedger)
     mat_cfg: object | None = None
     mat_state: object | None = None
+    construction_cfg: object | None = None
     extraction: ExtractionLedger = field(default_factory=ExtractionLedger)
     extract_cfg: ExtractionConfig = field(default_factory=ExtractionConfig)
     extract_state: ExtractionState = field(default_factory=ExtractionState)

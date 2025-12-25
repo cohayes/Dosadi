@@ -3,10 +3,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, Mapping
 
-from dosadi.world.construction import ConstructionProject, ProjectStatus
+from dosadi.world.construction import (
+    BlockReason,
+    ConstructionPipelineConfig,
+    ConstructionProject,
+    ProjectStatus,
+    StageState,
+    ensure_construction_config,
+    emit_project_event,
+    project_metrics,
+)
 from dosadi.world.facilities import FacilityLedger, FacilityKind, coerce_facility_kind, ensure_facility_ledger
 from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, ensure_logistics
 from dosadi.world.materials import (
+    Inventory,
     InventoryRegistry,
     Material,
     ensure_inventory_registry,
@@ -99,6 +109,15 @@ def _apply_production(
 
 def _owner_id_for_facility(facility_id: str) -> str:
     return f"facility:{facility_id}"
+
+
+def bom_missing(inv: Inventory, bom: dict[Material, int]) -> dict[Material, int]:
+    missing: dict[Material, int] = {}
+    for material, qty in bom.items():
+        need = max(0, int(qty) - inv.get(material))
+        if need > 0:
+            missing[material] = need
+    return missing
 
 
 def _run_recipe(
@@ -287,6 +306,8 @@ def _ensure_delivery(world, *, project: ConstructionProject, bom: Mapping[Materi
         project.pending_material_delivery_ids.append(delivery_id)
     metrics = _materials_metrics(world)
     metrics["deliveries_requested"] = metrics.get("deliveries_requested", 0.0) + 1.0
+    proj_metrics = project_metrics(world)
+    proj_metrics["deliveries_requested"] = proj_metrics.get("deliveries_requested", 0.0) + 1.0
 
 
 def _stage_unblocked(project: ConstructionProject, bom: Mapping[Material, int]) -> None:
@@ -315,34 +336,153 @@ def evaluate_project_materials(world, *, day: int) -> None:
     if not getattr(cfg, "project_consumption_enabled", True):
         return
 
+    construction_cfg = ensure_construction_config(world)
+
     registry = ensure_inventory_registry(world)
     ledger = getattr(world, "projects", None)
     if ledger is None:
         return
 
     metrics = _materials_metrics(world)
-
+    proj_metrics = project_metrics(world)
     for project_id, project in sorted(ledger.projects.items()):
         if project.status in {ProjectStatus.COMPLETE, ProjectStatus.CANCELED}:
             continue
         bom = _project_bom(project)
         if not bom:
             continue
-        project.bom = dict(bom)
-        inv = registry.inv(_project_inventory_id(project_id))
 
-        if inv.can_afford(bom):
-            if not project.bom_consumed:
-                inv.apply_bom(bom)
-                _stage_unblocked(project, bom)
-                metrics["consumed_units"] = metrics.get("consumed_units", 0.0) + float(
-                    sum(bom.values())
-                )
-                metrics["projects_unblocked"] = metrics.get("projects_unblocked", 0.0) + 1.0
+        project.bom = dict(bom)
+        inv = registry.inv(project.staging_owner_id or _project_inventory_id(project_id))
+
+        if not getattr(construction_cfg, "enabled", False):
+            if inv.can_afford(bom):
+                if not project.bom_consumed:
+                    inv.apply_bom(bom)
+                    _stage_unblocked(project, bom)
+                    metrics["consumed_units"] = metrics.get("consumed_units", 0.0) + float(
+                        sum(bom.values())
+                    )
+                    metrics["projects_unblocked"] = metrics.get("projects_unblocked", 0.0) + 1.0
+                continue
+
+            project.blocked_for_materials = True
+            metrics["projects_blocked"] = metrics.get("projects_blocked", 0.0) + 1.0
+            if getattr(cfg, "auto_delivery_requests_enabled", True):
+                _ensure_delivery(world, project=project, bom=bom)
             continue
 
-        project.blocked_for_materials = True
-        metrics["projects_blocked"] = metrics.get("projects_blocked", 0.0) + 1.0
-        if getattr(cfg, "auto_delivery_requests_enabled", True):
-            _ensure_delivery(world, project=project, bom=bom)
+        if project.last_evaluated_day == day and getattr(construction_cfg, "evaluate_daily", True):
+            continue
+
+        project.last_evaluated_day = day
+        project.block_reason = None
+
+        missing = bom_missing(inv, bom)
+        if missing:
+            project.stage_state = StageState.WAITING_MATERIALS
+            project.block_reason = BlockReason(
+                code="MATERIALS",
+                msg="Missing materials",
+                details={
+                    "missing": {mat.name: qty for mat, qty in sorted(missing.items(), key=lambda item: item[0].name)}
+                },
+            )
+            project.status = ProjectStatus.STAGED
+            proj_metrics["blocked_materials"] = proj_metrics.get("blocked_materials", 0.0) + 1.0
+            emit_project_event(
+                world,
+                {
+                    "type": "PROJECT_STAGE_BLOCKED",
+                    "project_id": project.project_id,
+                    "reason_code": "MATERIALS",
+                    "details": project.block_reason.details,
+                },
+            )
+            if getattr(cfg, "auto_delivery_requests_enabled", True):
+                _ensure_delivery(world, project=project, bom=missing)
+            continue
+
+        ledger_wf = ensure_workforce(world)
+        assigned = [
+            agent_id
+            for agent_id, assignment in ledger_wf.assignments.items()
+            if assignment.kind is AssignmentKind.PROJECT_WORK
+            and assignment.target_id == project.project_id
+        ]
+        if not assigned and project.assigned_agents:
+            assigned = list(project.assigned_agents)
+        assigned = sorted(set(assigned))
+        project.assigned_agents = assigned
+        if not assigned:
+            project.stage_state = StageState.WAITING_STAFF
+            project.block_reason = BlockReason(
+                code="STAFF",
+                msg="No workers assigned",
+                details={},
+            )
+            project.status = ProjectStatus.STAGED
+            proj_metrics["blocked_staff"] = proj_metrics.get("blocked_staff", 0.0) + 1.0
+            emit_project_event(
+                world,
+                {
+                    "type": "PROJECT_STAGE_BLOCKED",
+                    "project_id": project.project_id,
+                    "reason_code": "STAFF",
+                    "details": project.block_reason.details,
+                },
+            )
+            continue
+
+        paused = getattr(project, "incident_paused", False) or bool(
+            project.notes.get("incident_pause") if isinstance(project.notes, Mapping) else False
+        )
+        if paused:
+            project.stage_state = StageState.PAUSED_INCIDENT
+            project.block_reason = BlockReason(
+                code="INCIDENT",
+                msg="Project paused for incident",
+                details={},
+            )
+            project.status = ProjectStatus.STAGED
+            proj_metrics["blocked_incident"] = proj_metrics.get("blocked_incident", 0.0) + 1.0
+            emit_project_event(
+                world,
+                {
+                    "type": "PROJECT_STAGE_BLOCKED",
+                    "project_id": project.project_id,
+                    "reason_code": "INCIDENT",
+                    "details": project.block_reason.details,
+                },
+            )
+            continue
+
+        if not project.bom_consumed:
+            inv.apply_bom(bom)
+            _stage_unblocked(project, bom)
+            project.stage_state = StageState.IN_PROGRESS
+            project.block_reason = None
+            project.progress_days_in_stage = 0
+            proj_metrics["projects_unblocked"] = proj_metrics.get("projects_unblocked", 0.0) + 1.0
+            emit_project_event(
+                world,
+                {
+                    "type": "PROJECT_STAGE_STARTED",
+                    "project_id": project.project_id,
+                },
+            )
+        else:
+            project.stage_state = StageState.IN_PROGRESS
+            project.block_reason = None
+
+        project.status = ProjectStatus.BUILDING
+        project.progress_days_in_stage += 1
+        emit_project_event(
+            world,
+            {
+                "type": "PROJECT_STAGE_PROGRESS",
+                "project_id": project.project_id,
+                "progress_days": project.progress_days_in_stage,
+            },
+        )
 

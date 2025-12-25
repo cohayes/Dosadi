@@ -17,7 +17,7 @@ import argparse
 import random
 import sys
 from pathlib import Path
-from typing import List, Sequence
+from typing import List, Mapping, Sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -27,6 +27,7 @@ if str(SRC_PATH) not in sys.path:
 
 from dosadi.playbook.scenario_runner import run_scenario
 from dosadi.runtime.founding_wakeup import FoundingWakeupReport
+from dosadi.world.construction import project_admin_rows
 from dosadi.agents.groups import GroupType
 from dosadi.systems.protocols import ProtocolStatus
 
@@ -163,6 +164,34 @@ def _print_protocols(world) -> None:
         print(f"  Content: {protocol.description}")
 
 
+def _print_projects(world) -> None:
+    rows = project_admin_rows(world)
+    if not rows:
+        print("\nConstruction projects: none active.")
+        return
+
+    print("\nConstruction projects:")
+    for row in rows:
+        details = row.get("block_details") or {}
+        missing = details.get("missing") if isinstance(details, Mapping) else None
+        missing_label = f" missing={missing}" if missing else ""
+        block_label = row.get("block_reason") or "none"
+        print(
+            "- {project_id} ({kind}) @ {site}: stage={stage} status={status} "
+            "pending={pending} days={days} block={block}{missing}".format(
+                project_id=row.get("project_id"),
+                kind=row.get("kind"),
+                site=row.get("site"),
+                stage=row.get("stage_state"),
+                status=row.get("status"),
+                pending=row.get("pending_deliveries"),
+                days=row.get("progress_days"),
+                block=block_label,
+                missing=missing_label,
+            )
+        )
+
+
 def print_report(report: FoundingWakeupReport, sample_size: int, seed: int) -> None:
     world = report.world
     print("\n=== Founding Wakeup MVP run complete ===")
@@ -185,6 +214,7 @@ def print_report(report: FoundingWakeupReport, sample_size: int, seed: int) -> N
         _print_agent_episodes(agent)
 
     _print_council_members(world)
+    _print_projects(world)
     _print_protocols(world)
 
 
