@@ -34,6 +34,7 @@ from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
 from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
+from .runtime.market_signals import MarketSignalsConfig, MarketSignalsState
 from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
 from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
@@ -883,6 +884,8 @@ class WorldState:
     stock_cfg: StockpilePolicyConfig = field(default_factory=StockpilePolicyConfig)
     stock_state: StockpilePolicyState = field(default_factory=StockpilePolicyState)
     stock_policies: DepotPolicyLedger = field(default_factory=DepotPolicyLedger)
+    market_cfg: MarketSignalsConfig = field(default_factory=MarketSignalsConfig)
+    market_state: MarketSignalsState = field(default_factory=MarketSignalsState)
     escort_cfg: EscortConfig = field(default_factory=EscortConfig)
     escort_state: EscortState = field(default_factory=EscortState)
     delivery_due_queue: List[tuple[int, str]] = field(default_factory=list)
