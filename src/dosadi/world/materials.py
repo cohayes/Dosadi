@@ -27,15 +27,33 @@ class MaterialStack:
 class Inventory:
     items: Dict[Material, int] = field(default_factory=dict)
 
+    def _coerce_keys(self) -> None:
+        if not self.items:
+            return
+        coerced: Dict[Material, int] = {}
+        for key, qty in list(self.items.items()):
+            material = material_from_key(key)
+            if material is None:
+                continue
+            try:
+                amount = int(qty)
+            except (TypeError, ValueError):
+                continue
+            coerced[material] = coerced.get(material, 0) + amount
+        self.items = coerced
+
     def get(self, material: Material) -> int:
+        self._coerce_keys()
         return int(self.items.get(material, 0))
 
     def add(self, material: Material, qty: int) -> None:
+        self._coerce_keys()
         if qty <= 0:
             return
         self.items[material] = self.get(material) + int(qty)
 
     def remove(self, material: Material, qty: int) -> int:
+        self._coerce_keys()
         if qty <= 0:
             return 0
         current = self.get(material)
@@ -44,13 +62,16 @@ class Inventory:
         return current - new_value
 
     def can_afford(self, bom: Mapping[Material, int]) -> bool:
+        self._coerce_keys()
         return all(self.get(mat) >= int(qty) for mat, qty in bom.items())
 
     def apply_bom(self, bom: Mapping[Material, int]) -> None:
+        self._coerce_keys()
         for material, qty in bom.items():
             self.remove(material, int(qty))
 
     def signature(self) -> str:
+        self._coerce_keys()
         payload = {mat.name: self.get(mat) for mat in sorted(self.items, key=lambda m: m.name)}
         digest = sha256(str(payload).encode("utf-8")).hexdigest()
         return digest

@@ -396,7 +396,8 @@ def _delivery_should_fail(world, delivery_id: str, day: int) -> bool:
 def _assign_carrier(world, delivery: DeliveryRequest, tick: int) -> None:
     logistics = ensure_logistics(world)
     stockpiles: MutableMapping[str, float] = getattr(world, "stockpiles", {})
-    mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False))
+    is_stockpile_delivery = isinstance(delivery.notes, Mapping) and delivery.notes.get("kind") == "stockpile_pull"
+    mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False)) or is_stockpile_delivery
     origin_owner_id = getattr(delivery, "origin_owner_id", None)
     bom = _material_bom(delivery.items)
 
@@ -503,7 +504,8 @@ def _deliver(world, delivery: DeliveryRequest, tick: int) -> None:
     if agent is not None:
         agent.location_id = delivery.dest_node_id
 
-    mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False))
+    is_stockpile_delivery = isinstance(delivery.notes, Mapping) and delivery.notes.get("kind") == "stockpile_pull"
+    mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False)) or is_stockpile_delivery
     dest_owner_id = getattr(delivery, "dest_owner_id", None)
     if mat_enabled and dest_owner_id:
         inventory = ensure_inventory_registry(world)
@@ -516,6 +518,13 @@ def _deliver(world, delivery: DeliveryRequest, tick: int) -> None:
             mat_metrics = metrics.setdefault("materials", {})
             if isinstance(mat_metrics, dict):
                 mat_metrics["deliveries_completed"] = mat_metrics.get("deliveries_completed", 0.0) + 1.0
+    if is_stockpile_delivery:
+        try:
+            from dosadi.runtime.stockpile_policy import handle_stockpile_delivery_result
+
+            handle_stockpile_delivery_result(world, delivery, success=True)
+        except Exception:
+            pass
 
     projects = getattr(world, "projects", None)
     if projects and delivery.project_id in projects.projects:
@@ -546,6 +555,13 @@ def process_due_deliveries(world, *, tick: int) -> None:
             delivery.notes["failure"] = "phase_loss"
             release_courier(world, delivery.assigned_carrier_id)
             release_escorts(world, delivery.delivery_id)
+            if isinstance(delivery.notes, Mapping) and delivery.notes.get("kind") == "stockpile_pull":
+                try:
+                    from dosadi.runtime.stockpile_policy import handle_stockpile_delivery_result
+
+                    handle_stockpile_delivery_result(world, delivery, success=False)
+                except Exception:
+                    pass
             continue
         delivery.next_edge_complete_tick = None
         advance_delivery_along_route(world, delivery, tick=tick)

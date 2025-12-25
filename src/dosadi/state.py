@@ -27,6 +27,7 @@ from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from .runtime.escort_protocols import EscortConfig, EscortState
 from .runtime.staffing import StaffingConfig, StaffingState
+from .runtime.stockpile_policy import DepotPolicyLedger, StockpilePolicyConfig, StockpilePolicyState
 from .runtime.work_details import WorkDetailType
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
@@ -873,6 +874,9 @@ class WorldState:
     service_facilities: Dict[str, List[str]] = field(default_factory=dict)
     logistics: LogisticsLedger = field(default_factory=LogisticsLedger)
     logistics_cfg: LogisticsConfig = field(default_factory=LogisticsConfig)
+    stock_cfg: StockpilePolicyConfig = field(default_factory=StockpilePolicyConfig)
+    stock_state: StockpilePolicyState = field(default_factory=StockpilePolicyState)
+    stock_policies: DepotPolicyLedger = field(default_factory=DepotPolicyLedger)
     escort_cfg: EscortConfig = field(default_factory=EscortConfig)
     escort_state: EscortState = field(default_factory=EscortState)
     delivery_due_queue: List[tuple[int, str]] = field(default_factory=list)

@@ -150,6 +150,14 @@ def _resolve_stakeholders(world: Any, event: WorldEvent, cfg: RouterConfig) -> L
         return _resolve_project_stakeholders(
             workforce=workforce, project_id=event.subject_id, max_count=cfg.max_stakeholders_per_event
         )
+    if event.kind in {
+        EventKind.STOCKPILE_PULL_REQUESTED,
+        EventKind.STOCKPILE_PULL_COMPLETED,
+        EventKind.STOCKPILE_SHORTAGE,
+    }:
+        return _resolve_facility_stakeholders(
+            workforce=workforce, facility_id=event.subject_id, max_count=cfg.max_stakeholders_per_event
+        )
     if event.kind in {EventKind.FACILITY_DOWNTIME, EventKind.FACILITY_REACTIVATED}:
         return _resolve_facility_stakeholders(
             workforce=workforce, facility_id=event.subject_id, max_count=cfg.max_stakeholders_per_event
@@ -238,6 +246,19 @@ def _crumb_tags(event: WorldEvent) -> List[str]:
         facility_id = event.payload.get("facility_id") if isinstance(event.payload, dict) else None
         if facility_id:
             tags.append(f"workshop-reliability:{facility_id}")
+    elif event.kind in {
+        EventKind.STOCKPILE_PULL_REQUESTED,
+        EventKind.STOCKPILE_PULL_COMPLETED,
+        EventKind.STOCKPILE_SHORTAGE,
+    }:
+        material = event.payload.get("material") if isinstance(event.payload, dict) else None
+        depot_id = event.subject_id
+        if event.kind is EventKind.STOCKPILE_SHORTAGE and material and depot_id:
+            tags.append(f"depot-short:{material}:{depot_id}")
+        if event.kind is EventKind.STOCKPILE_PULL_COMPLETED:
+            source_owner = event.payload.get("source_owner") if isinstance(event.payload, dict) else None
+            if source_owner:
+                tags.append(f"source-reliable:{source_owner}")
     return tags
 
 
