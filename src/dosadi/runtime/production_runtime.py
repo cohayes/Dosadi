@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping
 
+from dosadi.runtime.market_signals import current_signal_urgency
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.world.construction import ConstructionProject
 from dosadi.world.facilities import FacilityKind, ensure_facility_ledger
@@ -81,6 +82,12 @@ def _material_need_scores(world, prefer: list[str]) -> dict[Material, float]:
         if material is None:
             continue
         scores[material] = max(scores.get(material, 0.0), weight)
+
+    for material, score in list(scores.items()):
+        urgency = current_signal_urgency(world, material.name)
+        if urgency <= 0:
+            continue
+        scores[material] = score * (1.0 + urgency)
     return scores
 
 

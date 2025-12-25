@@ -10,6 +10,7 @@ from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, ensure_logis
 from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.world.materials import InventoryRegistry, Material, ensure_inventory_registry, material_from_key
 from dosadi.world.routing import compute_route
+from dosadi.runtime.market_signals import current_signal_urgency
 from dosadi.world.survey_map import SurveyMap
 
 
@@ -407,6 +408,7 @@ def run_stockpile_policy_for_day(world, *, day: int) -> None:
 
     global_cap = max(0, int(cfg.max_deliveries_per_day))
     per_depot_cap = max(0, int(cfg.max_deliveries_per_depot_per_day))
+    material_order = sorted(cfg.materials, key=lambda mat: (-current_signal_urgency(world, mat), mat))
 
     for depot in sorted(facilities.list_by_kind(FacilityKind.DEPOT), key=lambda f: f.facility_id)[: cfg.depot_candidate_cap]:
         if state.deliveries_requested_today >= global_cap:
@@ -416,7 +418,7 @@ def run_stockpile_policy_for_day(world, *, day: int) -> None:
         if depot_budget <= 0:
             continue
         inv = registry.inv(f"facility:{depot.facility_id}")
-        for mat_key in cfg.materials:
+        for mat_key in material_order:
             if state.deliveries_requested_today >= global_cap or depot_budget <= 0:
                 break
             material = material_from_key(mat_key)
@@ -469,9 +471,12 @@ def run_stockpile_policy_for_day(world, *, day: int) -> None:
             if depot_budget <= 0:
                 continue
             inv = registry.inv(f"facility:{facility.facility_id}")
-            for mat_name, threshold in sorted(profile.thresholds.items()):
-                if mat_name not in _producer_thresholds(facility.kind):
-                    continue
+            producer_materials = [
+                mat_name for mat_name in profile.thresholds if mat_name in _producer_thresholds(facility.kind)
+            ]
+            producer_materials.sort(key=lambda name: (-current_signal_urgency(world, name), name))
+            for mat_name in producer_materials:
+                threshold = profile.thresholds[mat_name]
                 material = material_from_key(mat_name)
                 if material is None:
                     continue
