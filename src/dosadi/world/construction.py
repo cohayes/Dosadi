@@ -12,7 +12,7 @@ import json
 from hashlib import sha256
 from typing import Dict, MutableMapping, Optional
 
-from dosadi.world.materials import Material, normalize_bom
+from dosadi.world.materials import Material, material_from_key, normalize_bom
 from dosadi.world.facilities import (
     Facility,
     FacilityLedger,
@@ -35,6 +35,28 @@ class ProjectStatus(Enum):
     BUILDING = "BUILDING"
     COMPLETE = "COMPLETE"
     CANCELED = "CANCELED"
+
+
+class StageState(Enum):
+    READY = "READY"
+    WAITING_MATERIALS = "WAITING_MATERIALS"
+    WAITING_STAFF = "WAITING_STAFF"
+    PAUSED_INCIDENT = "PAUSED_INCIDENT"
+    IN_PROGRESS = "IN_PROGRESS"
+    DONE = "DONE"
+
+
+@dataclass(slots=True)
+class BlockReason:
+    code: str
+    msg: str
+    details: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ConstructionPipelineConfig:
+    enabled: bool = False
+    evaluate_daily: bool = True
 
 
 @dataclass(slots=True)
@@ -61,6 +83,12 @@ class ConstructionProject:
     blocked_for_materials: bool = False
     bom_consumed: bool = False
     pending_material_delivery_ids: list[str] = field(default_factory=list)
+    stage_state: StageState = StageState.READY
+    block_reason: BlockReason | None = None
+    staging_owner_id: str = ""
+    progress_days_in_stage: int = 0
+    last_evaluated_day: int = -1
+    incident_paused: bool = False
 
     def ensure_building(self) -> None:
         if self.status == ProjectStatus.STAGED and self.assigned_agents:
@@ -71,11 +99,15 @@ class ConstructionProject:
             return True
         if self.status != ProjectStatus.BUILDING:
             return False
-        materials_ready = all(
-            self.materials_delivered.get(mat, 0.0) >= required
-            for mat, required in self.cost.materials.items()
-        )
-        return materials_ready and self.labor_applied_hours >= self.cost.labor_hours
+        return _materials_met(self) and self.labor_applied_hours >= self.cost.labor_hours
+
+    def __post_init__(self) -> None:
+        if not self.staging_owner_id:
+            self.staging_owner_id = f"project:{self.project_id}"
+        if self.block_reason is not None and not isinstance(self.block_reason, BlockReason):
+            self.block_reason = None
+        if not isinstance(self.stage_state, StageState):
+            self.stage_state = StageState.READY
 
 
 @dataclass(slots=True)
@@ -106,11 +138,75 @@ class ProjectLedger:
                 "blocked": project.blocked_for_materials,
                 "bom_consumed": project.bom_consumed,
                 "pending": sorted(project.pending_material_delivery_ids),
+                "stage_state": project.stage_state.value,
+                "block_reason": (
+                    {
+                        "code": project.block_reason.code,
+                        "msg": project.block_reason.msg,
+                        "details": {
+                            str(k): v for k, v in sorted(project.block_reason.details.items())
+                        },
+                    }
+                    if project.block_reason
+                    else None
+                ),
+                "staging_owner_id": project.staging_owner_id,
+                "progress_days": project.progress_days_in_stage,
+                "last_evaluated_day": project.last_evaluated_day,
+                "incident_paused": project.incident_paused,
             }
             for project_id, project in sorted(self.projects.items())
         }
         payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
         return sha256(payload.encode("utf-8")).hexdigest()
+
+
+def ensure_construction_config(world) -> ConstructionPipelineConfig:
+    cfg: ConstructionPipelineConfig | None = getattr(world, "construction_cfg", None)
+    if not isinstance(cfg, ConstructionPipelineConfig):
+        cfg = ConstructionPipelineConfig()
+        world.construction_cfg = cfg
+    return cfg
+
+
+def project_metrics(world) -> MutableMapping[str, float]:
+    metrics: MutableMapping[str, float] = getattr(world, "metrics", {})
+    world.metrics = metrics
+    projects = metrics.get("projects")
+    if not isinstance(projects, dict):
+        projects = {}
+        metrics["projects"] = projects
+    return projects  # type: ignore[return-value]
+
+
+def emit_project_event(world, event: dict[str, object]) -> None:
+    events = getattr(world, "runtime_events", None)
+    if not isinstance(events, list):
+        events = []
+    payload = dict(event)
+    payload.setdefault("day", getattr(world, "day", 0))
+    events.append(payload)
+    world.runtime_events = events
+
+
+def project_admin_rows(world) -> list[dict[str, object]]:
+    ledger: ProjectLedger = getattr(world, "projects", ProjectLedger())
+    rows: list[dict[str, object]] = []
+    for project_id, project in sorted(ledger.projects.items()):
+        rows.append(
+            {
+                "project_id": project_id,
+                "kind": project.kind,
+                "site": project.site_node_id,
+                "stage_state": project.stage_state.value,
+                "status": project.status.value,
+                "block_reason": project.block_reason.code if project.block_reason else None,
+                "block_details": getattr(project.block_reason, "details", {}),
+                "pending_deliveries": len(project.pending_material_delivery_ids),
+                "progress_days": project.progress_days_in_stage,
+            }
+        )
+    return rows
 
 
 def _hours_per_tick(world) -> float:
@@ -141,10 +237,19 @@ def _project_workers(ledger: WorkforceLedger, project_id: str) -> list[str]:
 
 
 def _materials_met(project: ConstructionProject) -> bool:
-    return all(
-        project.materials_delivered.get(material, 0.0) >= qty
-        for material, qty in project.cost.materials.items()
-    )
+    bom = normalize_bom(project.cost.materials)
+    if not bom and getattr(project.cost, "materials", {}):
+        return all(
+            project.materials_delivered.get(str(material), 0.0) >= float(qty)
+            for material, qty in project.cost.materials.items()
+        )
+    delivered: dict[Material, float] = {}
+    for key, qty in project.materials_delivered.items():
+        material = material_from_key(key)
+        if material is None:
+            continue
+        delivered[material] = delivered.get(material, 0.0) + float(qty)
+    return all(delivered.get(material, 0.0) >= qty for material, qty in bom.items())
 
 
 def _ensure_delivery_request(world, project: ConstructionProject, tick: int) -> DeliveryRequest:
@@ -168,6 +273,9 @@ def _ensure_delivery_request(world, project: ConstructionProject, tick: int) -> 
 
 
 def stage_project_if_ready(world, project: ConstructionProject, tick: int) -> bool:
+    cfg: ConstructionPipelineConfig = getattr(world, "construction_cfg", ConstructionPipelineConfig())
+    if getattr(cfg, "enabled", False):
+        return False
     if not project.bom:
         project.bom = normalize_bom(project.cost.materials)
     mat_enabled = bool(getattr(getattr(world, "mat_cfg", None), "enabled", False))
@@ -242,7 +350,27 @@ def _maybe_complete(world, project: ConstructionProject, tick: int) -> None:
     if project.is_complete():
         _create_facility_stub(world, project)
         project.status = ProjectStatus.COMPLETE
+        project.stage_state = StageState.DONE
+        project.block_reason = None
+        project.progress_days_in_stage = 0
         project.last_tick = tick
+        metrics = project_metrics(world)
+        metrics["stages_completed"] = metrics.get("stages_completed", 0.0) + 1.0
+        metrics["projects_completed"] = metrics.get("projects_completed", 0.0) + 1.0
+        emit_project_event(
+            world,
+            {
+                "type": "PROJECT_STAGE_DONE",
+                "project_id": project.project_id,
+            },
+        )
+        emit_project_event(
+            world,
+            {
+                "type": "PROJECT_DONE",
+                "project_id": project.project_id,
+            },
+        )
         ledger = ensure_workforce(world)
         for agent_id, assignment in list(ledger.assignments.items()):
             if (
@@ -256,8 +384,9 @@ def process_projects(world, *, tick: Optional[int] = None) -> None:
     base_tick = getattr(world, "tick", 0)
     current_tick = tick if tick is not None else base_tick
     ledger: ProjectLedger = getattr(world, "projects", ProjectLedger())
+    cfg: ConstructionPipelineConfig = getattr(world, "construction_cfg", ConstructionPipelineConfig())
     for project in ledger.projects.values():
-        if project.status == ProjectStatus.APPROVED:
+        if not getattr(cfg, "enabled", False) and project.status == ProjectStatus.APPROVED:
             _ensure_delivery_request(world, project, base_tick)
     process_logistics_until(world, target_tick=current_tick, current_tick=base_tick)
     hours = _hours_per_tick(world)
@@ -266,7 +395,7 @@ def process_projects(world, *, tick: Optional[int] = None) -> None:
         if project.status == ProjectStatus.CANCELED:
             continue
 
-        if project.status == ProjectStatus.APPROVED:
+        if not getattr(cfg, "enabled", False) and project.status == ProjectStatus.APPROVED:
             stage_project_if_ready(world, project, current_tick)
 
         _sync_project_assignments(world, project)
@@ -282,8 +411,9 @@ def apply_project_work(world, *, elapsed_hours: float, tick: Optional[int] = Non
     base_tick = getattr(world, "tick", 0)
     current_tick = tick if tick is not None else base_tick
     ledger: ProjectLedger = getattr(world, "projects", ProjectLedger())
+    cfg: ConstructionPipelineConfig = getattr(world, "construction_cfg", ConstructionPipelineConfig())
     for project in ledger.projects.values():
-        if project.status == ProjectStatus.APPROVED:
+        if not getattr(cfg, "enabled", False) and project.status == ProjectStatus.APPROVED:
             _ensure_delivery_request(world, project, base_tick)
     process_logistics_until(world, target_tick=current_tick, current_tick=base_tick)
 
@@ -291,7 +421,7 @@ def apply_project_work(world, *, elapsed_hours: float, tick: Optional[int] = Non
         if project.status in {ProjectStatus.CANCELED, ProjectStatus.COMPLETE}:
             continue
 
-        if project.status == ProjectStatus.APPROVED:
+        if not getattr(cfg, "enabled", False) and project.status == ProjectStatus.APPROVED:
             stage_project_if_ready(world, project, current_tick)
 
         _sync_project_assignments(world, project)
