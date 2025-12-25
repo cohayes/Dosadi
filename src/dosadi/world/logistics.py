@@ -66,6 +66,7 @@ class DeliveryRequest:
     remaining_edge_ticks: int = 0
     next_edge_complete_tick: int | None = None
     escort_agent_ids: list[str] = field(default_factory=list)
+    escort_mission_ids: list[str] = field(default_factory=list)
     origin_owner_id: str | None = None
     dest_owner_id: str | None = None
 
