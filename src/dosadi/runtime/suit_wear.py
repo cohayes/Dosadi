@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Mapping
 
 from dosadi.agent.suits import SuitState
 from dosadi.runtime.local_interactions import hashed_unit_float
+from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
 from dosadi.world.facilities import Facility, FacilityKind, FacilityLedger, ensure_facility_ledger
 from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, LogisticsLedger, ensure_logistics
@@ -114,12 +115,11 @@ def ensure_suit_ledger(world: Any) -> SuitRepairLedger:
 
 
 def _suit_metrics(world: Any) -> Dict[str, Any]:
-    metrics: Dict[str, Any] = getattr(world, "metrics", None) or {}
-    world.metrics = metrics
-    bucket = metrics.get("suits")
+    telemetry = ensure_metrics(world)
+    bucket = telemetry.gauges.get("suits")
     if not isinstance(bucket, dict):
         bucket = {}
-        metrics["suits"] = bucket
+        telemetry.gauges["suits"] = bucket
     return bucket
 
 
@@ -206,8 +206,12 @@ def _candidate_agents(world: Any, workforce: WorkforceLedger) -> List[str]:
 def _apply_wear(world: Any, *, day: int, cfg: SuitWearConfig, state: SuitWearState) -> None:
     workforce = ensure_workforce(world)
     metrics = _suit_metrics(world)
+    telemetry = ensure_metrics(world)
     candidates = _candidate_agents(world, workforce)
     metrics["wear_candidates"] = float(len(candidates))
+    warn_count = 0
+    repair_count = 0
+    critical_count = 0
 
     for agent_id in candidates:
         agent = getattr(world, "agents", {}).get(agent_id)
@@ -265,8 +269,19 @@ def _apply_wear(world: Any, *, day: int, cfg: SuitWearConfig, state: SuitWearSta
                 payload={"integrity": suit.integrity},
             )
 
+        if suit.integrity < cfg.threshold_warn:
+            warn_count += 1
+        if suit.integrity < cfg.threshold_repair:
+            repair_count += 1
+        if suit.integrity < cfg.threshold_critical:
+            critical_count += 1
+
     state.last_run_day = day
     state.repairs_started_today = 0
+    total = max(1, len(getattr(world, "agents", {})) or len(candidates) or 1)
+    telemetry.set_gauge("suits.percent_warn", 100.0 * warn_count / total)
+    telemetry.set_gauge("suits.percent_repair", 100.0 * repair_count / total)
+    telemetry.set_gauge("suits.percent_critical", 100.0 * critical_count / total)
 
 
 def _bom_for_repair() -> Dict[Material, int]:
@@ -381,6 +396,7 @@ def _complete_job(world: Any, *, job: SuitRepairJob, day: int) -> None:
     job.status = "DONE"
     metrics = _suit_metrics(world)
     metrics["repairs_done"] = metrics.get("repairs_done", 0.0) + 1.0
+    ensure_metrics(world).inc("suits.repairs_done", 1)
     _emit_event(
         world,
         day=day,
@@ -425,6 +441,7 @@ def _open_repair_jobs(world: Any, *, day: int, cfg: SuitWearConfig, state: SuitW
         state.repairs_started_today += 1
         metrics = _suit_metrics(world)
         metrics["repairs_started"] = metrics.get("repairs_started", 0.0) + 1.0
+        ensure_metrics(world).inc("suits.repairs_started", 1)
         _emit_event(
             world,
             day=day,

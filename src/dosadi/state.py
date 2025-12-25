@@ -31,6 +31,7 @@ from .runtime.stockpile_policy import DepotPolicyLedger, StockpilePolicyConfig, 
 from .runtime.work_details import WorkDetailType
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
+from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
@@ -858,7 +859,9 @@ class WorldState:
     admin_event_log: AdminEventLog = field(default_factory=AdminEventLog)
     facility_belief_summaries: Dict[str, FacilityBeliefSummary] = field(default_factory=dict)
     facility_protocol_tuning: Dict[str, FacilityProtocolTuning] = field(default_factory=dict)
-    metrics: MutableMapping[str, float] = field(default_factory=dict)
+    metrics: Metrics = field(default_factory=Metrics)
+    event_ring: EventRing = field(default_factory=EventRing)
+    debug_cfg: DebugConfig = field(default_factory=DebugConfig)
     council_metrics: CouncilMetrics = field(default_factory=CouncilMetrics)
     council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
     admin_logs: Dict[str, AdminLogEntry] = field(default_factory=dict)

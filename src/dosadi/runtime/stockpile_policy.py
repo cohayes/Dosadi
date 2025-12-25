@@ -7,6 +7,7 @@ from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
 from dosadi.world.extraction import ExtractionLedger, ensure_extraction
 from dosadi.world.facilities import Facility, FacilityKind, FacilityLedger, ensure_facility_ledger
 from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, ensure_logistics
+from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.world.materials import InventoryRegistry, Material, ensure_inventory_registry, material_from_key
 from dosadi.world.routing import compute_route
 from dosadi.world.survey_map import SurveyMap
@@ -95,14 +96,11 @@ def default_thresholds() -> dict[str, MaterialThreshold]:
 
 
 def _stockpile_metrics(world) -> Dict[str, float]:
-    metrics = getattr(world, "metrics", None)
-    if metrics is None:
-        metrics = {}
-        world.metrics = metrics
-    stock_metrics = metrics.get("stockpile")
+    telemetry = ensure_metrics(world)
+    stock_metrics = telemetry.gauges.get("stockpile")
     if not isinstance(stock_metrics, dict):
         stock_metrics = {}
-        metrics["stockpile"] = stock_metrics
+        telemetry.gauges["stockpile"] = stock_metrics
     return stock_metrics  # type: ignore[return-value]
 
 
@@ -308,6 +306,8 @@ def _request_stockpile_delivery(
 
     metrics = _stockpile_metrics(world)
     metrics["deliveries_requested"] = metrics.get("deliveries_requested", 0.0) + 1.0
+    telemetry = ensure_metrics(world)
+    telemetry.inc("stockpile.deliveries_requested", 1)
     state.deliveries_requested_today += 1
     state.deliveries_by_depot[depot.facility_id] = state.deliveries_by_depot.get(depot.facility_id, 0) + 1
 
@@ -327,6 +327,14 @@ def _request_stockpile_delivery(
 def _emit_shortage(world: Any, *, depot: Facility, material: Material, deficit: int, day: int) -> None:
     metrics = _stockpile_metrics(world)
     metrics["shortages"] = metrics.get("shortages", 0.0) + 1.0
+    telemetry = ensure_metrics(world)
+    telemetry.topk_add(
+        "stockpile.shortages",
+        f"{material.name}:{depot.facility_id}",
+        float(deficit),
+        payload={"material": material.name, "depot": depot.facility_id, "deficit": deficit},
+    )
+    telemetry.set_gauge("stockpile.shortages_count", metrics.get("shortages", 0.0))
     log = _ensure_event_log(world)
     log.append(
         WorldEvent(
@@ -433,6 +441,7 @@ def handle_stockpile_delivery_result(world: Any, delivery: DeliveryRequest, *, s
     metrics = _stockpile_metrics(world)
     if success:
         metrics["deliveries_completed"] = metrics.get("deliveries_completed", 0.0) + 1.0
+        ensure_metrics(world).inc("stockpile.deliveries_completed", 1)
     log = _ensure_event_log(world)
     payload = {"material": material, "qty": sum(delivery.items.values())}
     if success and getattr(delivery, "origin_owner_id", None):
