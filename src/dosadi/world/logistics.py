@@ -8,6 +8,7 @@ from hashlib import sha256
 import random
 from typing import Dict, Mapping, MutableMapping, Optional
 
+from dosadi.runtime.telemetry import ensure_metrics
 import math
 
 from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
@@ -235,9 +236,19 @@ def _schedule_next_edge(world, delivery: DeliveryRequest, start_tick: int) -> No
 
 
 def _logistics_metrics(world) -> MutableMapping[str, float]:
-    metrics: MutableMapping[str, float] = getattr(world, "metrics", {})
-    world.metrics = metrics
-    return metrics.setdefault("logistics", {})  # type: ignore[arg-type]
+    metrics = ensure_metrics(world)
+    if hasattr(metrics, "gauges"):
+        gauges = metrics.gauges  # type: ignore[assignment]
+        if not isinstance(gauges.get("logistics"), dict):
+            gauges["logistics"] = {}
+        return gauges["logistics"]  # type: ignore[return-value]
+
+    metrics_mapping: MutableMapping[str, float] = metrics  # type: ignore[assignment]
+    existing = metrics_mapping.get("logistics")
+    if not isinstance(existing, dict):
+        existing = {}
+        metrics_mapping["logistics"] = existing
+    return existing  # type: ignore[return-value]
 
 
 def _edge_closed(world, edge: SurveyEdge | None) -> bool:

@@ -17,7 +17,18 @@ from dosadi.world.survey_map import SurveyMap
 class StockpilePolicyConfig:
     enabled: bool = False
     materials: list[str] = field(
-        default_factory=lambda: ["SCRAP_METAL", "PLASTICS", "FASTENERS", "SEALANT", "FABRIC"]
+        default_factory=lambda: [
+            "SCRAP_INPUT",
+            "SCRAP_METAL",
+            "PLASTICS",
+            "FASTENERS",
+            "SEALANT",
+            "FABRIC",
+            "FIBER",
+            "CHEM_SALTS",
+            "GASKETS",
+            "FILTER_MEDIA",
+        ]
     )
     max_deliveries_per_day: int = 30
     max_deliveries_per_depot_per_day: int = 5
@@ -87,12 +98,34 @@ class DepotPolicyLedger:
 
 def default_thresholds() -> dict[str, MaterialThreshold]:
     return {
+        "SCRAP_INPUT": MaterialThreshold(min_level=50, target_level=150, max_level=400),
         "SCRAP_METAL": MaterialThreshold(min_level=50, target_level=150, max_level=400),
         "PLASTICS": MaterialThreshold(min_level=30, target_level=100, max_level=250),
         "FASTENERS": MaterialThreshold(min_level=20, target_level=60, max_level=150),
         "SEALANT": MaterialThreshold(min_level=10, target_level=40, max_level=120),
         "FABRIC": MaterialThreshold(min_level=10, target_level=30, max_level=80),
+        "FIBER": MaterialThreshold(min_level=10, target_level=40, max_level=120),
+        "CHEM_SALTS": MaterialThreshold(min_level=10, target_level=40, max_level=120),
+        "GASKETS": MaterialThreshold(min_level=5, target_level=20, max_level=50),
+        "FILTER_MEDIA": MaterialThreshold(min_level=5, target_level=15, max_level=40),
     }
+
+
+def _producer_thresholds(kind: FacilityKind) -> dict[str, MaterialThreshold]:
+    if kind == FacilityKind.RECYCLER:
+        return {"SCRAP_INPUT": MaterialThreshold(min_level=100, target_level=300, max_level=600)}
+    if kind == FacilityKind.WORKSHOP:
+        return {
+            "SCRAP_METAL": MaterialThreshold(min_level=60, target_level=150, max_level=300),
+            "PLASTICS": MaterialThreshold(min_level=40, target_level=120, max_level=240),
+            "FIBER": MaterialThreshold(min_level=30, target_level=90, max_level=180),
+        }
+    if kind == FacilityKind.CHEM_WORKS:
+        return {
+            "CHEM_SALTS": MaterialThreshold(min_level=30, target_level=90, max_level=180),
+            "FIBER": MaterialThreshold(min_level=30, target_level=90, max_level=180),
+        }
+    return {}
 
 
 def _stockpile_metrics(world) -> Dict[str, float]:
@@ -192,7 +225,7 @@ def _candidate_sources(
             candidates.append((owner_id, float(available), site.node_id))
 
     for fac in sorted(facilities.facilities.values(), key=lambda f: f.facility_id):
-        if fac.kind not in {FacilityKind.WORKSHOP, FacilityKind.RECYCLER}:
+        if fac.kind not in {FacilityKind.WORKSHOP, FacilityKind.RECYCLER, FacilityKind.CHEM_WORKS}:
             continue
         owner_id = f"facility:{fac.facility_id}"
         available = registry.inv(owner_id).get(material)
@@ -420,6 +453,56 @@ def run_stockpile_policy_for_day(world, *, day: int) -> None:
                 state=state,
             )
             depot_budget -= 1
+
+    prod_cfg = getattr(world, "prod_cfg", None)
+    producer_kinds = (FacilityKind.RECYCLER, FacilityKind.WORKSHOP, FacilityKind.CHEM_WORKS)
+    if getattr(prod_cfg, "enabled", False):
+        for facility in sorted(facilities.values(), key=lambda f: f.facility_id):
+            if facility.kind not in producer_kinds:
+                continue
+            if state.deliveries_requested_today >= global_cap:
+                break
+            profile = ledger.profile(facility.facility_id)
+            for mat_name, threshold in _producer_thresholds(facility.kind).items():
+                profile.thresholds.setdefault(mat_name, threshold)
+            depot_budget = per_depot_cap - state.deliveries_by_depot.get(facility.facility_id, 0)
+            if depot_budget <= 0:
+                continue
+            inv = registry.inv(f"facility:{facility.facility_id}")
+            for mat_name, threshold in sorted(profile.thresholds.items()):
+                if mat_name not in _producer_thresholds(facility.kind):
+                    continue
+                material = material_from_key(mat_name)
+                if material is None:
+                    continue
+                qty = inv.get(material)
+                if qty >= threshold.min_level:
+                    continue
+                deficit = threshold.target_level - qty
+                request_qty = max(cfg.min_batch_units, min(cfg.max_batch_units, deficit))
+                if request_qty <= 0:
+                    continue
+                pending = _pending_inbound(profile)
+                if mat_name in pending:
+                    continue
+                source = choose_source_for_material(world, facility, material, request_qty, day)
+                if source is None:
+                    _emit_shortage(world, depot=facility, material=material, deficit=deficit, day=day)
+                    continue
+                source_owner_id, amount = source
+                amount = max(cfg.min_batch_units, min(request_qty, amount))
+                if amount <= 0:
+                    continue
+                _request_stockpile_delivery(
+                    world,
+                    depot=facility,
+                    material=material,
+                    qty=amount,
+                    source_owner_id=source_owner_id,
+                    day=day,
+                    state=state,
+                )
+                depot_budget -= 1
 
 
 def handle_stockpile_delivery_result(world: Any, delivery: DeliveryRequest, *, success: bool) -> None:
