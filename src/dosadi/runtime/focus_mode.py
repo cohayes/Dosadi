@@ -140,6 +140,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     from dosadi.runtime.event_to_memory_router import run_router_for_day
     from dosadi.runtime.facility_updates import update_facilities_for_day
     from dosadi.runtime.incident_engine import run_incident_engine_for_day
+    from dosadi.runtime.faction_interference import run_faction_interference_for_day
     from dosadi.runtime.maintenance import update_facility_wear
     from dosadi.runtime.local_interactions import run_interactions_for_day
     from dosadi.runtime.materials_economy import (
@@ -177,6 +178,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     run_extraction_for_day(world, day=day)
     run_stockpile_policy_for_day(world, day=day)
     run_incident_engine_for_day(world, day=day)
+    run_faction_interference_for_day(world, day=day)
     run_interactions_for_day(world, day=day)
     run_router_for_day(world, day=day)
     run_belief_formation_for_day(world, day=day)

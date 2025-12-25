@@ -227,8 +227,12 @@ def _crumb_tags(event: WorldEvent) -> List[str]:
         node_id = event.payload.get("node_id") if isinstance(event.payload, dict) else None
         if incident_kind in {"CONFLICT", "SABOTAGE"} and edge_key:
             tags.append(f"route-risk:{edge_key}")
+        if incident_kind in {"THEFT_CARGO", "THEFT_DEPOT", "SABOTAGE_PROJECT"} and edge_key:
+            tags.append(f"route-risk:{edge_key}")
         if incident_kind == "SABOTAGE" and event.payload.get("delivery_failed"):
             tags.append(f"delivery-fail:{target_id}")
+        if incident_kind == "SABOTAGE_PROJECT" and node_id:
+            tags.append(f"site-trouble:{node_id}")
         if node_id and event.subject_kind in {"project", "facility"}:
             tags.append(f"site-trouble:{node_id}")
         helper_id = event.payload.get("helper_id") if isinstance(event.payload, dict) else None

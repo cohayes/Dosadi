@@ -53,6 +53,7 @@ from .world.incidents import IncidentLedger
 from .runtime.focus_mode import FocusConfig, FocusState
 from .runtime.extraction_runtime import ExtractionConfig, ExtractionState
 from .runtime.maintenance import MaintenanceConfig, MaintenanceLedger, MaintenanceState
+from .runtime.faction_interference import InterferenceConfig, InterferenceState
 from .runtime.suit_wear import SuitRepairLedger, SuitWearConfig, SuitWearState
 from .agent.suits import SuitState
 from typing import TYPE_CHECKING
@@ -915,6 +916,8 @@ class WorldState:
     incidents: IncidentLedger = field(default_factory=IncidentLedger)
     incident_cfg: IncidentConfig = field(default_factory=IncidentConfig)
     incident_state: IncidentState = field(default_factory=IncidentState)
+    intf_cfg: InterferenceConfig = field(default_factory=InterferenceConfig)
+    intf_state: InterferenceState = field(default_factory=InterferenceState)
     focus_cfg: FocusConfig = field(default_factory=FocusConfig)
     focus_state: FocusState = field(default_factory=FocusState)
     maint_cfg: MaintenanceConfig = field(default_factory=MaintenanceConfig)
