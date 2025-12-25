@@ -13,6 +13,7 @@ class FacilityKind(str, Enum):
     DEPOT = "DEPOT"
     WORKSHOP = "WORKSHOP"
     RECYCLER = "RECYCLER"
+    CHEM_WORKS = "CHEM_WORKS"
     REFINERY = "REFINERY"
     WATER_WORKS = "WATER_WORKS"
 

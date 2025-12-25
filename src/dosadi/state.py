@@ -34,6 +34,7 @@ from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
 from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
+from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
 from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
@@ -916,6 +917,9 @@ class WorldState:
     maint_cfg: MaintenanceConfig = field(default_factory=MaintenanceConfig)
     maint_state: MaintenanceState = field(default_factory=MaintenanceState)
     maintenance: MaintenanceLedger = field(default_factory=MaintenanceLedger)
+    prod_cfg: ProductionConfig = field(default_factory=ProductionConfig)
+    prod_state: ProductionState = field(default_factory=ProductionState)
+    fac_prod: dict[str, FacilityProductionState] = field(default_factory=dict)
     mat_cfg: object | None = None
     mat_state: object | None = None
     construction_cfg: object | None = None

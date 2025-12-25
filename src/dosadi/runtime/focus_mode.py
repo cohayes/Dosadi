@@ -146,6 +146,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
         evaluate_project_materials,
         run_materials_production_for_day,
     )
+    from dosadi.runtime.production_runtime import run_production_for_day
     from dosadi.runtime.extraction_runtime import run_extraction_for_day
     from dosadi.runtime.stockpile_policy import run_stockpile_policy_for_day
     from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
@@ -167,6 +168,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     world.staffing_state = staffing_state
     scout_cfg = getattr(world, "scout_cfg", None)
     run_materials_production_for_day(world, day=day)
+    run_production_for_day(world, day=day)
     evaluate_project_materials(world, day=day)
     maybe_create_scout_missions(world, cfg=scout_cfg)
     step_scout_missions_for_day(world, day=day, cfg=scout_cfg)

@@ -12,6 +12,8 @@ import json
 from hashlib import sha256
 from typing import Dict, MutableMapping, Optional
 
+from dosadi.runtime.telemetry import ensure_metrics
+
 from dosadi.world.materials import Material, material_from_key, normalize_bom
 from dosadi.world.facilities import (
     Facility,
@@ -170,12 +172,20 @@ def ensure_construction_config(world) -> ConstructionPipelineConfig:
 
 
 def project_metrics(world) -> MutableMapping[str, float]:
-    metrics: MutableMapping[str, float] = getattr(world, "metrics", {})
-    world.metrics = metrics
-    projects = metrics.get("projects")
+    metrics = ensure_metrics(world)
+    if hasattr(metrics, "gauges"):
+        gauges = metrics.gauges  # type: ignore[assignment]
+        projects = gauges.get("projects")
+        if not isinstance(projects, dict):
+            projects = {}
+            gauges["projects"] = projects
+        return projects  # type: ignore[return-value]
+
+    metrics_mapping: MutableMapping[str, float] = metrics  # type: ignore[assignment]
+    projects = metrics_mapping.get("projects")
     if not isinstance(projects, dict):
         projects = {}
-        metrics["projects"] = projects
+        metrics_mapping["projects"] = projects
     return projects  # type: ignore[return-value]
 
 

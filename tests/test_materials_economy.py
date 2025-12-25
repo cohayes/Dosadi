@@ -142,6 +142,7 @@ def test_daily_cap_enforced() -> None:
     world.mat_cfg = cfg
     world.facilities.add(Facility(facility_id="fac:1", kind="workshop", site_node_id="loc:a", created_tick=0))
     _staff_facility(world, "fac:1")
+    world.inventories.inv("facility:fac:1").add(Material.SCRAP_METAL, 10)
 
     run_materials_production_for_day(world, day=0)
 
