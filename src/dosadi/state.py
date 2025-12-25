@@ -32,6 +32,8 @@ from .runtime.work_details import WorkDetailType
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
+from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
+from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
 from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
@@ -918,6 +920,10 @@ class WorldState:
     mat_state: object | None = None
     construction_cfg: object | None = None
     extraction: ExtractionLedger = field(default_factory=ExtractionLedger)
+    risk_cfg: CorridorRiskConfig = field(default_factory=CorridorRiskConfig)
+    risk_ledger: CorridorRiskLedger = field(default_factory=CorridorRiskLedger)
+    escort2_cfg: EscortPolicyV2Config = field(default_factory=EscortPolicyV2Config)
+    escort2_state: EscortPolicyV2State = field(default_factory=EscortPolicyV2State)
     extract_cfg: ExtractionConfig = field(default_factory=ExtractionConfig)
     extract_state: ExtractionState = field(default_factory=ExtractionState)
 
