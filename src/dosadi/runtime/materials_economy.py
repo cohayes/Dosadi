@@ -23,6 +23,7 @@ from dosadi.world.materials import (
     normalize_bom,
 )
 from dosadi.world.recipes import FACILITY_RECIPES, Recipe
+from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.world.workforce import AssignmentKind, ensure_workforce
 
 
@@ -43,28 +44,20 @@ class MaterialsEconomyState:
 
 
 def _materials_metrics(world) -> Dict[str, float]:
-    metrics = getattr(world, "metrics", None)
-    if metrics is None:
-        metrics = {}
-        world.metrics = metrics
-
-    materials_metrics = metrics.get("materials")
+    telemetry = ensure_metrics(world)
+    materials_metrics = telemetry.gauges.get("materials")
     if not isinstance(materials_metrics, dict):
         materials_metrics = {}
-        metrics["materials"] = materials_metrics
+        telemetry.gauges["materials"] = materials_metrics
     return materials_metrics  # type: ignore[return-value]
 
 
 def _facility_metrics(world) -> Dict[str, float]:
-    metrics = getattr(world, "metrics", None)
-    if metrics is None:
-        metrics = {}
-        world.metrics = metrics
-
-    facility_metrics = metrics.get("facilities")
+    telemetry = ensure_metrics(world)
+    facility_metrics = telemetry.gauges.get("facilities")
     if not isinstance(facility_metrics, dict):
         facility_metrics = {}
-        metrics["facilities"] = facility_metrics
+        telemetry.gauges["facilities"] = facility_metrics
     return facility_metrics  # type: ignore[return-value]
 
 
@@ -331,6 +324,7 @@ def evaluate_project_materials(world, *, day: int) -> None:
     world.mat_cfg = cfg
     world.mat_state = state
 
+    telemetry = ensure_metrics(world)
     if not getattr(cfg, "enabled", False):
         return
     if not getattr(cfg, "project_consumption_enabled", True):
@@ -345,6 +339,7 @@ def evaluate_project_materials(world, *, day: int) -> None:
 
     metrics = _materials_metrics(world)
     proj_metrics = project_metrics(world)
+    blocked_count = 0
     for project_id, project in sorted(ledger.projects.items()):
         if project.status in {ProjectStatus.COMPLETE, ProjectStatus.CANCELED}:
             continue
@@ -368,6 +363,7 @@ def evaluate_project_materials(world, *, day: int) -> None:
 
             project.blocked_for_materials = True
             metrics["projects_blocked"] = metrics.get("projects_blocked", 0.0) + 1.0
+            blocked_count += 1
             if getattr(cfg, "auto_delivery_requests_enabled", True):
                 _ensure_delivery(world, project=project, bom=bom)
             continue
@@ -390,6 +386,19 @@ def evaluate_project_materials(world, *, day: int) -> None:
             )
             project.status = ProjectStatus.STAGED
             proj_metrics["blocked_materials"] = proj_metrics.get("blocked_materials", 0.0) + 1.0
+            blocked_count += 1
+            telemetry.topk_add(
+                "projects.blocked",
+                project.project_id,
+                float(sum(missing.values())),
+                payload={
+                    "node": project.site_node_id,
+                    "stage": project.stage_state.value,
+                    "reason": "MATERIALS",
+                    "missing": {mat.name: qty for mat, qty in sorted(missing.items(), key=lambda item: item[0].name)},
+                    "pending_deliveries": len(project.pending_material_delivery_ids),
+                },
+            )
             emit_project_event(
                 world,
                 {
@@ -423,6 +432,19 @@ def evaluate_project_materials(world, *, day: int) -> None:
             )
             project.status = ProjectStatus.STAGED
             proj_metrics["blocked_staff"] = proj_metrics.get("blocked_staff", 0.0) + 1.0
+            blocked_count += 1
+            telemetry.topk_add(
+                "projects.blocked",
+                project.project_id,
+                1.0,
+                payload={
+                    "node": project.site_node_id,
+                    "stage": project.stage_state.value,
+                    "reason": "STAFF",
+                    "missing": {},
+                    "pending_deliveries": len(project.pending_material_delivery_ids),
+                },
+            )
             emit_project_event(
                 world,
                 {
@@ -446,6 +468,19 @@ def evaluate_project_materials(world, *, day: int) -> None:
             )
             project.status = ProjectStatus.STAGED
             proj_metrics["blocked_incident"] = proj_metrics.get("blocked_incident", 0.0) + 1.0
+            blocked_count += 1
+            telemetry.topk_add(
+                "projects.blocked",
+                project.project_id,
+                0.5,
+                payload={
+                    "node": project.site_node_id,
+                    "stage": project.stage_state.value,
+                    "reason": "INCIDENT",
+                    "missing": {},
+                    "pending_deliveries": len(project.pending_material_delivery_ids),
+                },
+            )
             emit_project_event(
                 world,
                 {
@@ -485,4 +520,6 @@ def evaluate_project_materials(world, *, day: int) -> None:
                 "progress_days": project.progress_days_in_stage,
             },
         )
+
+    telemetry.set_gauge("projects.blocked_count", blocked_count)
 

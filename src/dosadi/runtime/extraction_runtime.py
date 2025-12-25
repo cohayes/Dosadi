@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, Mapping
 
 from dosadi.runtime.local_interactions import hashed_unit_float
+from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.world.extraction import ExtractionSite, SiteKind, ensure_extraction
 from dosadi.world.facilities import FacilityKind, coerce_facility_kind, ensure_facility_ledger
 from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, ensure_logistics
@@ -30,15 +31,11 @@ class ExtractionState:
 
 
 def _extraction_metrics(world) -> Dict[str, float]:
-    metrics = getattr(world, "metrics", None)
-    if metrics is None:
-        metrics = {}
-        world.metrics = metrics
-
-    extraction_metrics = metrics.get("extraction")
+    telemetry = ensure_metrics(world)
+    extraction_metrics = telemetry.gauges.get("extraction")
     if not isinstance(extraction_metrics, dict):
         extraction_metrics = {}
-        metrics["extraction"] = extraction_metrics
+        telemetry.gauges["extraction"] = extraction_metrics
     return extraction_metrics  # type: ignore[return-value]
 
 
@@ -185,10 +182,12 @@ def run_extraction_for_day(world, *, day: int) -> None:
     world.extract_cfg = cfg
     world.extract_state = state
 
+    telemetry = ensure_metrics(world)
     ledger = ensure_extraction(world)
     registry = ensure_inventory_registry(world)
     metrics = _extraction_metrics(world)
     metrics["sites"] = float(len(ledger.sites))
+    telemetry.set_gauge("extraction.sites", metrics["sites"])
 
     if not getattr(cfg, "enabled", False):
         return
@@ -250,6 +249,16 @@ def run_extraction_for_day(world, *, day: int) -> None:
 
         if outputs:
             metrics["units_produced"] = metrics.get("units_produced", 0.0) + float(sum(outputs.values()))
+            telemetry.topk_add(
+                "extraction.top_sites",
+                site.site_id,
+                float(sum(outputs.values())),
+                payload={
+                    "node": site.node_id,
+                    "kind": site.kind.value,
+                    "pending_pickup": bool(site.notes.get("pending_pickup_delivery_id")) if isinstance(site.notes, dict) else False,
+                },
+            )
             _emit_event(
                 world,
                 {
@@ -264,6 +273,7 @@ def run_extraction_for_day(world, *, day: int) -> None:
             _maybe_request_pickup(world, site=site, cfg=cfg, day=day, metrics=metrics, registry=registry)
 
     state.last_run_day = day
+    telemetry.set_gauge("extraction.units_today", metrics.get("units_produced", 0.0))
 
 
 __all__ = ["ExtractionConfig", "ExtractionState", "run_extraction_for_day"]

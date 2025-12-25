@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Iterable, Mapping, MutableMapping, Sequence
 
+from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.world.construction import ConstructionProject, ProjectCost, ProjectLedger, ProjectStatus
 from dosadi.world.extraction import ExtractionLedger, SiteKind, ensure_extraction
 from dosadi.world.facilities import FacilityKind, coerce_facility_kind, ensure_facility_ledger
@@ -68,11 +69,11 @@ _ACTION_ORDER: tuple[str, ...] = (
 
 
 def _stable_metrics(world) -> MutableMapping[str, MutableMapping[str, int]]:
-    metrics = getattr(world, "metrics", None)
-    if not isinstance(metrics, MutableMapping):
-        metrics = {}
-        world.metrics = metrics
-    bucket = metrics.setdefault("planner_v2", {})
+    telemetry = ensure_metrics(world)
+    bucket = telemetry.gauges.get("planner_v2")
+    if not isinstance(bucket, MutableMapping):
+        bucket = {}
+        telemetry.gauges["planner_v2"] = bucket
     return bucket
 
 
@@ -434,6 +435,7 @@ def maybe_plan_expansion_v2(
     state = state or getattr(world, "plan2_state", ExpansionPlannerV2State())
     world.plan2_cfg = cfg
     world.plan2_state = state
+    telemetry = ensure_metrics(world)
 
     if not cfg.enabled:
         return []
@@ -539,6 +541,20 @@ def maybe_plan_expansion_v2(
     for action in selected:
         key = action.kind.lower()
         metrics[key] = metrics.get(key, 0) + 1
+    if selected:
+        telemetry.set_gauge(
+            "planner_v2.last_action_json",
+            [
+                {
+                    "kind": action.kind,
+                    "node": action.target_node_id,
+                    "facility": action.facility_kind,
+                    "score": round(action.score.total, 4),
+                    "terms": dict(sorted(action.score.terms.items())),
+                }
+                for action in selected
+            ],
+        )
 
     state.actions_taken_today = len(selected)
     if selected:
