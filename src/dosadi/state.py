@@ -38,6 +38,7 @@ from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
 from .runtime.culture_wars import CultureConfig, WardCultureState
 from .world.corridor_infrastructure import CorridorInfraConfig, CorridorInfraEdge
 from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
+from .runtime.migration import MigrationConfig, MigrationFlow, WardMigrationState
 from .runtime.defense import DefenseConfig, WardDefenseState
 from .runtime.market_signals import MarketSignalsConfig, MarketSignalsState
 from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
@@ -889,6 +890,9 @@ class WorldState:
     inst_state_by_ward: Dict[str, WardInstitutionState] = field(default_factory=dict)
     culture_cfg: CultureConfig = field(default_factory=CultureConfig)
     culture_by_ward: Dict[str, WardCultureState] = field(default_factory=dict)
+    migration_cfg: MigrationConfig = field(default_factory=MigrationConfig)
+    migration_by_ward: Dict[str, WardMigrationState] = field(default_factory=dict)
+    migration_flows: List[MigrationFlow] = field(default_factory=list)
     admin_logs: Dict[str, AdminLogEntry] = field(default_factory=dict)
     next_admin_log_seq: int = 0
     well: WellState = field(default_factory=WellState)

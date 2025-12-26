@@ -17,6 +17,7 @@ from dosadi.runtime.culture_wars import save_culture_seed
 from dosadi.runtime.ledger import save_ledger_seed
 from dosadi.runtime.treaties import save_treaties_seed
 from dosadi.runtime.smuggling import save_smuggling_seed
+from dosadi.runtime.migration import save_migration_seed
 from dosadi.testing.kpis import collect_kpis
 
 
@@ -76,6 +77,8 @@ def save_seed(
     save_treaties_seed(world, treaties_path)
     smuggling_path = vault_dir / "seeds" / seed_id / "smuggling.json"
     save_smuggling_seed(world, smuggling_path)
+    migration_path = vault_dir / "seeds" / seed_id / "migration.json"
+    save_migration_seed(world, migration_path)
 
     entry = {
         "seed_id": seed_id,
