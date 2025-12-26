@@ -12,6 +12,8 @@ from dosadi.runtime.telemetry import ensure_metrics
 import math
 
 from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
+from dosadi.runtime.governance_failures import delivery_disruption_prob_for_ward
+from dosadi.runtime.institutions import _ward_for_location
 from dosadi.runtime.escort_protocols import (
     assign_escorts_for_delivery,
     ensure_escort_config,
@@ -398,6 +400,16 @@ def release_courier(world, carrier_id: str | None) -> None:
 
 def _delivery_should_fail(world, delivery_id: str, day: int) -> bool:
     loss_rate = float(getattr(world, "logistics_loss_rate", 0.0) or 0.0)
+    delivery = getattr(getattr(world, "logistics", None), "deliveries", {}).get(delivery_id)
+    ward_ids: list[str] = []
+    if delivery is not None:
+        ward_a = _ward_for_location(world, getattr(delivery, "origin_node_id", None))
+        ward_b = _ward_for_location(world, getattr(delivery, "dest_node_id", None))
+        for ward in (ward_a, ward_b):
+            if ward is not None:
+                ward_ids.append(str(ward))
+    for ward_id in ward_ids:
+        loss_rate = max(loss_rate, delivery_disruption_prob_for_ward(world, ward_id))
     if loss_rate <= 0.0:
         return False
 
