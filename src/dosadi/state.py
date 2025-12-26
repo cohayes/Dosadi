@@ -29,6 +29,7 @@ from .runtime.escort_protocols import EscortConfig, EscortState
 from .runtime.staffing import StaffingConfig, StaffingState
 from .runtime.stockpile_policy import DepotPolicyLedger, StockpilePolicyConfig, StockpilePolicyState
 from .runtime.work_details import WorkDetailType
+from .runtime.war import RaidOutcome, RaidPlan, WarConfig
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
@@ -964,6 +965,11 @@ class WorldState:
     tech_state: object | None = None
     smuggling_cfg: SmugglingConfig = field(default_factory=SmugglingConfig)
     smuggling_by_faction: dict[str, SmugglingNetworkState] = field(default_factory=dict)
+    war_cfg: WarConfig = field(default_factory=WarConfig)
+    raid_active: dict[str, RaidPlan] = field(default_factory=dict)
+    raid_history: list[RaidOutcome] = field(default_factory=list)
+    corridor_stress: dict[str, float] = field(default_factory=dict)
+    collapsed_corridors: set[str] = field(default_factory=set)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
