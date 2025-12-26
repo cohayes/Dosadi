@@ -154,6 +154,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
     from dosadi.runtime.staffing import StaffingConfig, StaffingState, run_staffing_policy
     from dosadi.runtime.law_enforcement import run_enforcement_for_day
+    from dosadi.world.corridor_infrastructure import run_corridor_improvement_planner
     from dosadi.world.expansion_planner import (
         ExpansionPlannerConfig,
         ExpansionPlannerState,
@@ -179,6 +180,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     update_facility_wear(world, day=day)
     run_extraction_for_day(world, day=day)
     run_stockpile_policy_for_day(world, day=day)
+    run_corridor_improvement_planner(world, day=day)
     run_incident_engine_for_day(world, day=day)
     run_enforcement_for_day(world, day=day)
     run_real_factions_for_day(world, day=day)

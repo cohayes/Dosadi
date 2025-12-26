@@ -7,6 +7,7 @@ from typing import Any, Dict, Mapping
 
 from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
 
+from .corridor_infrastructure import travel_time_multiplier_for_edge
 from .survey_map import SurveyMap, edge_key
 
 
@@ -57,10 +58,11 @@ _ROUTE_CACHE = _LRU(capacity=2000)
 
 
 def _edge_cost(world: Any, edge_data: Mapping[str, Any], cfg: RoutingConfig, perspective: Any) -> float:
+    edge_key_str = edge_key(edge_data.get("a"), edge_data.get("b"))
     base_cost = max(float(edge_data.get("distance_m", 0.0)), float(edge_data.get("travel_cost", 0.0)))
+    base_cost *= travel_time_multiplier_for_edge(world, edge_key_str)
     hazard = float(edge_data.get("hazard", 0.0))
     edge = edge_data.get("edge_obj")
-    edge_key_str = edge.key if edge is not None else edge_key(edge_data.get("a"), edge_data.get("b"))
     belief = 0.0
     if perspective is not None:
         belief = belief_score(perspective, f"route-risk:{edge_key_str}", cfg.hazard_weight)

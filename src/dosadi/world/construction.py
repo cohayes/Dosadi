@@ -358,7 +358,15 @@ def _maybe_complete(world, project: ConstructionProject, tick: int) -> None:
         return
 
     if project.is_complete():
-        _create_facility_stub(world, project)
+        if project.kind == "CORRIDOR_UPGRADE":
+            try:
+                from dosadi.world.corridor_infrastructure import apply_corridor_upgrade
+
+                apply_corridor_upgrade(world, project, day=getattr(world, "day", 0))
+            except Exception:
+                pass
+        else:
+            _create_facility_stub(world, project)
         project.status = ProjectStatus.COMPLETE
         project.stage_state = StageState.DONE
         project.block_reason = None

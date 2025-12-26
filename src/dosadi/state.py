@@ -33,6 +33,7 @@ from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
+from .world.corridor_infrastructure import CorridorInfraConfig, CorridorInfraEdge
 from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
 from .runtime.market_signals import MarketSignalsConfig, MarketSignalsState
 from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
@@ -839,6 +840,8 @@ class WorldState:
     facilities: MutableMapping[str, Any] = field(default_factory=FacilityLedger)
     places: MutableMapping[str, Any] = field(default_factory=dict)
     survey_map: SurveyMap = field(default_factory=SurveyMap)
+    infra_cfg: CorridorInfraConfig = field(default_factory=CorridorInfraConfig)
+    infra_edges: MutableMapping[str, CorridorInfraEdge] = field(default_factory=dict)
     discovery_cfg: DiscoveryConfig = field(default_factory=DiscoveryConfig)
     crews: Dict[str, CrewState] = field(default_factory=dict)
     water_tap_sources: Dict[str, str] = field(default_factory=dict)
