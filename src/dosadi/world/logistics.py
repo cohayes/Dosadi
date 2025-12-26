@@ -81,6 +81,8 @@ class DeliveryRequest:
     cargo: Dict[str, float] = field(default_factory=dict)
     declared_value: float = 0.0
     flags: set[str] = field(default_factory=set)
+    smuggling_bribe_budget_total: float = 0.0
+    smuggling_bribe_map: Dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.shipment_id:

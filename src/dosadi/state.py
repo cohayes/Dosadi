@@ -39,6 +39,7 @@ from .world.corridor_infrastructure import CorridorInfraConfig, CorridorInfraEdg
 from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
 from .runtime.market_signals import MarketSignalsConfig, MarketSignalsState
 from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
+from .runtime.smuggling import SmugglingConfig, SmugglingNetworkState
 from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
@@ -961,6 +962,8 @@ class WorldState:
     extract_state: ExtractionState = field(default_factory=ExtractionState)
     tech_cfg: object | None = None
     tech_state: object | None = None
+    smuggling_cfg: SmugglingConfig = field(default_factory=SmugglingConfig)
+    smuggling_by_faction: dict[str, SmugglingNetworkState] = field(default_factory=dict)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
