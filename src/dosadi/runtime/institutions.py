@@ -298,7 +298,7 @@ def _apply_caps(value: float, delta: float, cap: float) -> float:
     return _clamp01(value + bounded)
 
 
-def _update_state(state: WardInstitutionState, issues: Mapping[str, float], *, cfg: InstitutionConfig) -> None:
+def _update_state(world: Any, state: WardInstitutionState, issues: Mapping[str, float], *, cfg: InstitutionConfig) -> None:
     shortage = issues.get("issue:shortage", 0.0)
     predation = issues.get("issue:predation", 0.0)
     anger = issues.get("issue:belief_anger", 0.0)
@@ -309,6 +309,16 @@ def _update_state(state: WardInstitutionState, issues: Mapping[str, float], *, c
     corr_delta = 0.30 * shortage + 0.25 * predation + 0.20 * corruption_opportunity - 0.30 * state.audit
     audit_delta = 0.25 * (1.0 - corruption_opportunity) + 0.15 * (1.0 - predation) + 0.15 * state.legitimacy - 0.20 * shortage
 
+    culture = getattr(world, "culture_by_ward", {}) or {}
+    culture_state = culture.get(getattr(state, "ward_id", None) or ward_id)
+    if culture_state is not None:
+        anti_state = float(getattr(culture_state, "norms", {}).get("norm:anti_state", 0.0))
+        queue_order = float(getattr(culture_state, "norms", {}).get("norm:queue_order", 0.0))
+        leg_delta -= 0.15 * anti_state
+        dis_delta += 0.10 * queue_order - 0.05 * anti_state
+        audit_delta -= 0.05 * anti_state
+
+
     caps = cfg.daily_delta_caps
     state.legitimacy = _apply_caps(state.legitimacy, leg_delta * 0.1, caps.get("legitimacy", 0.02))
     state.discipline = _apply_caps(state.discipline, dis_delta * 0.1, caps.get("discipline", 0.02))
@@ -316,6 +326,10 @@ def _update_state(state: WardInstitutionState, issues: Mapping[str, float], *, c
     state.audit = _apply_caps(state.audit, audit_delta * 0.1, caps.get("audit", 0.02))
 
     state.unrest = _clamp01(0.5 * shortage + 0.5 * anger + 0.4 * predation - 0.3 * state.legitimacy)
+    if culture_state is not None:
+        anti_state = float(getattr(culture_state, "norms", {}).get("norm:anti_state", 0.0))
+        queue_order = float(getattr(culture_state, "norms", {}).get("norm:queue_order", 0.0))
+        state.unrest = _clamp01(state.unrest + 0.25 * anti_state - 0.10 * queue_order)
 
 
 def _auto_tune_policy(policy: WardInstitutionPolicy, issues: Mapping[str, float]) -> bool:
@@ -391,7 +405,7 @@ def run_institutions_for_day(world: Any, *, day: int) -> None:
         state = ensure_state(world, ward_id, cfg=cfg)
         policy = ensure_policy(world, ward_id)
         state.recent_issue_scores = dict(issues)
-        _update_state(state, issues, cfg=cfg)
+        _update_state(world, state, issues, cfg=cfg)
         changed = _auto_tune_policy(policy, issues)
         state.last_updated_day = day
         wards_updated += 1

@@ -97,6 +97,21 @@ def _success_probability(faction: Faction, opportunity: Opportunity, world: Any)
         base -= prob * 0.35
     if faction.kind.upper() == "RAIDERS":
         base += 0.05
+    if opportunity.kind == "ward":
+        culture = getattr(world, "culture_by_ward", {}) or {}
+        culture_state = culture.get(opportunity.target_id)
+        if culture_state is not None:
+            norms = getattr(culture_state, "norms", {})
+            alignment = getattr(culture_state, "alignment", {})
+            anti_state = float(norms.get("norm:anti_state", 0.0))
+            anti_raider = float(norms.get("norm:anti_raider", 0.0))
+            smuggling = float(norms.get("norm:smuggling_tolerance", 0.0))
+            if faction.kind.upper() == "RAIDERS":
+                base += 0.08 * smuggling - 0.05 * anti_raider
+                base += 0.05 * float(alignment.get("fac:raiders", 0.0))
+            else:
+                base += 0.08 * anti_raider - 0.06 * smuggling - 0.07 * anti_state
+                base += 0.05 * float(alignment.get("fac:state", 0.0))
     return _clamp01(base)
 
 

@@ -81,6 +81,19 @@ def _ticks_per_day(world: Any) -> int:
     return max(1, ticks_int or 144_000)
 
 
+def _ward_for_location(world: Any, location_id: str | None) -> str | None:
+    if not location_id:
+        return None
+    survey_map = getattr(world, "survey_map", None)
+    if survey_map is None:
+        return None
+    node = getattr(survey_map, "nodes", {}).get(location_id) if hasattr(survey_map, "nodes") else None
+    if node is None:
+        return None
+    ward_id = getattr(node, "ward_id", None)
+    return str(ward_id) if ward_id else None
+
+
 def _bounded_candidates(candidates: Iterable[str], max_count: int, seed: int) -> List[str]:
     ids = list(sorted(set(candidates)))
     if not ids:
@@ -249,12 +262,25 @@ def _schedule_facility_incidents(
     sampled = _bounded_candidates(candidates, bound, _seed_int(base_seed, day, "facilities"))
     scheduled = 0
 
+    cultures = getattr(world, "culture_by_ward", {}) or {}
     for facility_id in sampled:
         if scheduled >= remaining_budget:
             break
         rng = _derived_rng(base_seed, day, facility_id, "facility")
         severity = rng.random()
-        if rng.random() >= cfg.p_facility_downtime_p2:
+        facility = facilities.get(facility_id)
+        ward_id = _ward_for_location(world, getattr(facility, "site_node_id", None)) if facility is not None else None
+        prob = cfg.p_facility_downtime_p2
+        if ward_id:
+            culture_state = cultures.get(ward_id)
+            if culture_state is not None:
+                norms = getattr(culture_state, "norms", {})
+                anti_state = float(norms.get("norm:anti_state", 0.0))
+                vigilante = float(norms.get("norm:vigilante_justice", 0.0))
+                anti_raider = float(norms.get("norm:anti_raider", 0.0))
+                bias = 1.0 + 0.6 * anti_state + 0.3 * vigilante - 0.25 * anti_raider
+                prob = max(0.0, min(cfg.p_facility_downtime_p2 * max(0.2, bias), cfg.p_facility_downtime_p2 * 1.8))
+        if rng.random() >= prob:
             continue
 
         state.next_incident_seq += 1
