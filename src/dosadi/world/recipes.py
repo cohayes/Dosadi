@@ -18,6 +18,7 @@ class Recipe:
     labor_days: int = 0
     waste: Mapping[Material, int] = field(default_factory=dict)
     tags: frozenset[str] = frozenset()
+    requires_unlocks: frozenset[str] = frozenset()
     min_staff: int = 0
     enabled: bool = True
     notes: str = ""
@@ -68,6 +69,7 @@ def _recipe(
     labor_days: int = 0,
     waste: Mapping[object, object] | None = None,
     tags: Iterable[str] | None = None,
+    requires_unlocks: Iterable[str] | None = None,
     min_staff: int = 0,
     enabled: bool = True,
     notes: str = "",
@@ -81,6 +83,7 @@ def _recipe(
         labor_days=labor_days,
         waste=normalize_bom(waste or {}),
         tags=frozenset(tags or set()),
+        requires_unlocks=frozenset(requires_unlocks or set()),
         min_staff=min_staff,
         enabled=enabled,
         notes=notes,
@@ -95,6 +98,7 @@ DEFAULT_RECIPES: list[Recipe] = [
         outputs={Material.SCRAP_METAL: 4, Material.PLASTICS: 2, Material.FIBER: 1},
         tags={"base", "refine"},
         notes="SCRAP_INPUT -> SCRAP_METAL/PLASTICS/FIBER",
+        requires_unlocks={"UNLOCK_RECYCLER_RECIPES_T1"},
     ),
     _recipe(
         recipe_id="recycler_salvage_mix",
@@ -103,6 +107,7 @@ DEFAULT_RECIPES: list[Recipe] = [
         outputs={Material.SCRAP_METAL: 3, Material.PLASTICS: 1, Material.FIBER: 1},
         tags={"refine"},
         notes="SALVAGE_MIX -> mixed basics",
+        requires_unlocks={"UNLOCK_RECYCLER_RECIPES_T1"},
     ),
     _recipe(
         recipe_id="chemworks_sealant_gaskets",
@@ -111,6 +116,7 @@ DEFAULT_RECIPES: list[Recipe] = [
         outputs={Material.SEALANT: 2, Material.GASKETS: 1},
         tags={"parts"},
         notes="CHEM_SALTS/FIBER -> SEALANT/GASKETS",
+        requires_unlocks={"UNLOCK_CHEM_SEALANTS_T2"},
     ),
     _recipe(
         recipe_id="workshop_fasteners",
@@ -120,6 +126,7 @@ DEFAULT_RECIPES: list[Recipe] = [
         min_staff=1,
         tags={"parts"},
         notes="SCRAP_METAL -> FASTENERS",
+        requires_unlocks={"UNLOCK_WORKSHOP_PARTS_T2"},
     ),
     _recipe(
         recipe_id="workshop_filter_media",
@@ -129,6 +136,7 @@ DEFAULT_RECIPES: list[Recipe] = [
         min_staff=1,
         tags={"parts"},
         notes="FIBER -> FILTER_MEDIA",
+        requires_unlocks={"UNLOCK_WORKSHOP_PARTS_T2"},
     ),
     _recipe(
         recipe_id="workshop_circuit_simple",
