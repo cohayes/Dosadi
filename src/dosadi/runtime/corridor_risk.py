@@ -189,7 +189,14 @@ def risk_for_edge(world, edge_key: str) -> float:
     rec = ledger.edges.get(edge_key)
     if rec is None:
         return 0.0
-    return _clamp01(rec.risk)
+    base = _clamp01(rec.risk)
+    try:
+        from dosadi.runtime.crackdown import corridor_modifiers
+
+        mods = corridor_modifiers(world, edge_key)
+        return _clamp01(base * float(mods.get("risk_mult", 1.0)))
+    except Exception:
+        return base
 
 
 def hot_edges(ledger: CorridorRiskLedger) -> Iterable[str]:

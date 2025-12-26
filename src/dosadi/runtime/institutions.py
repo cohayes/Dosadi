@@ -6,6 +6,7 @@ import json
 from typing import Any, Iterable, Mapping
 
 from dosadi.runtime.telemetry import ensure_metrics, record_event
+from dosadi.runtime.crackdown import ward_audit_modifiers
 from dosadi.world.phases import WorldPhase
 from dosadi.world.survey_map import SurveyEdge, SurveyMap, SurveyNode
 
@@ -313,6 +314,12 @@ def _update_state(world: Any, state: WardInstitutionState, issues: Mapping[str, 
     corr_delta = 0.30 * shortage + 0.25 * predation + 0.20 * corruption_opportunity - 0.30 * state.audit
     audit_delta = 0.25 * (1.0 - corruption_opportunity) + 0.15 * (1.0 - predation) + 0.15 * state.legitimacy - 0.20 * shortage
 
+    modifiers = ward_audit_modifiers(world, getattr(state, "ward_id", ""))
+    if modifiers:
+        leg_delta += float(modifiers.get("legitimacy_delta", 0.0))
+        audit_delta += float(modifiers.get("audit_bonus", 0.0))
+        corr_delta *= float(modifiers.get("corruption_mult", 1.0))
+
     culture = getattr(world, "culture_by_ward", {}) or {}
     culture_state = culture.get(getattr(state, "ward_id", None) or ward_id)
     if culture_state is not None:
@@ -329,11 +336,16 @@ def _update_state(world: Any, state: WardInstitutionState, issues: Mapping[str, 
     state.corruption = _apply_caps(state.corruption, corr_delta * 0.1, caps.get("corruption", 0.03))
     state.audit = _apply_caps(state.audit, audit_delta * 0.1, caps.get("audit", 0.02))
 
+    if modifiers:
+        state.legitimacy = _clamp01(state.legitimacy + float(modifiers.get("legitimacy_delta", 0.0)))
+
     state.unrest = _clamp01(0.5 * shortage + 0.5 * anger + 0.4 * predation - 0.3 * state.legitimacy)
     if culture_state is not None:
         anti_state = float(getattr(culture_state, "norms", {}).get("norm:anti_state", 0.0))
         queue_order = float(getattr(culture_state, "norms", {}).get("norm:queue_order", 0.0))
         state.unrest = _clamp01(state.unrest + 0.25 * anti_state - 0.10 * queue_order)
+    if modifiers:
+        state.unrest = _clamp01(state.unrest + float(modifiers.get("unrest_delta", 0.0)))
 
 
 def _auto_tune_policy(policy: WardInstitutionPolicy, issues: Mapping[str, float]) -> bool:
