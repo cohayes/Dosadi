@@ -31,6 +31,7 @@ from dosadi.runtime.maintenance import update_facility_wear
 from dosadi.runtime.facility_updates import update_facilities_for_day
 from dosadi.runtime.incident_engine import run_incident_engine_for_day
 from dosadi.runtime.faction_interference import run_faction_interference_for_day
+from dosadi.runtime.factions import run_real_factions_for_day
 from dosadi.runtime.local_interactions import run_interactions_for_day
 from dosadi.runtime.law_enforcement import run_enforcement_for_day
 from dosadi.runtime.suit_wear import ensure_suit_config, run_suit_wear_for_day, suit_decay_multiplier
@@ -205,6 +206,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         run_suit_wear_for_day(world, day=world.day)
         run_incident_engine_for_day(world, day=world.day)
         run_enforcement_for_day(world, day=world.day)
+        run_real_factions_for_day(world, day=world.day)
         run_faction_interference_for_day(world, day=world.day)
         run_interactions_for_day(world, day=world.day)
         run_router_for_day(world, day=world.day)

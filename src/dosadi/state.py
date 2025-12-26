@@ -40,6 +40,7 @@ from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
 from .world.environment import PlaceEnvironmentState
+from .world.factions import FactionSystemConfig, FactionSystemState, FactionTerritory, Faction
 from .world.phases import PhaseConfig, PhaseState
 from .world.discovery import DiscoveryConfig
 from .world.extraction import ExtractionLedger
@@ -825,7 +826,7 @@ class WorldState:
     time_min: int = 0
     config: WorldConfig = field(default_factory=WorldConfig)
     wards: MutableMapping[str, WardState] = field(default_factory=dict)
-    factions: MutableMapping[str, FactionState] = field(default_factory=dict)
+    factions: MutableMapping[str, Faction | FactionState] = field(default_factory=dict)
     agents: MutableMapping[str, AgentState] = field(default_factory=dict)
     queues: MutableMapping[str, "QueueState"] = field(default_factory=dict)
     contracts: MutableMapping[str, ContractState] = field(default_factory=dict)
@@ -938,6 +939,9 @@ class WorldState:
     escort2_cfg: EscortPolicyV2Config = field(default_factory=EscortPolicyV2Config)
     escort2_state: EscortPolicyV2State = field(default_factory=EscortPolicyV2State)
     extract_cfg: ExtractionConfig = field(default_factory=ExtractionConfig)
+    faction_cfg: FactionSystemConfig = field(default_factory=FactionSystemConfig)
+    faction_state: FactionSystemState = field(default_factory=FactionSystemState)
+    faction_territory: dict[str, FactionTerritory] = field(default_factory=dict)
     extract_state: ExtractionState = field(default_factory=ExtractionState)
 
     def register_ward(self, ward: WardState) -> None:
@@ -1053,6 +1057,9 @@ __all__ = [
     "ContractState",
     "EnvironmentState",
     "FactionState",
+    "Faction",
+    "FactionSystemConfig",
+    "FactionSystemState",
     "FactionMetrics",
     "InfrastructureState",
     "MemoryState",
