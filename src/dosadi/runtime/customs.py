@@ -11,6 +11,7 @@ from hashlib import sha256
 from typing import Any, Iterable, Mapping
 
 from dosadi.runtime.institutions import ensure_policy, ensure_state
+from dosadi.runtime.crackdown import border_modifiers
 from dosadi.runtime.ledger import BLACK_MARKET, STATE_TREASURY, ensure_accounts, transfer
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.world.factions import pseudo_rand01
@@ -202,12 +203,14 @@ def _bribe_success(
     enforcement_budget: float,
     key: str,
     phase_key: str,
+    *,
+    modifier_mult: float = 1.0,
 ) -> bool:
     base = _clamp01(float(getattr(policy, "customs_bribe_tolerance", 0.0)))
     base += 0.4 * _clamp01(corruption)
     base -= 0.02 * max(0.0, enforcement_budget)
     base += _phase_multiplier(cfg, phase_key, "bribery")
-    return pseudo_rand01(key) < _clamp01(base)
+    return pseudo_rand01(key) < _clamp01(base * modifier_mult)
 
 
 def _update_metrics(world: Any, *, tariff: float, bribe: float, seized: bool, inspected: bool) -> None:
@@ -266,6 +269,7 @@ def process_customs_crossing(
     policy = ensure_policy(world, crossing.to_control)
     inst_state = ensure_state(world, crossing.to_control)
     enforcement_budget = float(getattr(policy, "enforcement_budget_points", 0.0) or 0.0)
+    modifiers = border_modifiers(world, crossing.border_at)
 
     phase_key = _phase_key(world)
     flags = getattr(shipment, "flags", set()) or set()
@@ -275,6 +279,8 @@ def process_customs_crossing(
 
     escorted = bool(getattr(shipment, "escort_agent_ids", None))
     inspection_prob = _effective_inspection_prob(cfg, policy, phase_key, escorted=escorted, flags=flags)
+    inspection_prob *= float(modifiers.get("inspection_mult", 1.0))
+    inspection_prob = _clamp01(inspection_prob)
     inspect_roll = pseudo_rand01(
         "|".join(
             str(part)
@@ -297,6 +303,8 @@ def process_customs_crossing(
     if inspection:
         score = _contraband_score(shipment)
         detection_prob = _contraband_detection_prob(cfg, policy, phase_key, corruption=getattr(inst_state, "corruption", 0.0))
+        detection_prob *= float(modifiers.get("detection_mult", 1.0))
+        detection_prob = _clamp01(detection_prob)
         detect_roll = pseudo_rand01(
             "|".join(
                 str(part)
@@ -336,6 +344,7 @@ def process_customs_crossing(
                     enforcement_budget,
                     bribe_key,
                     phase_key,
+                    modifier_mult=float(modifiers.get("bribe_mult", 1.0)),
                 ):
                     bribe_paid = _bribe_amount(tariff, declared_value)
                     outcome = "CLEARED"

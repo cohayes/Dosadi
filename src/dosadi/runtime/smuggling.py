@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -289,7 +289,7 @@ def smuggling_seed_payload(world: Any) -> dict[str, Any] | None:
     if cfg is None and state is None:
         return None
     payload = {
-        "config": cfg.__dict__ if cfg else {},
+        "config": asdict(cfg) if cfg else {},
         "by_faction": {
             fid: {
                 "commodity_prefs": dict(net.commodity_prefs),
