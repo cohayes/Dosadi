@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -11,6 +12,7 @@ from dosadi.runtime.snapshot import (
     save_snapshot,
     snapshot_world,
 )
+from dosadi.runtime.institutions import save_institutions_seed
 from dosadi.testing.kpis import collect_kpis
 
 
@@ -60,6 +62,8 @@ def save_seed(
     snapshot = snapshot_world(world, scenario_id=scenario_id)
     snapshot_path = _snapshots_dir(vault_dir) / f"{seed_id}.json.gz"
     snapshot_sha = save_snapshot(snapshot, snapshot_path, gzip_output=True)
+    inst_path = vault_dir / "seeds" / seed_id / "institutions.json"
+    save_institutions_seed(world, inst_path)
 
     entry = {
         "seed_id": seed_id,
@@ -71,6 +75,9 @@ def save_seed(
         "snapshot_sha256": snapshot_sha,
         "kpis": collect_kpis(world),
     }
+    if inst_path.exists():
+        entry["institutions_path"] = str(inst_path.relative_to(vault_dir))
+        entry["institutions_sha256"] = sha256(inst_path.read_bytes()).hexdigest()
     if meta:
         entry.update({k: v for k, v in meta.items() if k not in entry})
 

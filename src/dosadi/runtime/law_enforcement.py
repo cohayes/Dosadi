@@ -7,6 +7,7 @@ from hashlib import sha256
 from typing import Any, Dict, Iterable, Mapping
 
 from dosadi.runtime.telemetry import ensure_metrics, record_event
+from dosadi.runtime.institutions import WardInstitutionPolicy
 from dosadi.world.corridor_infrastructure import predation_multiplier_for_edge
 from dosadi.world.phases import WorldPhase
 
@@ -83,6 +84,10 @@ def ensure_policy_for_ward(world: Any, ward_id: str) -> WardSecurityPolicy:
     if not isinstance(policy, WardSecurityPolicy):
         policy = WardSecurityPolicy(ward_id=ward_id)
         policies[ward_id] = policy
+    inst_policies = getattr(world, "inst_policy_by_ward", {}) or {}
+    inst_policy = inst_policies.get(ward_id)
+    if isinstance(inst_policy, WardInstitutionPolicy):
+        policy.budget_points = float(getattr(inst_policy, "enforcement_budget_points", policy.budget_points))
     world.enf_policy_by_ward = policies
     return policy
 

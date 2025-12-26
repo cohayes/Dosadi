@@ -34,6 +34,7 @@ from dosadi.runtime.faction_interference import run_faction_interference_for_day
 from dosadi.runtime.factions import run_real_factions_for_day
 from dosadi.runtime.local_interactions import run_interactions_for_day
 from dosadi.runtime.law_enforcement import run_enforcement_for_day
+from dosadi.runtime.institutions import ensure_inst_config, run_institutions_for_day
 from dosadi.runtime.suit_wear import ensure_suit_config, run_suit_wear_for_day, suit_decay_multiplier
 from dosadi.world.corridor_infrastructure import run_corridor_improvement_planner
 from dosadi.world.construction import apply_project_work
@@ -210,6 +211,9 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         run_enforcement_for_day(world, day=world.day)
         run_real_factions_for_day(world, day=world.day)
         run_faction_interference_for_day(world, day=world.day)
+        inst_cfg = ensure_inst_config(world)
+        if getattr(inst_cfg, "enabled", False):
+            run_institutions_for_day(world, day=world.day)
         run_interactions_for_day(world, day=world.day)
         run_router_for_day(world, day=world.day)
         run_belief_formation_for_day(world, day=world.day)
