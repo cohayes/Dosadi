@@ -825,6 +825,12 @@ def _protocol_registry_factory():
     return ProtocolRegistry()
 
 
+def _health_config_factory():
+    from dosadi.runtime.health import HealthConfig
+
+    return HealthConfig()
+
+
 @dataclass
 class WorldState:
     tick: int = 0
@@ -896,6 +902,9 @@ class WorldState:
     migration_cfg: MigrationConfig = field(default_factory=MigrationConfig)
     migration_by_ward: Dict[str, WardMigrationState] = field(default_factory=dict)
     migration_flows: List[MigrationFlow] = field(default_factory=list)
+    health_cfg: "HealthConfig" = field(default_factory=_health_config_factory)
+    health_by_ward: Dict[str, "WardHealthState"] = field(default_factory=dict)
+    health_events: List["HealthEvent"] = field(default_factory=list)
     admin_logs: Dict[str, AdminLogEntry] = field(default_factory=dict)
     next_admin_log_seq: int = 0
     well: WellState = field(default_factory=WellState)
