@@ -38,11 +38,25 @@ class Metrics(MutableMapping[str, float]):
     topk: dict[str, TopK] = field(default_factory=dict)
     legacy: dict[str, float] = field(default_factory=dict)
 
-    def __getitem__(self, key: str) -> float:
-        return self.legacy[key]
+    def __getitem__(self, key: str) -> Any:
+        if key in self.legacy:
+            return self.legacy[key]
+        if key in self.gauges:
+            return self.gauges[key]
+        raise KeyError(key)
 
-    def __setitem__(self, key: str, value: float) -> None:
-        self.legacy[key] = float(value)
+    def get(self, key: str, default: Any = None) -> Any:  # type: ignore[override]
+        if key in self.legacy:
+            return self.legacy.get(key, default)
+        if key in self.gauges:
+            return self.gauges.get(key, default)
+        return default
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        if isinstance(value, (int, float)):
+            self.legacy[key] = float(value)
+        else:
+            self.legacy[key] = value
 
     def __delitem__(self, key: str) -> None:
         if key in self.legacy:
@@ -74,7 +88,7 @@ class Metrics(MutableMapping[str, float]):
             "counters": {k: float(v) for k, v in sorted(self.counters.items())},
             "gauges": {k: self._to_jsonable(v) for k, v in sorted(self.gauges.items())},
             "topk": {k: bucket.snapshot() for k, bucket in sorted(self.topk.items())},
-            "legacy": {k: float(v) for k, v in sorted(self.legacy.items())},
+            "legacy": {k: self._to_jsonable(v) for k, v in sorted(self.legacy.items())},
         }
         return json.dumps(canonical, sort_keys=True, separators=(",", ":"))
 

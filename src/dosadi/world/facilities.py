@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterator, MutableMapping, Set
 
 class FacilityKind(str, Enum):
     DEPOT = "DEPOT"
+    OUTPOST = "OUTPOST"
     WORKSHOP = "WORKSHOP"
     RECYCLER = "RECYCLER"
     CHEM_WORKS = "CHEM_WORKS"
@@ -137,7 +138,11 @@ _FACILITY_BEHAVIORS: Dict[str, FacilityBehavior] = {
 
 
 def get_facility_behavior(kind: str) -> FacilityBehavior:
-    behavior = _FACILITY_BEHAVIORS.get(kind)
+    if isinstance(kind, FacilityKind):
+        key = kind.value.lower()
+    else:
+        key = str(kind).lower()
+    behavior = _FACILITY_BEHAVIORS.get(key)
     if behavior is None:
         raise KeyError(f"Unknown facility kind: {kind}")
     return behavior

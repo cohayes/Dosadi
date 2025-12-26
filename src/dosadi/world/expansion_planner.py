@@ -7,7 +7,7 @@ from hashlib import sha256
 from typing import Iterable, Mapping, MutableMapping
 
 from .construction import ConstructionProject, ProjectCost, ProjectLedger, ProjectStatus, stage_project_if_ready
-from .facilities import FacilityKind
+from .facilities import FacilityKind, coerce_facility_kind
 from .extraction import SiteKind, ensure_extraction
 from .materials import Material, ensure_inventory_registry, normalize_bom
 from .site_scoring import SiteScoreConfig, score_site
@@ -47,7 +47,7 @@ class ProjectProposal:
 
 
 _DEFAULT_COSTS: Mapping[str, ProjectCost] = {
-    FacilityKind.DEPOT.value: ProjectCost(materials={}, labor_hours=24.0),
+    FacilityKind.DEPOT.value: ProjectCost(materials={"metal": 4.0, "polymer": 3.0}, labor_hours=24.0),
     FacilityKind.WORKSHOP.value: ProjectCost(
         materials={"metal": 8.0, "polymer": 6.0}, labor_hours=72.0
     ),
@@ -285,7 +285,11 @@ def maybe_plan(
     score_cfg = SiteScoreConfig()
     planner_agent = _planner_agent(world)
     shortages = _material_shortages(world)
-    chosen_kind = _kind_for_shortages(shortages)
+    default_kinds = tuple(kind.value for kind in FacilityKind)
+    if cfg.project_kinds and tuple(cfg.project_kinds) != default_kinds:
+        chosen_kind = coerce_facility_kind(cfg.project_kinds[0])
+    else:
+        chosen_kind = _kind_for_shortages(shortages)
     proposals: list[ProjectProposal] = []
     for node in candidates:
         for kind in (chosen_kind.value,):
