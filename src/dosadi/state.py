@@ -973,6 +973,8 @@ class WorldState:
     collapsed_corridors: set[str] = field(default_factory=set)
     defense_cfg: DefenseConfig = field(default_factory=DefenseConfig)
     ward_defense: dict[str, WardDefenseState] = field(default_factory=dict)
+    deterrence_cfg: object | None = None
+    relationships: dict[str, object] = field(default_factory=dict)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
