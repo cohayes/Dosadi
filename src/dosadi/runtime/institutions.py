@@ -58,6 +58,9 @@ class WardInstitutionPolicy:
     audit_budget_points: float = 2.0
     research_budget_points: float = 0.0
     posture: str = "balanced"
+    militia_target_strength: float = 0.0
+    militia_training_budget: float = 0.0
+    militia_upkeep_budget: float = 0.0
     customs_inspection_bias: float = 0.0
     customs_tariff_bias: float = 0.0
     customs_contraband_bias: float = 0.0
@@ -503,6 +506,9 @@ def institution_seed_payload(world: Any) -> dict[str, Any] | None:
                 "audit_budget_points": policy.audit_budget_points,
                 "research_budget_points": policy.research_budget_points,
                 "posture": policy.posture,
+                "militia_target_strength": policy.militia_target_strength,
+                "militia_training_budget": policy.militia_training_budget,
+                "militia_upkeep_budget": policy.militia_upkeep_budget,
             }
         if isinstance(state, WardInstitutionState):
             entry["state"] = {

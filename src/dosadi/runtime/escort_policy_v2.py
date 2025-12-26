@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
 from .corridor_risk import ensure_corridor_risk_config, ensure_corridor_risk_ledger, risk_for_edge
+from .defense import DefenseConfig, ensure_defense_config, ensure_ward_defense
+from dosadi.world.survey_map import SurveyMap
 
 
 @dataclass(slots=True)
@@ -65,6 +67,25 @@ def required_escorts_for_route(world, route_edges: Sequence[str]) -> int:
     max_risk = 0.0
     for edge in route_edges:
         max_risk = max(max_risk, risk_for_edge(world, edge))
+
+    defense_cfg: DefenseConfig = ensure_defense_config(world)
+    if defense_cfg.enabled:
+        survey_map: SurveyMap = getattr(world, "survey_map", SurveyMap())
+        ward_ids: set[str] = set()
+        for edge_key in route_edges:
+            edge = survey_map.edges.get(edge_key)
+            if edge is None:
+                continue
+            for node_id in (edge.a, edge.b):
+                ward_id = getattr(survey_map.nodes.get(node_id, None), "ward_id", None)
+                if ward_id:
+                    ward_ids.add(str(ward_id))
+        readiness: list[float] = []
+        for ward_id in sorted(ward_ids):
+            state = ensure_ward_defense(world, ward_id)
+            readiness.append(state.militia_ready * state.militia_strength)
+        if readiness:
+            max_risk *= max(0.0, 1.0 - 0.25 * max(readiness))
 
     if max_risk >= cfg.risk_threshold_critical:
         return min(cfg.max_escorts_per_delivery, cfg.critical_escort_count)

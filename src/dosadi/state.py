@@ -38,6 +38,7 @@ from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
 from .runtime.culture_wars import CultureConfig, WardCultureState
 from .world.corridor_infrastructure import CorridorInfraConfig, CorridorInfraEdge
 from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
+from .runtime.defense import DefenseConfig, WardDefenseState
 from .runtime.market_signals import MarketSignalsConfig, MarketSignalsState
 from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
 from .runtime.smuggling import SmugglingConfig, SmugglingNetworkState
@@ -970,6 +971,8 @@ class WorldState:
     raid_history: list[RaidOutcome] = field(default_factory=list)
     corridor_stress: dict[str, float] = field(default_factory=dict)
     collapsed_corridors: set[str] = field(default_factory=set)
+    defense_cfg: DefenseConfig = field(default_factory=DefenseConfig)
+    ward_defense: dict[str, WardDefenseState] = field(default_factory=dict)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, Iterator, Mapping, MutableMapping, Set
 class FacilityKind(str, Enum):
     DEPOT = "DEPOT"
     OUTPOST = "OUTPOST"
+    OUTPOST_L1 = "OUTPOST_L1"
     WORKSHOP = "WORKSHOP"
     WORKSHOP_T2 = "WORKSHOP_T2"
     RECYCLER = "RECYCLER"
@@ -21,6 +22,8 @@ class FacilityKind(str, Enum):
     WATER_WORKS = "WATER_WORKS"
     FAB_SHOP_T3 = "FAB_SHOP_T3"
     WAYSTATION_L2 = "WAYSTATION_L2"
+    FORT_L2 = "FORT_L2"
+    GARRISON_L2 = "GARRISON_L2"
 
 
 def coerce_facility_kind(raw: object) -> FacilityKind:
@@ -178,6 +181,24 @@ _FACILITY_DEFAULTS: dict[FacilityKind, dict[str, object]] = {
         "requires_unlocks": {"UNLOCK_CORRIDOR_L2"},
         "tier": 2,
         "role_tags": {"logistics_support", "corridor"},
+    },
+    FacilityKind.OUTPOST_L1: {
+        "requires_unlocks": {"UNLOCK_OUTPOST_L1"},
+        "tier": 1,
+        "role_tags": {"defense", "corridor"},
+        "consumes": {"SCRAP_METAL": 2.0, "FASTENERS": 1.0, "FILTER_MEDIA": 1.0},
+    },
+    FacilityKind.FORT_L2: {
+        "requires_unlocks": {"UNLOCK_FORT_L2"},
+        "tier": 2,
+        "role_tags": {"defense", "corridor"},
+        "consumes": {"ADV_COMPONENTS": 1.0, "SEALANT": 1.0, "FILTER_MEDIA": 1.0},
+    },
+    FacilityKind.GARRISON_L2: {
+        "requires_unlocks": {"UNLOCK_GARRISON_L2"},
+        "tier": 2,
+        "role_tags": {"defense", "corridor"},
+        "consumes": {"ADV_COMPONENTS": 1.0, "SEALANT": 1.0, "TRAINING_SUPPLIES": 1.0},
     },
 }
 

@@ -11,6 +11,7 @@ from hashlib import sha256
 from typing import Any, Iterable, Mapping, MutableMapping
 
 from dosadi.runtime.crackdown import CrackdownTarget
+from dosadi.runtime.defense import DefenseConfig, ensure_defense_config, ensure_ward_defense
 from dosadi.runtime.ledger import (
     LedgerConfig,
     LedgerState,
@@ -19,6 +20,7 @@ from dosadi.runtime.ledger import (
 )
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.world.corridor_infrastructure import level_for_edge
+from dosadi.world.facilities import FacilityKind, ensure_facility_ledger
 from dosadi.world.factions import (
     Faction,
     FactionSystemConfig,
@@ -138,6 +140,23 @@ def _edge_defense_penalty(world: Any, edge: SurveyEdge) -> float:
     if wards:
         avg_legitimacy = sum(getattr(world.wards.get(w, None), "legitimacy", 0.5) for w in wards) / len(wards)
         penalty += max(0.0, avg_legitimacy - 0.5) * 0.15
+    cfg: DefenseConfig = ensure_defense_config(world)
+    if cfg.enabled:
+        ledger = ensure_facility_ledger(world)
+        for facility in ledger.values():
+            if getattr(facility, "site_node_id", None) not in {edge.a, edge.b}:
+                continue
+            if facility.kind in {FacilityKind.OUTPOST_L1, FacilityKind.OUTPOST}:
+                penalty += 0.05
+            if facility.kind == FacilityKind.FORT_L2:
+                penalty += 0.12
+            if facility.kind == FacilityKind.GARRISON_L2:
+                penalty += 0.1
+        for ward_id in wards:
+            state = ensure_ward_defense(world, ward_id)
+            militia_factor = float(state.militia_strength) * float(state.militia_ready)
+            if militia_factor > 0:
+                penalty += 0.08 * militia_factor
     return penalty
 
 
