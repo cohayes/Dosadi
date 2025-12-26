@@ -5,6 +5,7 @@ from hashlib import sha256
 from typing import Iterable, Mapping
 
 from dosadi.runtime.telemetry import ensure_metrics, record_event
+from dosadi.runtime.ledger import ensure_ledger_config, ensure_ledger_state, post_tx
 from dosadi.world.materials import Material, InventoryRegistry, ensure_inventory_registry
 
 
@@ -204,9 +205,19 @@ def run_tech_for_day(world, *, day: int) -> None:
     if not cfg.enabled:
         return
 
+    ledger_cfg = ensure_ledger_config(world)
+    ledger_state = ensure_ledger_state(world) if ledger_cfg.enabled else None
+
     registry = tech_registry()
     priorities = _pressure_scores(world)
     inventory = ensure_inventory_registry(world)
+
+    sponsor_policies = getattr(world, "inst_policy_by_ward", {}) or {}
+    sponsor_candidates = [
+        (float(getattr(policy, "research_budget_points", 0.0)), ward_id)
+        for ward_id, policy in sorted(sponsor_policies.items())
+    ]
+    sponsor_candidates.sort(key=lambda item: (-round(item[0], 6), item[1]))
 
     # Complete finished projects
     for tech_id, active in sorted(list(state.active.items())):
@@ -241,6 +252,22 @@ def run_tech_for_day(world, *, day: int) -> None:
             continue
         if not inventory.inv(_owner_for_research(world)).can_afford(spec.cost_materials):
             continue
+        if ledger_cfg.enabled:
+            sponsor_budget, sponsor_ward = (sponsor_candidates[0] if sponsor_candidates else (0.0, None))
+            if sponsor_budget <= 0.0 or sponsor_ward is None:
+                continue
+            prev_len = len(ledger_state.txs) if ledger_state is not None else 0
+            posted = post_tx(
+                world,
+                day=day,
+                from_acct=f"acct:ward:{sponsor_ward}",
+                to_acct="acct:state:treasury",
+                amount=sponsor_budget,
+                reason="PAY_RESEARCH",
+                meta={"tech_id": spec.tech_id},
+            )
+            if not posted or (ledger_state is not None and len(ledger_state.txs) <= prev_len):
+                continue
         inventory.inv(_owner_for_research(world)).apply_bom(spec.cost_materials)
         complete_day = day + max(1, int(spec.duration_days))
         state.active[spec.tech_id] = ActiveTechProject(
