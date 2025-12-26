@@ -7,6 +7,7 @@ from hashlib import sha256
 from typing import Any, Dict, Iterable, Mapping
 
 from dosadi.runtime.telemetry import ensure_metrics, record_event
+from dosadi.runtime.ledger import ensure_ledger_config, ensure_ledger_state
 from dosadi.runtime.institutions import WardInstitutionPolicy
 from dosadi.world.corridor_infrastructure import predation_multiplier_for_edge
 from dosadi.world.phases import WorldPhase
@@ -245,6 +246,9 @@ def run_enforcement_for_day(world: Any, *, day: int) -> None:
     active_wards = sorted(candidates_by_ward.keys())
     total_patrols = 0
     total_checkpoints = 0
+    ledger_cfg = ensure_ledger_config(world)
+    ledger_state = ensure_ledger_state(world)
+
     for ward_id in active_wards:
         policy = ensure_policy_for_ward(world, ward_id)
         state = ensure_state_for_ward(world, ward_id)
@@ -253,7 +257,9 @@ def run_enforcement_for_day(world: Any, *, day: int) -> None:
         priority_edges = [ek for ek, _ in ranked[: min(20, len(ranked))]]
         policy.priority_edges = priority_edges[:10]
 
-        budget = max(0.0, float(policy.budget_points)) * multiplier
+        paid_budget = ledger_state.paid_enforcement.get(ward_id, None) if ledger_cfg.enabled else None
+        budget_base = paid_budget if paid_budget is not None else policy.budget_points
+        budget = max(0.0, float(budget_base)) * multiplier
         if policy.posture == "patrol-heavy":
             patrol_budget = 0.7 * budget
         elif policy.posture == "checkpoint-heavy":

@@ -47,6 +47,22 @@ def _extraction_sites(telemetry: Metrics) -> list[str]:
     return _topk_lines(bucket, prefix="•")
 
 
+def _ledger_panel(telemetry: Metrics) -> list[str]:
+    ledger_metrics = telemetry.gauges.get("ledger", {}) if hasattr(telemetry, "gauges") else {}
+    if not isinstance(ledger_metrics, Mapping):
+        return ["ledger telemetry unavailable"]
+    balances = ledger_metrics.get("balances", {}) if isinstance(ledger_metrics, Mapping) else {}
+    lines = [
+        _fmt_row("treasury balance", f"{float(balances.get('state_treasury', 0.0)):.2f}"),
+        _fmt_row("avg ward balance", f"{float(balances.get('avg_ward', 0.0)):.2f}"),
+        _fmt_row("avg faction balance", f"{float(balances.get('avg_faction', 0.0)):.2f}"),
+        _fmt_row("tx count", str(ledger_metrics.get("tx_count", 0))),
+    ]
+    lines.extend(_topk_lines(telemetry.topk.get("ledger.richest_accounts"), prefix="richest:"))
+    lines.extend(_topk_lines(telemetry.topk.get("ledger.lowest_accounts"), prefix="lowest:"))
+    return lines
+
+
 def _recent_events(ring: EventRing, *, limit: int = 10) -> list[str]:
     if ring.capacity <= 0 or not ring.events:
         return ["(event ring disabled)"]
@@ -142,6 +158,9 @@ class DebugCockpitCLI:
 
         lines.append(_section("What is producing value?"))
         lines.extend(_extraction_sites(telemetry))
+
+        lines.append(_section("Ledger"))
+        lines.extend(_ledger_panel(telemetry))
 
         lines.append(_section("Logistics health"))
         lines.extend(_logistics_health(world, telemetry))

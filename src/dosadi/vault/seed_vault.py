@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
-import json
-from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -16,6 +14,7 @@ from dosadi.runtime.snapshot import (
 )
 from dosadi.runtime.institutions import save_institutions_seed
 from dosadi.runtime.culture_wars import save_culture_seed
+from dosadi.runtime.ledger import save_ledger_seed
 from dosadi.testing.kpis import collect_kpis
 
 
@@ -69,6 +68,8 @@ def save_seed(
     save_institutions_seed(world, inst_path)
     culture_path = vault_dir / "seeds" / seed_id / "culture.json"
     save_culture_seed(world, culture_path)
+    ledger_path = vault_dir / "seeds" / seed_id / "ledger_accounts.json"
+    save_ledger_seed(world, ledger_path)
 
     entry = {
         "seed_id": seed_id,
@@ -86,6 +87,9 @@ def save_seed(
     if culture_path.exists():
         entry["culture_path"] = str(culture_path.relative_to(vault_dir))
         entry["culture_sha256"] = sha256(culture_path.read_bytes()).hexdigest()
+    if ledger_path.exists():
+        entry["ledger_path"] = str(ledger_path.relative_to(vault_dir))
+        entry["ledger_sha256"] = sha256(ledger_path.read_bytes()).hexdigest()
     if meta:
         entry.update({k: v for k, v in meta.items() if k not in entry})
 
