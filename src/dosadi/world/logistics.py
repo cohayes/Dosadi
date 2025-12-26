@@ -73,6 +73,26 @@ class DeliveryRequest:
     escort_mission_ids: list[str] = field(default_factory=list)
     origin_owner_id: str | None = None
     dest_owner_id: str | None = None
+    shipment_id: str = ""
+    owner_party: str | None = None
+    origin_ward: str | None = None
+    dest_ward: str | None = None
+    route_corridors: list[str] = field(default_factory=list)
+    cargo: Dict[str, float] = field(default_factory=dict)
+    declared_value: float = 0.0
+    flags: set[str] = field(default_factory=set)
+
+    def __post_init__(self) -> None:
+        if not self.shipment_id:
+            self.shipment_id = self.delivery_id
+        if not self.cargo:
+            self.cargo = dict(self.items)
+        if not self.route_corridors and self.route_edge_keys:
+            self.route_corridors = list(self.route_edge_keys)
+        if not self.owner_party:
+            self.owner_party = self.origin_owner_id or self.dest_owner_id or ""
+        if not isinstance(self.flags, set):
+            self.flags = set(self.flags or set())
 
 
 @dataclass(slots=True)
@@ -331,9 +351,22 @@ def advance_delivery_along_route(world, delivery: DeliveryRequest, *, tick: int,
             current_edge_key = None
             if delivery.route_index < len(delivery.route_edge_keys):
                 current_edge_key = delivery.route_edge_keys[delivery.route_index]
+            from_node = None
+            if delivery.route_index < len(delivery.route_nodes):
+                from_node = delivery.route_nodes[delivery.route_index]
             dest_node = None
             if delivery.route_index + 1 < len(delivery.route_nodes):
                 dest_node = delivery.route_nodes[delivery.route_index + 1]
+            if current_edge_key:
+                from dosadi.runtime.customs import process_delivery_edge as process_customs_delivery_edge  # local to avoid cycle
+                process_customs_delivery_edge(
+                    world,
+                    day=_day_from_tick(world, tick),
+                    delivery=delivery,
+                    edge_key=current_edge_key,
+                    from_node=from_node,
+                    to_node=dest_node,
+                )
             if current_edge_key:
                 _maybe_enqueue_courier_opportunity(
                     world,

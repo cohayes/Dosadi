@@ -57,6 +57,10 @@ class WardInstitutionPolicy:
     audit_budget_points: float = 2.0
     research_budget_points: float = 0.0
     posture: str = "balanced"
+    customs_inspection_bias: float = 0.0
+    customs_tariff_bias: float = 0.0
+    customs_contraband_bias: float = 0.0
+    customs_bribe_tolerance: float = 0.1
     notes: dict[str, object] = field(default_factory=dict)
 
 
