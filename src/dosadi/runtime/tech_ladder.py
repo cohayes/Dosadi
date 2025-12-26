@@ -127,6 +127,20 @@ def tech_registry() -> dict[str, TechProjectSpec]:
             unlocks=("UNLOCK_CORRIDOR_L2",),
             tags=("corridor",),
         ),
+        _spec(
+            tech_id="tech:fab:simple:t3",
+            name="Basic Fabrication",
+            prereqs=("tech:workshop:parts:t2", "tech:chem:sealants:t2"),
+            cost_materials={
+                Material.METAL_PLATE: 2,
+                Material.SEALANT: 2,
+                Material.FITTINGS: 2,
+            },
+            cost_labor_days=4,
+            duration_days=8,
+            unlocks=("UNLOCK_FABRICATION_SIMPLE_T3",),
+            tags=("fabrication",),
+        ),
     ]
     return {spec.tech_id: spec for spec in projects}
 

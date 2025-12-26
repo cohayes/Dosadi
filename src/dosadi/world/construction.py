@@ -20,6 +20,7 @@ from dosadi.world.facilities import (
     FacilityLedger,
     coerce_facility_kind,
     ensure_facility_ledger,
+    required_unlocks_for_facility_kind,
 )
 from dosadi.world.logistics import (
     DeliveryRequest,
@@ -28,6 +29,7 @@ from dosadi.world.logistics import (
     process_logistics_until,
 )
 from dosadi.world.workforce import AssignmentKind, ensure_workforce
+from dosadi.runtime.tech_ladder import has_unlock
 
 
 class ProjectStatus(Enum):
@@ -199,6 +201,16 @@ def emit_project_event(world, event: dict[str, object]) -> None:
     world.runtime_events = events
 
 
+def _unlock_block(world, project: ConstructionProject) -> BlockReason | None:
+    required = required_unlocks_for_facility_kind(getattr(project, "kind", ""))
+    if not required:
+        return None
+    missing = [tag for tag in required if not has_unlock(world, tag)]
+    if not missing:
+        return None
+    return BlockReason(code="UNLOCK", msg="Technology locked", details={"requires": sorted(missing)})
+
+
 def project_admin_rows(world) -> list[dict[str, object]]:
     ledger: ProjectLedger = getattr(world, "projects", ProjectLedger())
     rows: list[dict[str, object]] = []
@@ -285,6 +297,12 @@ def _ensure_delivery_request(world, project: ConstructionProject, tick: int) -> 
 def stage_project_if_ready(world, project: ConstructionProject, tick: int) -> bool:
     cfg: ConstructionPipelineConfig = getattr(world, "construction_cfg", ConstructionPipelineConfig())
     if getattr(cfg, "enabled", False):
+        return False
+    unlock_block = _unlock_block(world, project)
+    if unlock_block:
+        project.block_reason = unlock_block
+        project.stage_state = StageState.WAITING_MATERIALS
+        project.status = ProjectStatus.STAGED
         return False
     if not project.bom:
         project.bom = normalize_bom(project.cost.materials)
