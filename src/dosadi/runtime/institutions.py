@@ -65,6 +65,12 @@ class WardInstitutionPolicy:
     customs_tariff_bias: float = 0.0
     customs_contraband_bias: float = 0.0
     customs_bribe_tolerance: float = 0.1
+    zoning_residential_bias: float = 0.0
+    zoning_industrial_bias: float = 0.0
+    zoning_civic_bias: float = 0.0
+    zoning_security_bias: float = 0.0
+    growth_aggressiveness: float = 0.25
+    heritage_preservation: float = 0.0
     notes: dict[str, object] = field(default_factory=dict)
 
 
