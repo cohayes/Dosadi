@@ -874,6 +874,9 @@ class WorldState:
     well: WellState = field(default_factory=WellState)
     inventories: InventoryRegistry = field(default_factory=InventoryRegistry)
     place_environment: Dict[str, PlaceEnvironmentState] = field(default_factory=dict)
+    enf_cfg: Any = None
+    enf_policy_by_ward: Dict[str, Any] = field(default_factory=dict)
+    enf_state_by_ward: Dict[str, Any] = field(default_factory=dict)
     runtime_config: Any = None
     belief_config: Any = None
     belief_state: Any = None
