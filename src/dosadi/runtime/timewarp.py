@@ -36,6 +36,7 @@ from dosadi.runtime.faction_interference import run_faction_interference_for_day
 from dosadi.runtime.factions import run_real_factions_for_day
 from dosadi.runtime.local_interactions import run_interactions_for_day
 from dosadi.runtime.law_enforcement import run_enforcement_for_day
+from dosadi.runtime.ledger import run_ledger_for_day
 from dosadi.runtime.institutions import ensure_inst_config, run_institutions_for_day
 from dosadi.runtime.suit_wear import ensure_suit_config, run_suit_wear_for_day, suit_decay_multiplier
 from dosadi.world.corridor_infrastructure import run_corridor_improvement_planner
@@ -211,6 +212,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         run_corridor_improvement_planner(world, day=world.day)
         run_incident_engine_for_day(world, day=world.day)
         run_governance_failure_for_day(world, day=world.day)
+        run_ledger_for_day(world, day=world.day)
         run_enforcement_for_day(world, day=world.day)
         run_real_factions_for_day(world, day=world.day)
         run_faction_interference_for_day(world, day=world.day)

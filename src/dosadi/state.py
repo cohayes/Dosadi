@@ -59,6 +59,7 @@ from .runtime.extraction_runtime import ExtractionConfig, ExtractionState
 from .runtime.maintenance import MaintenanceConfig, MaintenanceLedger, MaintenanceState
 from .runtime.faction_interference import InterferenceConfig, InterferenceState
 from .runtime.suit_wear import SuitRepairLedger, SuitWearConfig, SuitWearState
+from .runtime.ledger import LedgerConfig, LedgerState
 from .agent.suits import SuitState
 from typing import TYPE_CHECKING
 
@@ -875,6 +876,8 @@ class WorldState:
     debug_cfg: DebugConfig = field(default_factory=DebugConfig)
     council_metrics: CouncilMetrics = field(default_factory=CouncilMetrics)
     council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
+    ledger_cfg: LedgerConfig = field(default_factory=LedgerConfig)
+    ledger_state: LedgerState = field(default_factory=LedgerState)
     inst_cfg: InstitutionConfig = field(default_factory=InstitutionConfig)
     inst_policy_by_ward: Dict[str, WardInstitutionPolicy] = field(default_factory=dict)
     inst_state_by_ward: Dict[str, WardInstitutionState] = field(default_factory=dict)
@@ -1074,6 +1077,8 @@ __all__ = [
     "FactionSystemState",
     "FactionMetrics",
     "InfrastructureState",
+    "LedgerConfig",
+    "LedgerState",
     "MemoryState",
     "RouteState",
     "RumorState",
