@@ -21,6 +21,11 @@ from dosadi.world.routing import edge_key
 from dosadi.world.survey_map import SurveyMap
 from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
 from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, LogisticsLedger
+from dosadi.runtime.law_enforcement import (
+    apply_interdiction,
+    escort_synergy_multiplier,
+    interdiction_prob_for_edge,
+)
 
 
 @dataclass(slots=True)
@@ -279,9 +284,19 @@ def _spawn_theft_cargo(world: Any, *, day: int, target: Target, cfg: Interferenc
     if not isinstance(delivery.items, dict):
         return
     escorts = len(getattr(delivery, "escort_agent_ids", []) or [])
+    ward_id = None
+    if delivery.route_nodes:
+        from dosadi.runtime.law_enforcement import _ward_for_edge as _ward_for_edge_internal  # type: ignore
+
+        if len(delivery.route_nodes) >= 2:
+            ward_id = _ward_for_edge_internal(world, edge_key(delivery.route_nodes[0], delivery.route_nodes[1]))
+    edge_ref = _edge_for_delivery(world, delivery)
     mitigation = max(0.2, 1.0 - escorts * cfg.escort_mitigation_per_guard)
+    enforcement_multiplier = escort_synergy_multiplier(world, edge_ref or "", ward_id)
+    mitigation = _clamp01(mitigation * enforcement_multiplier)
     severity = _clamp01(max(target.value, 0.2) * mitigation)
 
+    metrics = ensure_metrics(world)
     chosen_mat = None
     chosen_qty = 0.0
     for mat_key, qty in delivery.items.items():
@@ -296,7 +311,12 @@ def _spawn_theft_cargo(world: Any, *, day: int, target: Target, cfg: Interferenc
     if chosen_mat is None:
         return
     available = max(0.0, float(delivery.items.get(chosen_mat, 0.0)))
-    stolen = min(available, max(1.0, round(available * 0.25 * (0.5 + severity))))
+    prevented, adjusted = apply_interdiction(world, edge_key=edge_ref or "", ward_id=ward_id, day=day, severity=severity)
+    if prevented and adjusted <= 0.0:
+        metrics.inc("enforcement.incidents_prevented", 1.0)
+        return
+
+    stolen = min(available, max(1.0, round(available * 0.25 * (0.5 + adjusted))))
     delivery.items[chosen_mat] = max(0.0, available - stolen)
 
     metrics = ensure_metrics(world)
@@ -309,15 +329,19 @@ def _spawn_theft_cargo(world: Any, *, day: int, target: Target, cfg: Interferenc
         payload={"stolen": stolen, "material": chosen_mat},
     )
 
-    edge_ref = _edge_for_delivery(world, delivery)
+    edge_ref = edge_ref or _edge_for_delivery(world, delivery)
     incident_id = f"inc:intf:{day}:{state.next_incident_seq}"
     state.next_incident_seq += 1
+    prevented, adjusted = apply_interdiction(world, edge_key=edge_ref or "", ward_id=ward_id, day=day, severity=severity)
+    if prevented and adjusted <= 0.0:
+        metrics.inc("enforcement.incidents_prevented", 1.0)
+        return
     payload = {
         "incident_id": incident_id,
         "incident_kind": IncidentKind.THEFT_CARGO.value,
         "target_kind": "delivery",
         "target_id": delivery.delivery_id,
-        "severity": severity,
+        "severity": adjusted,
         "stolen_qty": stolen,
         "material": chosen_mat,
         "edge_key": edge_ref,
@@ -328,10 +352,10 @@ def _spawn_theft_cargo(world: Any, *, day: int, target: Target, cfg: Interferenc
         day=day,
         target_kind="delivery",
         target_id=delivery.delivery_id,
-        severity=severity,
+        severity=adjusted,
         payload=payload,
     )
-    _apply_incident(world, incident, severity=severity, edge_key_ref=edge_ref)
+    _apply_incident(world, incident, severity=adjusted, edge_key_ref=edge_ref)
 
 
 def _spawn_theft_depot(world: Any, *, day: int, target: Target, cfg: InterferenceConfig, state: InterferenceState) -> None:
@@ -344,7 +368,12 @@ def _spawn_theft_depot(world: Any, *, day: int, target: Target, cfg: Interferenc
     if available <= 0:
         return
     severity = _clamp01(max(target.value, 0.2))
-    stolen = min(available, max(1.0, round(available * 0.2 * (0.5 + severity))))
+    prevented, adjusted = apply_interdiction(world, edge_key="", ward_id=None, day=day, severity=severity)
+    if prevented and adjusted <= 0.0:
+        metrics.inc("enforcement.incidents_prevented", 1.0)
+        return
+
+    stolen = min(available, max(1.0, round(available * 0.2 * (0.5 + adjusted))))
     inventory.remove(material, int(stolen))
 
     metrics = ensure_metrics(world)
@@ -359,12 +388,16 @@ def _spawn_theft_depot(world: Any, *, day: int, target: Target, cfg: Interferenc
 
     incident_id = f"inc:intf:{day}:{state.next_incident_seq}"
     state.next_incident_seq += 1
+    prevented, adjusted = apply_interdiction(world, edge_key="", ward_id=None, day=day, severity=severity)
+    if prevented and adjusted <= 0.0:
+        metrics.inc("enforcement.incidents_prevented", 1.0)
+        return
     payload = {
         "incident_id": incident_id,
         "incident_kind": IncidentKind.THEFT_DEPOT.value,
         "target_kind": "depot",
         "target_id": target.target_id,
-        "severity": severity,
+        "severity": adjusted,
         "stolen_qty": stolen,
         "material": material.name,
         "node_id": target.target_id,
@@ -375,10 +408,10 @@ def _spawn_theft_depot(world: Any, *, day: int, target: Target, cfg: Interferenc
         day=day,
         target_kind="depot",
         target_id=target.target_id,
-        severity=severity,
+        severity=adjusted,
         payload=payload,
     )
-    _apply_incident(world, incident, severity=severity, edge_key_ref=None)
+    _apply_incident(world, incident, severity=adjusted, edge_key_ref=None)
 
 
 def _spawn_sabotage_project(world: Any, *, day: int, target: Target, cfg: InterferenceConfig, state: InterferenceState) -> None:
@@ -404,12 +437,17 @@ def _spawn_sabotage_project(world: Any, *, day: int, target: Target, cfg: Interf
 
     incident_id = f"inc:intf:{day}:{state.next_incident_seq}"
     state.next_incident_seq += 1
+    severity = _clamp01(target.value)
+    prevented, adjusted = apply_interdiction(world, edge_key="", ward_id=None, day=day, severity=severity)
+    if prevented and adjusted <= 0.0:
+        metrics.inc("enforcement.incidents_prevented", 1.0)
+        return
     payload = {
         "incident_id": incident_id,
         "incident_kind": IncidentKind.SABOTAGE_PROJECT.value,
         "target_kind": "project",
         "target_id": project.project_id,
-        "severity": _clamp01(target.value),
+        "severity": adjusted,
         "downtime_days": downtime_days,
         "node_id": project.site_node_id,
     }
@@ -419,10 +457,10 @@ def _spawn_sabotage_project(world: Any, *, day: int, target: Target, cfg: Interf
         day=day,
         target_kind="project",
         target_id=project.project_id,
-        severity=_clamp01(target.value),
+        severity=adjusted,
         payload=payload,
     )
-    _apply_incident(world, incident, severity=_clamp01(target.value), edge_key_ref=None)
+    _apply_incident(world, incident, severity=adjusted, edge_key_ref=None)
 
 
 def _maybe_release_project_pauses(world: Any, *, day: int) -> None:
