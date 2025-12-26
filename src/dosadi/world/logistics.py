@@ -26,6 +26,7 @@ from dosadi.runtime.local_interactions import (
 )
 from dosadi.world.materials import ensure_inventory_registry, material_from_key
 
+from .corridor_infrastructure import suit_wear_multiplier_for_edge, travel_time_multiplier_for_edge
 from .routing import Route, compute_route
 from .survey_map import SurveyEdge, SurveyMap, edge_key
 from .workforce import Assignment, AssignmentKind, WorkforceLedger, ensure_workforce
@@ -128,9 +129,10 @@ def _route_cost(world, edge_key_str: str, base_cost: float) -> float:
     return base_cost * (1.0 + weight * (risk - 0.5))
 
 
-def _edge_travel_ticks(edge: SurveyEdge) -> int:
+def _edge_travel_ticks(world, edge: SurveyEdge) -> int:
     base = max(getattr(edge, "distance_m", 0.0), getattr(edge, "travel_cost", 0.0))
-    return max(1, int(math.ceil(base)))
+    mult = travel_time_multiplier_for_edge(world, edge.key)
+    return max(1, int(math.ceil(base * mult)))
 
 
 def estimate_travel_ticks(origin: str, dest: str, survey_map: SurveyMap, world=None) -> int:
@@ -144,7 +146,7 @@ def estimate_travel_ticks(origin: str, dest: str, survey_map: SurveyMap, world=N
         edge = survey_map.edges.get(edge_key_str)
         if edge is None:
             continue
-        cost += _edge_travel_ticks(edge)
+        cost += _edge_travel_ticks(world, edge)
     return max(1, int(cost))
 
 
@@ -222,7 +224,7 @@ def _schedule_next_edge(world, delivery: DeliveryRequest, start_tick: int) -> No
     edge = survey_map.edges.get(edge_key_str)
     if _edge_closed(world, edge):
         return
-    remaining = _edge_travel_ticks(edge)
+    remaining = _edge_travel_ticks(world, edge)
     escort_cfg = ensure_escort_config(world)
     if getattr(escort_cfg, "enabled", False) and has_escort(world, delivery.delivery_id):
         penalty = 1.0 + max(0.0, getattr(escort_cfg, "escort_speed_penalty", 0.0))
@@ -277,7 +279,7 @@ def _init_delivery_route(world, delivery: DeliveryRequest, *, tick: int) -> bool
         edge = survey_map.edges.get(ekey)
         if edge is None:
             continue
-        total_ticks += _edge_travel_ticks(edge)
+        total_ticks += _edge_travel_ticks(world, edge)
     delivery.deliver_tick = tick + total_ticks
     return True
 
@@ -317,7 +319,7 @@ def advance_delivery_along_route(world, delivery: DeliveryRequest, *, tick: int,
                 if delivery.status != DeliveryStatus.IN_TRANSIT:
                     return
                 continue
-            delivery.remaining_edge_ticks = _edge_travel_ticks(edge)
+            delivery.remaining_edge_ticks = _edge_travel_ticks(world, edge)
             delivery.next_edge_complete_tick = tick + delivery.remaining_edge_ticks
 
         consume = min(remaining, delivery.remaining_edge_ticks)

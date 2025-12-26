@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Mapping
 from dosadi.agent.suits import SuitState
 from dosadi.runtime.local_interactions import hashed_unit_float
 from dosadi.runtime.telemetry import ensure_metrics
+from dosadi.world.corridor_infrastructure import suit_wear_multiplier_for_edge
 from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
 from dosadi.world.facilities import Facility, FacilityKind, FacilityLedger, ensure_facility_ledger
 from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, LogisticsLedger, ensure_logistics
@@ -203,6 +204,24 @@ def _candidate_agents(world: Any, workforce: WorkforceLedger) -> List[str]:
     return sorted(candidates)
 
 
+def _corridor_wear_multiplier(world: Any, assignment: Assignment) -> float:
+    if assignment.kind not in {AssignmentKind.LOGISTICS_COURIER, AssignmentKind.LOGISTICS_ESCORT}:
+        return 1.0
+    ledger: LogisticsLedger | None = getattr(world, "logistics", None)
+    if not isinstance(ledger, LogisticsLedger):
+        return 1.0
+    delivery_id = assignment.target_id or ""
+    delivery = ledger.deliveries.get(delivery_id)
+    if delivery is None:
+        return 1.0
+    multipliers: list[float] = []
+    for edge_key in delivery.route_edge_keys:
+        multipliers.append(suit_wear_multiplier_for_edge(world, edge_key))
+    if not multipliers:
+        return 1.0
+    return min(multipliers)
+
+
 def _apply_wear(world: Any, *, day: int, cfg: SuitWearConfig, state: SuitWearState) -> None:
     workforce = ensure_workforce(world)
     metrics = _suit_metrics(world)
@@ -220,6 +239,7 @@ def _apply_wear(world: Any, *, day: int, cfg: SuitWearConfig, state: SuitWearSta
         suit = _ensure_agent_suit(agent)
         assignment = workforce.get(agent_id)
         delta = cfg.wear_per_day_base * _assignment_multiplier(assignment, cfg)
+        delta *= _corridor_wear_multiplier(world, assignment)
         jitter = hashed_unit_float(cfg.deterministic_salt, agent_id, str(day))
         delta *= 0.9 + 0.2 * jitter
         prior = suit.integrity

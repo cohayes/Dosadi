@@ -7,6 +7,7 @@ from hashlib import sha256
 from typing import Any, Dict, Iterable, Mapping
 
 from dosadi.runtime.telemetry import ensure_metrics, record_event
+from dosadi.world.corridor_infrastructure import predation_multiplier_for_edge
 from dosadi.world.phases import WorldPhase
 
 
@@ -165,6 +166,7 @@ def apply_interdiction(world: Any, *, edge_key: str, ward_id: str | None, day: i
     if not cfg.enabled:
         return False, severity
     ward = ward_id or _ward_for_edge(world, edge_key)
+    severity *= predation_multiplier_for_edge(world, edge_key)
     prob = interdiction_prob_for_edge(world, edge_key, ward)
     if prob <= 0.0:
         return False, severity
