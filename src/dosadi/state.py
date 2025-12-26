@@ -946,6 +946,8 @@ class WorldState:
     faction_state: FactionSystemState = field(default_factory=FactionSystemState)
     faction_territory: dict[str, FactionTerritory] = field(default_factory=dict)
     extract_state: ExtractionState = field(default_factory=ExtractionState)
+    tech_cfg: object | None = None
+    tech_state: object | None = None
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

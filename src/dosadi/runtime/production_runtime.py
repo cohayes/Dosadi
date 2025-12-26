@@ -8,6 +8,7 @@ from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.world.construction import ConstructionProject
 from dosadi.world.facilities import FacilityKind, ensure_facility_ledger
 from dosadi.world.materials import Material, InventoryRegistry, ensure_inventory_registry, material_from_key
+from dosadi.runtime.tech_ladder import has_unlock
 from dosadi.world.recipes import Recipe, RecipeRegistry, ensure_recipe_registry
 
 
@@ -106,6 +107,8 @@ def choose_recipe_for_facility(
     for recipe in recipes:
         if not getattr(recipe, "enabled", True):
             continue
+        if any(not has_unlock(world, tag) for tag in getattr(recipe, "requires_unlocks", frozenset())):
+            continue
         score = 0.0
         for material, qty in getattr(recipe, "outputs", {}).items():
             need_score = needs.get(material, 0.0)
@@ -117,10 +120,22 @@ def choose_recipe_for_facility(
     if best_score > 0:
         return best
 
-    fallback = next((r for r in recipes if "base" in getattr(r, "tags", set())), None)
+    fallback = next(
+        (
+            r
+            for r in recipes
+            if "base" in getattr(r, "tags", set())
+            and not any(not has_unlock(world, tag) for tag in getattr(r, "requires_unlocks", frozenset()))
+        ),
+        None,
+    )
     if fallback is not None:
         return fallback
-    return recipes[0]
+    for recipe in recipes:
+        if any(not has_unlock(world, tag) for tag in getattr(recipe, "requires_unlocks", frozenset())):
+            continue
+        return recipe
+    return None
 
 
 def _owner_id_for_facility(facility_id: str) -> str:
