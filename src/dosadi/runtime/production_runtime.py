@@ -19,7 +19,9 @@ class ProductionConfig:
     enabled: bool = False
     max_jobs_per_day_global: int = 200
     max_jobs_per_facility_per_day: int = 3
-    prefer_recipes: list[str] = field(default_factory=lambda: ["FASTENERS", "SEALANT", "FILTER_MEDIA"])
+    prefer_recipes: list[str] = field(
+        default_factory=lambda: ["FASTENERS", "SEALANT", "FILTER_MEDIA", "ADV_COMPONENTS"]
+    )
     deterministic_salt: str = "prod-v2"
 
 
@@ -226,7 +228,14 @@ def run_production_for_day(world, *, day: int) -> None:
     inventory = ensure_inventory_registry(world)
     metrics = _production_metrics(world)
 
-    producer_kinds = {FacilityKind.RECYCLER, FacilityKind.CHEM_WORKS, FacilityKind.WORKSHOP}
+    producer_kinds = {
+        FacilityKind.RECYCLER,
+        FacilityKind.CHEM_WORKS,
+        FacilityKind.WORKSHOP,
+        FacilityKind.WORKSHOP_T2,
+        FacilityKind.CHEM_LAB_T2,
+        FacilityKind.FAB_SHOP_T3,
+    }
     for facility_id in sorted(facilities.keys()):
         facility = facilities[facility_id]
         if facility.kind not in producer_kinds:

@@ -11,9 +11,16 @@ from dosadi.world.construction import (
     StageState,
     ensure_construction_config,
     emit_project_event,
+    _unlock_block,
     project_metrics,
 )
-from dosadi.world.facilities import FacilityLedger, FacilityKind, coerce_facility_kind, ensure_facility_ledger
+from dosadi.world.facilities import (
+    FacilityLedger,
+    FacilityKind,
+    coerce_facility_kind,
+    ensure_facility_ledger,
+    facility_unlocked,
+)
 from dosadi.world.logistics import DeliveryRequest, DeliveryStatus, ensure_logistics
 from dosadi.world.materials import (
     Inventory,
@@ -25,6 +32,7 @@ from dosadi.world.materials import (
 from dosadi.world.recipes import FACILITY_RECIPES, Recipe
 from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.world.workforce import AssignmentKind, ensure_workforce
+from dosadi.runtime.tech_ladder import has_unlock
 
 
 @dataclass(slots=True)
@@ -58,6 +66,9 @@ def _facility_metrics(world) -> Dict[str, float]:
     if not isinstance(facility_metrics, dict):
         facility_metrics = {}
         telemetry.gauges["facilities"] = facility_metrics
+    facility_metrics.setdefault("count_by_type", {})
+    facility_metrics.setdefault("outputs_by_material", {})
+    facility_metrics.setdefault("inputs_missing", {})
     return facility_metrics  # type: ignore[return-value]
 
 
@@ -86,8 +97,9 @@ def _apply_production(
     outputs: Mapping[Material, int],
     *,
     remaining_cap: int,
-) -> int:
+) -> tuple[int, dict[Material, int]]:
     produced = 0
+    produced_by_material: dict[Material, int] = {}
     inv = inventory.inv(owner_id)
     for material, qty in outputs.items():
         if produced >= remaining_cap:
@@ -97,7 +109,8 @@ def _apply_production(
             continue
         inv.add(material, allowed)
         produced += allowed
-    return produced
+        produced_by_material[material] = produced_by_material.get(material, 0) + allowed
+    return produced, produced_by_material
 
 
 def _owner_id_for_facility(facility_id: str) -> str:
@@ -121,10 +134,11 @@ def _run_recipe(
     inventory: InventoryRegistry,
     remaining_cap: int,
     metrics: Dict[str, float],
-) -> int:
+) -> tuple[int, dict[Material, int], dict[Material, int]]:
     inv = inventory.inv(_owner_id_for_facility(facility_id))
     if recipe.inputs and not inv.can_afford(recipe.inputs):
         metrics["recipes_skipped_inputs"] = metrics.get("recipes_skipped_inputs", 0.0) + 1.0
+        missing_inputs = bom_missing(inv, dict(recipe.inputs))
         _emit_facility_event(
             world,
             {
@@ -132,12 +146,13 @@ def _run_recipe(
                 "facility_id": facility_id,
                 "recipe_id": recipe.id,
                 "reason": "inputs",
+                "missing": {mat.name: qty for mat, qty in missing_inputs.items()},
             },
         )
-        return 0
+        return 0, {}, missing_inputs
 
     inv.apply_bom(recipe.inputs)
-    produced = _apply_production(
+    produced, produced_by_material = _apply_production(
         inventory,
         _owner_id_for_facility(facility_id),
         recipe.outputs,
@@ -154,7 +169,7 @@ def _run_recipe(
             "applied_cap": remaining_cap,
         },
     )
-    return produced
+    return produced, produced_by_material, {}
 
 
 def run_materials_production_for_day(world, *, day: int) -> None:
@@ -183,8 +198,26 @@ def run_materials_production_for_day(world, *, day: int) -> None:
     for facility_id in sorted(facilities.keys()):
         facility = facilities[facility_id]
         facility.kind = coerce_facility_kind(getattr(facility, "kind", FacilityKind.DEPOT))
+        facility_metrics["count_by_type"].setdefault(facility.kind.value, 0)
+        facility_metrics["count_by_type"][facility.kind.value] += 1
+        if facility.last_run_day == day:
+            continue
+
         recipes = FACILITY_RECIPES.get(facility.kind, [])
         if not recipes:
+            continue
+
+        if not facility_unlocked(world, facility):
+            facility_metrics["locked"] = facility_metrics.get("locked", 0.0) + 1.0
+            _emit_facility_event(
+                world,
+                {
+                    "type": "FACILITY_RECIPE_SKIPPED",
+                    "facility_id": facility_id,
+                    "reason": "unlock",
+                },
+            )
+            facility.last_run_day = day
             continue
 
         if not facility.is_operational or facility.down_until_day >= day:
@@ -197,6 +230,7 @@ def run_materials_production_for_day(world, *, day: int) -> None:
                     "reason": "downtime",
                 },
             )
+            facility.last_run_day = day
             continue
 
         staff = _facility_staff_count(world, facility_id)
@@ -211,9 +245,15 @@ def run_materials_production_for_day(world, *, day: int) -> None:
                     "reason": "staff",
                 },
             )
+            facility.last_run_day = day
             continue
 
-        for recipe in recipes:
+        eligible_recipes = [
+            r
+            for r in recipes
+            if not any(not has_unlock(world, tag) for tag in getattr(r, "requires_unlocks", frozenset()))
+        ]
+        for recipe in eligible_recipes:
             if not recipe.enabled:
                 continue
             if staff < max(facility.min_staff, recipe.min_staff):
@@ -233,7 +273,7 @@ def run_materials_production_for_day(world, *, day: int) -> None:
             if remaining_cap <= 0:
                 break
 
-            produced = _run_recipe(
+            produced, produced_by_material, missing_inputs = _run_recipe(
                 world=world,
                 facility_id=facility_id,
                 recipe=recipe,
@@ -241,9 +281,37 @@ def run_materials_production_for_day(world, *, day: int) -> None:
                 remaining_cap=remaining_cap,
                 metrics=facility_metrics,
             )
+            if missing_inputs:
+                for mat, qty in missing_inputs.items():
+                    facility_metrics["inputs_missing"][mat.name] = facility_metrics["inputs_missing"].get(mat.name, 0.0) + float(qty)
+                _emit_facility_event(
+                    world,
+                    {
+                        "type": "FACILITY_STALLED_INPUTS",
+                        "facility_id": facility_id,
+                        "recipe_id": recipe.id,
+                        "missing": {mat.name: qty for mat, qty in missing_inputs.items()},
+                    },
+                )
+                continue
+
             produced_units += produced
+            if produced_by_material:
+                for mat, qty in produced_by_material.items():
+                    facility_metrics["outputs_by_material"][mat.name] = facility_metrics["outputs_by_material"].get(mat.name, 0.0) + float(qty)
+                _emit_facility_event(
+                    world,
+                    {
+                        "type": "FACILITY_PRODUCED",
+                        "facility_id": facility_id,
+                        "recipe_id": recipe.id,
+                        "outputs": {mat.name: qty for mat, qty in produced_by_material.items()},
+                    },
+                )
             if produced_units >= cfg.daily_production_cap:
                 break
+
+        facility.last_run_day = day
 
     metrics["produced_units"] = metrics.get("produced_units", 0.0) + float(produced_units)
     state.last_run_day = day
@@ -342,6 +410,35 @@ def evaluate_project_materials(world, *, day: int) -> None:
     blocked_count = 0
     for project_id, project in sorted(ledger.projects.items()):
         if project.status in {ProjectStatus.COMPLETE, ProjectStatus.CANCELED}:
+            continue
+        unlock_block = _unlock_block(world, project)
+        if unlock_block:
+            project.block_reason = unlock_block
+            project.stage_state = StageState.WAITING_MATERIALS
+            project.status = ProjectStatus.STAGED
+            proj_metrics["blocked_unlocks"] = proj_metrics.get("blocked_unlocks", 0.0) + 1.0
+            blocked_count += 1
+            telemetry.topk_add(
+                "projects.blocked",
+                project.project_id,
+                1.0,
+                payload={
+                    "node": project.site_node_id,
+                    "stage": project.stage_state.value,
+                    "reason": "UNLOCK",
+                    "missing_unlocks": unlock_block.details.get("requires", []),
+                    "pending_deliveries": len(project.pending_material_delivery_ids),
+                },
+            )
+            emit_project_event(
+                world,
+                {
+                    "type": "PROJECT_STAGE_BLOCKED",
+                    "project_id": project.project_id,
+                    "reason_code": "UNLOCK",
+                    "details": unlock_block.details,
+                },
+            )
             continue
         bom = _project_bom(project)
         if not bom:
