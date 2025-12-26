@@ -16,6 +16,7 @@ from dosadi.runtime.institutions import save_institutions_seed
 from dosadi.runtime.culture_wars import save_culture_seed
 from dosadi.runtime.ledger import save_ledger_seed
 from dosadi.runtime.treaties import save_treaties_seed
+from dosadi.runtime.smuggling import save_smuggling_seed
 from dosadi.testing.kpis import collect_kpis
 
 
@@ -73,6 +74,8 @@ def save_seed(
     save_ledger_seed(world, ledger_path)
     treaties_path = vault_dir / "seeds" / seed_id / "treaties.json"
     save_treaties_seed(world, treaties_path)
+    smuggling_path = vault_dir / "seeds" / seed_id / "smuggling.json"
+    save_smuggling_seed(world, smuggling_path)
 
     entry = {
         "seed_id": seed_id,
@@ -96,6 +99,9 @@ def save_seed(
     if treaties_path.exists():
         entry["treaties_path"] = str(treaties_path.relative_to(vault_dir))
         entry["treaties_sha256"] = sha256(treaties_path.read_bytes()).hexdigest()
+    if smuggling_path.exists():
+        entry["smuggling_path"] = str(smuggling_path.relative_to(vault_dir))
+        entry["smuggling_sha256"] = sha256(smuggling_path.read_bytes()).hexdigest()
     if meta:
         entry.update({k: v for k, v in meta.items() if k not in entry})
 

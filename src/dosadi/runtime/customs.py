@@ -312,7 +312,13 @@ def process_customs_crossing(
         contraband_found = score > 0 and detect_roll < detection_prob * score
         if contraband_found:
             reason_codes.append("CONTRABAND")
-            if _should_allow_bribe(policy, getattr(inst_state, "corruption", 0.0)):
+            smuggling_bribe_map = getattr(shipment, "smuggling_bribe_map", {}) or {}
+            smuggling_bribe = float(smuggling_bribe_map.get(crossing.border_at, 0.0))
+            if smuggling_bribe > 0:
+                bribe_paid = smuggling_bribe
+                outcome = "CLEARED"
+                reason_codes.append("SMUGGLING_BRIBE")
+            elif _should_allow_bribe(policy, getattr(inst_state, "corruption", 0.0)):
                 bribe_key = "|".join(
                     str(part)
                     for part in (
