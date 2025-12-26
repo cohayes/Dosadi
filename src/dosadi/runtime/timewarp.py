@@ -25,6 +25,7 @@ from dosadi.runtime.eating import (
 from dosadi.runtime.belief_formation import run_belief_formation_for_day
 from dosadi.runtime.culture_wars import run_culture_for_day
 from dosadi.runtime.event_to_memory_router import run_router_for_day
+from dosadi.runtime.governance_failures import run_governance_failure_for_day
 from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
 from dosadi.runtime.scouting_config import ScoutConfig
 from dosadi.runtime.staffing import StaffingConfig, StaffingState, run_staffing_policy
@@ -209,6 +210,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         run_suit_wear_for_day(world, day=world.day)
         run_corridor_improvement_planner(world, day=world.day)
         run_incident_engine_for_day(world, day=world.day)
+        run_governance_failure_for_day(world, day=world.day)
         run_enforcement_for_day(world, day=world.day)
         run_real_factions_for_day(world, day=world.day)
         run_faction_interference_for_day(world, day=world.day)

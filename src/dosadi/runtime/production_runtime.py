@@ -9,6 +9,8 @@ from dosadi.world.construction import ConstructionProject
 from dosadi.world.facilities import FacilityKind, ensure_facility_ledger
 from dosadi.world.materials import Material, InventoryRegistry, ensure_inventory_registry, material_from_key
 from dosadi.runtime.tech_ladder import has_unlock
+from dosadi.runtime.governance_failures import production_multiplier_for_ward
+from dosadi.runtime.institutions import _ward_for_location
 from dosadi.world.recipes import Recipe, RecipeRegistry, ensure_recipe_registry
 
 
@@ -240,10 +242,17 @@ def run_production_for_day(world, *, day: int) -> None:
                 metrics=metrics,
             )
 
-        if state.jobs_started_today >= max(0, int(cfg.max_jobs_per_day_global)):
+        ward_id = _ward_for_location(world, getattr(facility, "site_node_id", None))
+        prod_mult = production_multiplier_for_ward(world, ward_id)
+        if prod_mult <= 0.0:
+            continue
+
+        global_cap = max(0, int(cfg.max_jobs_per_day_global * prod_mult))
+        if state.jobs_started_today >= global_cap:
             continue
         started_here = state.jobs_started_by_facility.get(facility_id, 0)
-        if started_here >= max(0, int(cfg.max_jobs_per_facility_per_day)):
+        facility_cap = max(0, int(cfg.max_jobs_per_facility_per_day * prod_mult))
+        if started_here >= facility_cap:
             continue
         if prod_state.active_job is not None:
             continue

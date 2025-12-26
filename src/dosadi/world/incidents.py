@@ -15,6 +15,10 @@ class IncidentKind(Enum):
     THEFT_CARGO = "THEFT_CARGO"
     THEFT_DEPOT = "THEFT_DEPOT"
     SABOTAGE_PROJECT = "SABOTAGE_PROJECT"
+    STRIKE = "STRIKE"
+    RIOT = "RIOT"
+    SECESSION_ATTEMPT = "SECESSION_ATTEMPT"
+    COUP_PLOT = "COUP_PLOT"
 
 
 @dataclass(slots=True)
@@ -29,6 +33,10 @@ class Incident:
     created_day: int = 0
     resolved: bool = False
     resolved_day: int | None = None
+    status: str = "active"
+    duration_days: int = 0
+    cooldown_days: int = 0
+    faction_id: str | None = None
 
 
 @dataclass(slots=True)

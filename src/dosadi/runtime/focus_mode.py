@@ -139,6 +139,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     from dosadi.runtime.belief_formation import run_belief_formation_for_day
     from dosadi.runtime.event_to_memory_router import run_router_for_day
     from dosadi.runtime.facility_updates import update_facilities_for_day
+    from dosadi.runtime.governance_failures import run_governance_failure_for_day
     from dosadi.runtime.incident_engine import run_incident_engine_for_day
     from dosadi.runtime.faction_interference import run_faction_interference_for_day
     from dosadi.runtime.factions import run_real_factions_for_day
@@ -182,6 +183,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     run_stockpile_policy_for_day(world, day=day)
     run_corridor_improvement_planner(world, day=day)
     run_incident_engine_for_day(world, day=day)
+    run_governance_failure_for_day(world, day=day)
     run_enforcement_for_day(world, day=day)
     run_real_factions_for_day(world, day=day)
     run_faction_interference_for_day(world, day=day)
