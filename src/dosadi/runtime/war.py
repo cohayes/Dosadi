@@ -11,6 +11,7 @@ from hashlib import sha256
 from typing import Any, Iterable, Mapping, MutableMapping
 
 from dosadi.runtime.crackdown import CrackdownTarget
+from dosadi.runtime.deterrence import apply_raid_outcome, deterrence_penalty
 from dosadi.runtime.defense import DefenseConfig, ensure_defense_config, ensure_ward_defense
 from dosadi.runtime.ledger import (
     LedgerConfig,
@@ -69,6 +70,8 @@ class RaidOutcome:
     corridor_stress_delta: float = 0.0
     territory_delta: dict[str, object] = field(default_factory=dict)
     notes: dict[str, object] = field(default_factory=dict)
+    aggressor: str | None = None
+    target: str | None = None
 
 
 def _clamp01(value: float) -> float:
@@ -251,8 +254,9 @@ def success_probability(world: Any, plan: RaidPlan) -> float:
     defense_penalty = _edge_defense_penalty(world, edge) if edge else 0.0
     crackdown = _crackdown_penalty(world, plan.target_id)
     treaty = _treaty_penalty(world, plan.target_id)
+    det_penalty, _ = deterrence_penalty(world, plan)
     base = 0.35 + 0.5 * float(plan.intensity)
-    prob = _clamp01(base - defense_penalty - crackdown - treaty)
+    prob = _clamp01(base - defense_penalty - crackdown - treaty - det_penalty)
     return prob
 
 
@@ -344,6 +348,8 @@ def _resolve_plan(world: Any, plan: RaidPlan, day: int) -> RaidOutcome:
         corridor_stress_delta=stress_delta,
         territory_delta=territory_delta,
         notes={"prob": prob, "roll": roll},
+        aggressor=plan.aggressor_faction,
+        target=plan.target_id,
     )
     if treaty_penalty > 0.0:
         record_event(
@@ -420,11 +426,18 @@ def run_war_for_day(world: Any, *, day: int) -> None:
         if day < plan.start_day:
             continue
         if day > plan.end_day:
-            outcome = RaidOutcome(op_id=plan.op_id, day=day, status="expired")
+            outcome = RaidOutcome(
+                op_id=plan.op_id,
+                day=day,
+                status="expired",
+                aggressor=plan.aggressor_faction,
+                target=plan.target_id,
+            )
             _bounded_append(history, outcome)
             active.pop(op_id, None)
             continue
         outcome = _resolve_plan(world, plan, day)
+        apply_raid_outcome(world, plan, outcome, day=day)
         if outcome.status == "succeeded":
             stress[plan.target_id] = stress.get(plan.target_id, 0.0) + outcome.corridor_stress_delta
             ensure_metrics(world).inc("war.ops_success", 1.0)
