@@ -873,6 +873,9 @@ class WorldState:
     facility_protocol_tuning: Dict[str, FacilityProtocolTuning] = field(default_factory=dict)
     metrics: Metrics = field(default_factory=Metrics)
     event_ring: EventRing = field(default_factory=EventRing)
+    treaty_cfg: Any = None
+    treaties: Dict[str, Any] = field(default_factory=dict)
+    treaty_penalties: Dict[str, float] = field(default_factory=dict)
     debug_cfg: DebugConfig = field(default_factory=DebugConfig)
     council_metrics: CouncilMetrics = field(default_factory=CouncilMetrics)
     council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
