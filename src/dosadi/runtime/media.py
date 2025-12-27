@@ -6,6 +6,11 @@ from hashlib import sha256
 from typing import Any, Iterable, Mapping, MutableMapping, Sequence
 
 from dosadi.runtime.institutions import ensure_policy
+from dosadi.runtime.comms import (
+    CommsModifiers,
+    get_comms_modifiers_for_hop,
+    relay_path_available,
+)
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.runtime.ideology import ensure_ward_ideology
 from dosadi.runtime.corridor_risk import CorridorRiskLedger
@@ -176,12 +181,30 @@ def _transit_time_days(world: Any, path: Sequence[str], channel: str) -> int:
     return max(1, int(round(total)))
 
 
-def _apply_hop_effects(message: MediaMessage, *, cfg: MediaConfig, hop_index: int, risk: float) -> None:
+def _comms_latency_add(world: Any, path: Sequence[str], channel: str) -> int:
+    if len(path) <= 1:
+        return 0
+    latency = 0
+    for a, b in zip(path, path[1:]):
+        modifiers = get_comms_modifiers_for_hop(world, a, b, channel)
+        latency += max(0, int(modifiers.latency_add_days))
+    return latency
+
+
+def _apply_hop_effects(
+    message: MediaMessage,
+    *,
+    cfg: MediaConfig,
+    hop_index: int,
+    risk: float,
+    modifiers: CommsModifiers | None = None,
+) -> None:
     salt = cfg.deterministic_salt
     base_parts = (message.msg_id, hop_index, message.channel, message.dest_id)
-    intercept_chance = cfg.intercept_rate_base + 0.5 * risk
-    loss_chance = cfg.loss_rate_base + 0.5 * risk
-    distortion_chance = cfg.distortion_rate_base + 0.25 * risk
+    mod = modifiers or CommsModifiers()
+    intercept_chance = (cfg.intercept_rate_base + 0.5 * risk) * mod.intercept_mult
+    loss_chance = (cfg.loss_rate_base + 0.5 * risk) * mod.loss_mult
+    distortion_chance = (cfg.distortion_rate_base + 0.25 * risk) * mod.distortion_mult
     if _stable_float(base_parts, salt + "intercept") < intercept_chance:
         message.status = "INTERCEPTED"
         return
@@ -198,7 +221,8 @@ def _simulate_transit(world: Any, message: MediaMessage, path: Sequence[str]) ->
         if message.status != "IN_FLIGHT":
             break
         risk = _edge_risk(world, a, b)
-        _apply_hop_effects(message, cfg=cfg, hop_index=hop_index, risk=risk)
+        modifiers = get_comms_modifiers_for_hop(world, a, b, message.channel)
+        _apply_hop_effects(message, cfg=cfg, hop_index=hop_index, risk=risk, modifiers=modifiers)
     if message.status == "IN_FLIGHT":
         message.status = "DELIVERED"
 
@@ -295,7 +319,8 @@ def process_media_for_day(world: Any, *, current_day: int | None = None) -> None
         else:
             if message.channel == "RELAY":
                 path = _relay_path(world, message.origin_ward, message.dest_id)
-                if not path:
+                if not path or not relay_path_available(world, path):
+                    metrics.inc("comms.relay_fallbacks")
                     message.channel = "COURIER"
                     path = _shortest_path(world, message.origin_ward, message.dest_id)
             else:
@@ -303,6 +328,7 @@ def process_media_for_day(world: Any, *, current_day: int | None = None) -> None
         if not path:
             path = [message.origin_ward, message.dest_id]
         transit_days = _transit_time_days(world, path, message.channel)
+        transit_days += _comms_latency_add(world, path, message.channel)
         eta_day = message.day_sent + transit_days
         message.notes["eta_day"] = eta_day
         message.notes["path"] = path
