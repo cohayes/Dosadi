@@ -74,6 +74,12 @@ from .runtime.faction_interference import InterferenceConfig, InterferenceState
 from .runtime.suit_wear import SuitRepairLedger, SuitWearConfig, SuitWearState
 from .runtime.ledger import LedgerConfig, LedgerState
 from .runtime.finance import FinanceConfig, Loan, Patronage
+from .runtime.trade_federations import (
+    CartelAgreement,
+    CartelCompliance,
+    Federation,
+    FederationConfig,
+)
 from .runtime.labor import BargainingEvent, LaborConfig, LaborOrgState
 from .agent.suits import SuitState
 from typing import TYPE_CHECKING
@@ -1046,6 +1052,12 @@ class WorldState:
     sanction_rules: dict[str, Any] = field(default_factory=dict)
     sanctions_compliance: dict[str, Any] = field(default_factory=dict)
     sanctions_events: list[dict[str, object]] = field(default_factory=list)
+    fed_cfg: FederationConfig = field(default_factory=FederationConfig)
+    federations: dict[str, Federation] = field(default_factory=dict)
+    cartels: dict[str, CartelAgreement] = field(default_factory=dict)
+    cartel_compliance: dict[tuple[str, str], CartelCompliance] = field(default_factory=dict)
+    fed_events: list[dict[str, object]] = field(default_factory=list)
+    fed_last_update_day: int = -1
     insurgency_cfg: object | None = None
     cells_by_ward: dict[str, list[object]] = field(default_factory=dict)
     cell_ops_active: dict[str, object] = field(default_factory=dict)
