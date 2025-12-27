@@ -4,6 +4,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+from dosadi.runtime.shadow_state import apply_capture_modifier
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 
 
@@ -147,6 +148,13 @@ def compute_leak_rate(
         if getattr(smuggling_cfg, "enabled", False):
             smuggling = 0.25
     leak = cfg.base_leak_rate * (1.0 + smuggling) * (1.0 - enforcement * cfg.enforcement_effect)
+    if getattr(getattr(world, "shadow_cfg", None), "enabled", False):
+        enforcement_score = _clamp01(1.0 - leak)
+        ward_id = rule.target_id if rule.target_kind == "WARD" else None
+        adjusted_enforcement, audit_flags = apply_capture_modifier(world, ward_id, "CUSTOMS", enforcement_score)
+        if audit_flags:
+            record_event(world, {"type": "CAPTURE_APPLIED", "ward_id": ward_id, "domain": "CUSTOMS", "flags": audit_flags})
+        leak = _clamp01(1.0 - adjusted_enforcement)
     return _clamp01(leak)
 
 
