@@ -73,6 +73,7 @@ from .runtime.maintenance import MaintenanceConfig, MaintenanceLedger, Maintenan
 from .runtime.faction_interference import InterferenceConfig, InterferenceState
 from .runtime.suit_wear import SuitRepairLedger, SuitWearConfig, SuitWearState
 from .runtime.ledger import LedgerConfig, LedgerState
+from .runtime.shadow_state import CorruptionIndex, InfluenceEdge, ShadowAccount, ShadowStateConfig
 from .runtime.finance import FinanceConfig, Loan, Patronage
 from .runtime.trade_federations import (
     CartelAgreement,
@@ -1065,6 +1066,11 @@ class WorldState:
     leadership_cfg: Any = None
     leadership_by_polity: dict[str, Any] = field(default_factory=dict)
     succession_events: list[object] = field(default_factory=list)
+    shadow_cfg: ShadowStateConfig = field(default_factory=ShadowStateConfig)
+    influence_edges_by_ward: dict[str, list[InfluenceEdge]] = field(default_factory=dict)
+    shadow_accounts: dict[str, ShadowAccount] = field(default_factory=dict)
+    corruption_by_ward: dict[str, CorruptionIndex] = field(default_factory=dict)
+    shadow_events: list[dict[str, object]] = field(default_factory=list)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward

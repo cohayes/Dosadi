@@ -14,6 +14,7 @@ from dosadi.runtime.institutions import ensure_policy, ensure_state
 from dosadi.runtime.crackdown import border_modifiers
 from dosadi.runtime.ledger import BLACK_MARKET, STATE_TREASURY, ensure_accounts, transfer
 from dosadi.runtime.telemetry import ensure_metrics, record_event
+from dosadi.runtime.shadow_state import apply_capture_modifier
 from dosadi.world.factions import pseudo_rand01
 from dosadi.runtime.policing import policing_effects
 
@@ -285,6 +286,10 @@ def process_customs_crossing(
     inspection_prob *= float(modifiers.get("inspection_mult", 1.0))
     inspection_prob *= max(0.1, effects.detection_mult)
     inspection_prob = _clamp01(inspection_prob)
+    actor_faction_id = getattr(shipment, "faction_id", getattr(shipment, "owner_faction_id", None))
+    inspection_prob, audit_flags = apply_capture_modifier(
+        world, crossing.to_control, "CUSTOMS", inspection_prob, actor_faction_id=actor_faction_id
+    )
     inspect_roll = pseudo_rand01(
         "|".join(
             str(part)
@@ -310,6 +315,11 @@ def process_customs_crossing(
         detection_prob *= max(0.1, effects.detection_mult)
         detection_prob *= float(modifiers.get("detection_mult", 1.0))
         detection_prob = _clamp01(detection_prob)
+        detection_prob, domain_flags = apply_capture_modifier(
+            world, crossing.to_control, "CUSTOMS", detection_prob, actor_faction_id=actor_faction_id
+        )
+        reason_codes.extend(audit_flags)
+        reason_codes.extend(domain_flags)
         detect_roll = pseudo_rand01(
             "|".join(
                 str(part)
