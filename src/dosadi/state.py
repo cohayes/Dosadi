@@ -1046,6 +1046,10 @@ class WorldState:
     sanction_rules: dict[str, Any] = field(default_factory=dict)
     sanctions_compliance: dict[str, Any] = field(default_factory=dict)
     sanctions_events: list[dict[str, object]] = field(default_factory=list)
+    insurgency_cfg: object | None = None
+    cells_by_ward: dict[str, list[object]] = field(default_factory=dict)
+    cell_ops_active: dict[str, object] = field(default_factory=dict)
+    cell_ops_history: list[object] = field(default_factory=list)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
