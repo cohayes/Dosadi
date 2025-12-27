@@ -53,6 +53,7 @@ from .runtime.market_signals import MarketSignalsConfig, MarketSignalsState
 from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
 from .runtime.smuggling import SmugglingConfig, SmugglingNetworkState
 from .runtime.policing import PolicingConfig, WardPolicingState
+from .runtime.archives import ArchivesConfig, ArchiveState, CanonEvent, CounterNarrative, NarrativeState
 from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
@@ -1076,6 +1077,11 @@ class WorldState:
     integrity_by_polity: dict[str, IntegrityState] = field(default_factory=dict)
     integrity_by_ward: dict[str, IntegrityState] = field(default_factory=dict)
     truth_events: list[TruthEvent] = field(default_factory=list)
+    archives_cfg: ArchivesConfig = field(default_factory=ArchivesConfig)
+    archive_by_polity: dict[str, ArchiveState] = field(default_factory=dict)
+    narrative_by_polity: dict[str, NarrativeState] = field(default_factory=dict)
+    canon_events: dict[str, list[CanonEvent]] = field(default_factory=dict)
+    counter_narratives: dict[str, list[CounterNarrative]] = field(default_factory=dict)
     shadow_cfg: ShadowStateConfig = field(default_factory=ShadowStateConfig)
     influence_edges_by_ward: dict[str, list[InfluenceEdge]] = field(default_factory=dict)
     shadow_accounts: dict[str, ShadowAccount] = field(default_factory=dict)
