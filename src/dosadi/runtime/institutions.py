@@ -71,6 +71,10 @@ class WardInstitutionPolicy:
     zoning_security_bias: float = 0.0
     growth_aggressiveness: float = 0.25
     heritage_preservation: float = 0.0
+    education_spend_bias: float = 0.0
+    education_priority: dict[str, float] = field(default_factory=dict)
+    education_access: float = 0.7
+    apprenticeship_bias: float = 0.3
     notes: dict[str, object] = field(default_factory=dict)
 
 

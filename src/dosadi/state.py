@@ -36,6 +36,7 @@ from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, WardInstitutionState
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
 from .runtime.culture_wars import CultureConfig, WardCultureState
+from .runtime.education import EducationConfig, WardEducationState
 from .runtime.urban import UrbanConfig, WardUrbanState
 from .world.corridor_infrastructure import CorridorInfraConfig, CorridorInfraEdge
 from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
@@ -899,6 +900,8 @@ class WorldState:
     urban_by_ward: Dict[str, WardUrbanState] = field(default_factory=dict)
     culture_cfg: CultureConfig = field(default_factory=CultureConfig)
     culture_by_ward: Dict[str, WardCultureState] = field(default_factory=dict)
+    education_cfg: EducationConfig = field(default_factory=EducationConfig)
+    education_by_ward: Dict[str, WardEducationState] = field(default_factory=dict)
     migration_cfg: MigrationConfig = field(default_factory=MigrationConfig)
     migration_by_ward: Dict[str, WardMigrationState] = field(default_factory=dict)
     migration_flows: List[MigrationFlow] = field(default_factory=list)
