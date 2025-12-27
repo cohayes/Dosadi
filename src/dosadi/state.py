@@ -936,6 +936,9 @@ class WorldState:
     escort_state: EscortState = field(default_factory=EscortState)
     ideology_cfg: Any = None
     ideology_by_ward: Dict[str, Any] = field(default_factory=dict)
+    religion_cfg: Any = None
+    sects: Dict[str, Any] = field(default_factory=dict)
+    religion_by_ward: Dict[str, Any] = field(default_factory=dict)
     media_cfg: MediaConfig = field(default_factory=MediaConfig)
     media_in_flight: Dict[str, MediaMessage] = field(default_factory=dict)
     media_inbox_by_ward: Dict[str, deque[str]] = field(default_factory=dict)
