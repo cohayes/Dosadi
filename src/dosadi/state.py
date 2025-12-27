@@ -82,6 +82,7 @@ from .runtime.trade_federations import (
     Federation,
     FederationConfig,
 )
+from .runtime.truth_regimes import IntegrityState, TruthConfig, TruthEvent
 from .runtime.labor import BargainingEvent, LaborConfig, LaborOrgState
 from .agent.suits import SuitState
 from typing import TYPE_CHECKING
@@ -1071,6 +1072,10 @@ class WorldState:
     settlements: dict[str, Settlement] = field(default_factory=dict)
     constitution_by_polity: dict[str, ConstitutionState] = field(default_factory=dict)
     constitution_events: list[ConstitutionalEvent] = field(default_factory=list)
+    truth_cfg: TruthConfig = field(default_factory=TruthConfig)
+    integrity_by_polity: dict[str, IntegrityState] = field(default_factory=dict)
+    integrity_by_ward: dict[str, IntegrityState] = field(default_factory=dict)
+    truth_events: list[TruthEvent] = field(default_factory=list)
     shadow_cfg: ShadowStateConfig = field(default_factory=ShadowStateConfig)
     influence_edges_by_ward: dict[str, list[InfluenceEdge]] = field(default_factory=dict)
     shadow_accounts: dict[str, ShadowAccount] = field(default_factory=dict)
