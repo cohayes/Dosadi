@@ -49,6 +49,7 @@ from .runtime.urban import UrbanConfig, WardUrbanState
 from .world.corridor_infrastructure import CorridorInfraConfig, CorridorInfraEdge
 from .runtime.escort_policy_v2 import EscortPolicyV2Config, EscortPolicyV2State
 from .runtime.migration import MigrationConfig, MigrationFlow, WardMigrationState
+from .runtime.demographics import DemographicEvent, DemographicsConfig, PolityDemographics
 from .runtime.defense import DefenseConfig, WardDefenseState
 from .runtime.market_signals import MarketSignalsConfig, MarketSignalsState
 from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
@@ -937,6 +938,9 @@ class WorldState:
     migration_cfg: MigrationConfig = field(default_factory=MigrationConfig)
     migration_by_ward: Dict[str, WardMigrationState] = field(default_factory=dict)
     migration_flows: List[MigrationFlow] = field(default_factory=list)
+    demographics_cfg: DemographicsConfig = field(default_factory=DemographicsConfig)
+    demographics_by_polity: dict[str, PolityDemographics] = field(default_factory=dict)
+    demographic_events: list[DemographicEvent] = field(default_factory=list)
     health_cfg: "HealthConfig" = field(default_factory=_health_config_factory)
     health_by_ward: Dict[str, "WardHealthState"] = field(default_factory=dict)
     health_events: List["HealthEvent"] = field(default_factory=list)

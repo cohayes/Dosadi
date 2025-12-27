@@ -44,6 +44,7 @@ from dosadi.runtime.law_enforcement import run_enforcement_for_day
 from dosadi.runtime.ledger import run_ledger_for_day
 from dosadi.runtime.finance import run_finance_week
 from dosadi.runtime.health import run_health_for_day
+from dosadi.runtime.demographics import run_demographics_for_day
 from dosadi.runtime.migration import run_migration_for_day
 from dosadi.runtime.institutions import ensure_inst_config, run_institutions_for_day
 from dosadi.runtime.leadership import run_leadership_for_day
@@ -238,6 +239,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         run_belief_formation_for_day(world, day=world.day)
         run_health_for_day(world, day=world.day)
         run_migration_for_day(world, day=world.day)
+        run_demographics_for_day(world, day=world.day)
         run_religion_for_week(world, day=world.day)
         run_ideology_update(world, day=world.day)
         run_education_update(world, day=world.day)
