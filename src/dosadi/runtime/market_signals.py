@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping
 
 from dosadi.runtime.telemetry import ensure_metrics, record_event
+from dosadi.runtime.sanctions import apply_sanctions_to_market_signal, sanctions_price_multiplier
 from dosadi.world.construction import ConstructionProject
 from dosadi.world.materials import InventoryRegistry, Material, ensure_inventory_registry, material_from_key
 from dosadi.world.construction import ProjectLedger
@@ -200,7 +201,9 @@ def run_market_signals_for_day(world, *, day: int) -> None:
             state.global_signals[material] = signal
         demand = demand_scores.get(material, 0.0)
         supply = supply_scores.get(material, 0.0)
+        demand *= sanctions_price_multiplier(world, material=material, day=day)
         _update_signal(signal, demand=demand, supply=supply, day=day, cfg=cfg)
+        apply_sanctions_to_market_signal(world, signal, day=day)
         metrics.topk_add(
             "market.urgent",
             material,

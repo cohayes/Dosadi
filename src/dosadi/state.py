@@ -1039,6 +1039,10 @@ class WorldState:
     ward_defense: dict[str, WardDefenseState] = field(default_factory=dict)
     deterrence_cfg: object | None = None
     relationships: dict[str, object] = field(default_factory=dict)
+    sanctions_cfg: Any = None
+    sanction_rules: dict[str, Any] = field(default_factory=dict)
+    sanctions_compliance: dict[str, Any] = field(default_factory=dict)
+    sanctions_events: list[dict[str, object]] = field(default_factory=list)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
