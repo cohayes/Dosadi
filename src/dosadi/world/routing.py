@@ -6,6 +6,7 @@ import math
 from typing import Any, Dict, Mapping
 
 from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
+from dosadi.runtime.sanctions import is_transit_denied
 
 from .corridor_infrastructure import travel_time_multiplier_for_edge
 from .survey_map import SurveyMap, edge_key
@@ -139,6 +140,16 @@ def compute_route(
                 "hazard": getattr(edge_obj, "hazard", 0.0),
                 "edge_obj": edge_obj,
             }
+            perspective_faction = getattr(perspective, "faction_id", None)
+            perspective_ward = getattr(perspective, "home_ward_id", None)
+            if is_transit_denied(
+                world,
+                edge_key=ekey,
+                actor_faction_id=perspective_faction,
+                actor_ward_id=perspective_ward,
+                day=getattr(world, "day", 0),
+            ):
+                continue
             step_cost = _edge_cost(world, edge_payload, cfg, perspective)
             next_cost = cost + step_cost
             prev = costs.get(nbr)
