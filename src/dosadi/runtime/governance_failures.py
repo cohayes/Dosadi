@@ -5,6 +5,7 @@ from hashlib import sha256
 from typing import Any, Dict, Iterable, List, Mapping
 
 from dosadi.runtime.telemetry import ensure_metrics
+from dosadi.runtime.labor import labor_sector_multiplier
 from dosadi.world.incidents import Incident, IncidentKind, IncidentLedger
 from dosadi.world.phases import WorldPhase
 
@@ -267,9 +268,9 @@ def production_multiplier_for_ward(world: Any, ward_id: str | None) -> float:
     state = getattr(world, "govfail_state", None)
     effects = getattr(state, "effects_by_ward", {}) if state is not None else {}
     effect = effects.get(str(ward_id)) if isinstance(effects, Mapping) else None
-    if effect is None:
-        return 1.0
-    return float(getattr(effect, "production_multiplier", 1.0) or 1.0)
+    base = float(getattr(effect, "production_multiplier", 1.0) if effect is not None else 1.0)
+    labor_mult = labor_sector_multiplier(world, ward_id, "REFINING")
+    return float(base) * float(labor_mult)
 
 
 def delivery_disruption_prob_for_ward(world: Any, ward_id: str | None) -> float:

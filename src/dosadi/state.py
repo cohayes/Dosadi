@@ -69,6 +69,7 @@ from .runtime.maintenance import MaintenanceConfig, MaintenanceLedger, Maintenan
 from .runtime.faction_interference import InterferenceConfig, InterferenceState
 from .runtime.suit_wear import SuitRepairLedger, SuitWearConfig, SuitWearState
 from .runtime.ledger import LedgerConfig, LedgerState
+from .runtime.labor import BargainingEvent, LaborConfig, LaborOrgState
 from .agent.suits import SuitState
 from typing import TYPE_CHECKING
 
@@ -979,6 +980,9 @@ class WorldState:
     maint_cfg: MaintenanceConfig = field(default_factory=MaintenanceConfig)
     maint_state: MaintenanceState = field(default_factory=MaintenanceState)
     maintenance: MaintenanceLedger = field(default_factory=MaintenanceLedger)
+    labor_cfg: LaborConfig = field(default_factory=LaborConfig)
+    labor_orgs_by_ward: dict[str, list[LaborOrgState]] = field(default_factory=dict)
+    labor_events: list[BargainingEvent] = field(default_factory=list)
     prod_cfg: ProductionConfig = field(default_factory=ProductionConfig)
     prod_state: ProductionState = field(default_factory=ProductionState)
     fac_prod: dict[str, FacilityProductionState] = field(default_factory=dict)
