@@ -10,6 +10,7 @@ resource aggregation needed for the conservation law described in
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 import random
 
@@ -35,6 +36,7 @@ from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, WardInstitutionState
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
+from .runtime.media import MediaConfig, MediaMessage
 from .runtime.culture_wars import CultureConfig, WardCultureState
 from .runtime.education import EducationConfig, WardEducationState
 from .runtime.urban import UrbanConfig, WardUrbanState
@@ -933,6 +935,12 @@ class WorldState:
     escort_state: EscortState = field(default_factory=EscortState)
     ideology_cfg: Any = None
     ideology_by_ward: Dict[str, Any] = field(default_factory=dict)
+    media_cfg: MediaConfig = field(default_factory=MediaConfig)
+    media_in_flight: Dict[str, MediaMessage] = field(default_factory=dict)
+    media_inbox_by_ward: Dict[str, deque[str]] = field(default_factory=dict)
+    media_inbox_by_faction: Dict[str, deque[str]] = field(default_factory=dict)
+    media_stats: Dict[str, float] = field(default_factory=dict)
+    next_media_seq: int = 0
     delivery_due_queue: List[tuple[int, str]] = field(default_factory=list)
     carriers_available: int = 1
     next_carrier_seq: int = 0
