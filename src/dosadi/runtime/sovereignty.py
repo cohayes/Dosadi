@@ -164,6 +164,12 @@ def ward_fracture_pressure(world, ward_id: str) -> float:
     avg_pressure = sum(inputs.values()) / 4.0
     max_pressure = max(inputs.values())
     weight = 0.6 * avg_pressure + 0.4 * max_pressure
+    try:
+        from dosadi.runtime.constitution import sovereignty_modifier
+
+        weight = max(0.0, weight - sovereignty_modifier(world, ward_id))
+    except Exception:
+        pass
     return _clamp01(weight + contested_bonus)
 
 
