@@ -77,6 +77,9 @@ class WardInstitutionPolicy:
     education_priority: dict[str, float] = field(default_factory=dict)
     education_access: float = 0.7
     apprenticeship_bias: float = 0.3
+    religious_tolerance: float = 0.5
+    state_church_bias: float = 0.0
+    suppression_intensity: float = 0.0
     notes: dict[str, object] = field(default_factory=dict)
 
 
