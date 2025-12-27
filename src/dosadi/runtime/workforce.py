@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
 from dosadi.runtime.education import DOMAINS
+from dosadi.runtime.lineages import nepotism_bias, polity_for_ward
 from dosadi.runtime.local_interactions import hashed_unit_float
 from dosadi.runtime.telemetry import ensure_metrics
 
@@ -163,7 +164,7 @@ def compute_workforce_pools(world: Any, *, day: int) -> None:
         pools.last_update_day = day
 
 
-def _priority_for_facility(facility: Any, req: Mapping[str, float]) -> float:
+def _priority_for_facility(facility: Any, req: Mapping[str, float], world: Any) -> float:
     tags = getattr(facility, "role_tags", set()) or set()
     priority = 1.0
     if tags & {"water", "health", "life_support"}:
@@ -174,6 +175,23 @@ def _priority_for_facility(facility: Any, req: Mapping[str, float]) -> float:
         priority += 0.8
     if "logistics" in tags or SKILL_COURIER in req:
         priority += 0.4
+    role_kind = "TECHNICIAN"
+    if SKILL_ADMIN in req:
+        role_kind = "CLERK"
+    elif SKILL_GUARD in req:
+        role_kind = "OFFICER"
+    elif SKILL_ENGINEER in req or SKILL_BUILDER in req:
+        role_kind = "SUPERVISOR"
+    ward_id = getattr(facility, "ward_id", getattr(facility, "site_node_id", ""))
+    polity_id = polity_for_ward(world, ward_id)
+    house_id = getattr(facility, "preferred_house_id", None)
+    if house_id:
+        priority *= 1.0 + nepotism_bias(
+            world,
+            polity_id,
+            house_id,
+            role_kind,
+        )
     return priority
 
 
@@ -228,7 +246,7 @@ def allocate_staffing_for_ward(world: Any, ward_id: str, *, day: int) -> None:
         req = getattr(facility, "staff_req", {}) or {}
         if not req:
             continue
-        priority = _priority_for_facility(facility, req)
+        priority = _priority_for_facility(facility, req, world)
         scored.append((priority, facility))
 
     scored.sort(key=lambda item: (-item[0], getattr(item[1], "facility_id", "")))
