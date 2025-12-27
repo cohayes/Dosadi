@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
+from dosadi.runtime.class_system import class_hardship, class_inequality
 from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.runtime.institutions import ensure_policy, ensure_state
 from dosadi.world.factions import pseudo_rand01
@@ -103,7 +104,10 @@ def _ward_grievance(world: Any, ward_id: str, org: LaborOrgState) -> float:
     inst_state = ensure_state(world, ward_id)
     corruption = _clamp01(getattr(inst_state, "corruption", 0.0))
     unrest = _clamp01(getattr(inst_state, "unrest", 0.0))
-    weight = 0.5 * shortage + 0.3 * safety + 0.2 * corruption + 0.1 * unrest
+    hardship = class_hardship(world, ward_id)
+    inequality = class_inequality(world, ward_id)
+    weight = 0.45 * shortage + 0.25 * safety + 0.15 * corruption + 0.1 * unrest
+    weight += 0.15 * hardship + 0.10 * inequality
     if org.org_type == "UNION":
         weight += 0.05 * shortage
     return _clamp01(weight)

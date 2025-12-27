@@ -23,6 +23,7 @@ from dosadi.runtime.eating import (
     HYDRATION_DECAY_PER_TICK,
 )
 from dosadi.runtime.belief_formation import run_belief_formation_for_day
+from dosadi.runtime.class_system import update_class_system_for_day
 from dosadi.runtime.culture_wars import run_culture_for_day
 from dosadi.runtime.education import run_education_update
 from dosadi.runtime.ideology import run_ideology_update
@@ -227,6 +228,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         inst_cfg = ensure_inst_config(world)
         if getattr(inst_cfg, "enabled", False):
             run_institutions_for_day(world, day=world.day)
+        update_class_system_for_day(world, day=world.day)
         run_interactions_for_day(world, day=world.day)
         run_router_for_day(world, day=world.day)
         run_belief_formation_for_day(world, day=world.day)

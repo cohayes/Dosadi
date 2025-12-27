@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import TYPE_CHECKING, Iterable, Mapping
 
+from dosadi.runtime.class_system import class_hardship
 from dosadi.runtime.telemetry import Metrics, TopK
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
@@ -128,7 +129,8 @@ def _compute_displacement(world: WorldState, ward_state: WardMigrationState, rng
     if ward is None:
         return 0
     pressure = max(0.0, ward.need_index + ward.risk_index)
-    return int(pressure * 50 + rng.randint(0, 10))
+    hardship = class_hardship(world, ward_state.ward_id)
+    return int((pressure + 0.8 * hardship) * 50 + rng.randint(0, 10))
 
 
 def _score_destination(

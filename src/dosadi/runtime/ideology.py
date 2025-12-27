@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any, Iterable, Mapping
 
+from dosadi.runtime.class_system import class_hardship, class_inequality
 from dosadi.runtime.institutions import ensure_policy, ensure_state
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 
@@ -152,6 +153,9 @@ def run_ideology_update(world: Any, *, day: int) -> None:
         policy = ensure_policy(world, ward_id)
         censorship = _clamp01(0.5 * max(0.0, getattr(policy, "censorship_bias", 0.0)))
         propaganda = _clamp01(max(0.0, getattr(policy, "propaganda_budget_points", 0.0)) / 10.0)
+        inequality = class_inequality(world, ward_id)
+        hardship = class_hardship(world, ward_id)
+        polarization = _clamp01(0.3 * inequality + 0.2 * hardship)
 
         candidates = _candidate_factions(world, ward_id, cfg)
         influence = dict(state.influence)
@@ -171,6 +175,10 @@ def run_ideology_update(world: Any, *, day: int) -> None:
             influence[fid] = _clamp01(prev + (baseline - prev) * cfg.decay_rate)
 
         axes = _axes_from_state(state, censorship, getattr(policy, "education_priority", {}))
+        axes["ORTHODOXY"] = _clamp01(axes.get("ORTHODOXY", 0.0) + 0.2 * polarization)
+        axes["TECHNICISM"] = _clamp01(axes.get("TECHNICISM", 0.0) - 0.1 * polarization)
+        axes = _normalized_axes(axes)
+        state.state_share = _clamp01(state.state_share - 0.2 * polarization + 0.05 * propaganda)
         state.curriculum_axes = axes
         state.censorship_level = censorship
         state.propaganda_intensity = propaganda
@@ -178,7 +186,7 @@ def run_ideology_update(world: Any, *, day: int) -> None:
         state.last_update_day = day
 
         inst_state = ensure_state(world, ward_id)
-        inst_state.unrest = _clamp01(inst_state.unrest + cfg.coercion_cost_scale * censorship)
+        inst_state.unrest = _clamp01(inst_state.unrest + cfg.coercion_cost_scale * censorship + 0.1 * polarization)
         inst_state.legitimacy = _clamp01(inst_state.legitimacy - 0.25 * censorship + 0.1 * propaganda)
 
         if propaganda > 0.0:

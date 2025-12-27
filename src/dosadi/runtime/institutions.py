@@ -53,6 +53,11 @@ class InstitutionConfig:
 class WardInstitutionPolicy:
     ward_id: str
     ration_strictness: float = 0.3
+    rationing_regime: str = "EQUAL"
+    wage_regime: str = "FLAT"
+    housing_allocation_bias: float = 0.5
+    camp_integration_bias: float = 0.5
+    suit_maintenance_bias: float = 0.5
     levy_rate: float = 0.05
     enforcement_budget_points: float = 10.0
     audit_budget_points: float = 2.0

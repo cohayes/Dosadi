@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping
 
 from dosadi.runtime.market_signals import current_signal_urgency
+from dosadi.runtime.class_system import update_class_system_for_day
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.world.construction import ConstructionProject
 from dosadi.world.facilities import FacilityKind, ensure_facility_ledger
@@ -223,6 +224,7 @@ def run_production_for_day(world, *, day: int) -> None:
         state.jobs_started_today = 0
         state.jobs_started_by_facility = {}
 
+    update_class_system_for_day(world, day=day)
     update_labor_for_day(world, day=day)
 
     facilities = ensure_facility_ledger(world)

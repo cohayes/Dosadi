@@ -36,6 +36,7 @@ from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, WardInstitutionState
+from .runtime.class_system import ClassConfig, WardClassState
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
 from .runtime.media import MediaConfig, MediaMessage
 from .runtime.espionage import EspionageConfig, IntelOpOutcome, IntelOpPlan
@@ -901,6 +902,8 @@ class WorldState:
     inst_cfg: InstitutionConfig = field(default_factory=InstitutionConfig)
     inst_policy_by_ward: Dict[str, WardInstitutionPolicy] = field(default_factory=dict)
     inst_state_by_ward: Dict[str, WardInstitutionState] = field(default_factory=dict)
+    class_cfg: ClassConfig = field(default_factory=ClassConfig)
+    class_by_ward: Dict[str, WardClassState] = field(default_factory=dict)
     urban_cfg: UrbanConfig = field(default_factory=UrbanConfig)
     urban_by_ward: Dict[str, WardUrbanState] = field(default_factory=dict)
     culture_cfg: CultureConfig = field(default_factory=CultureConfig)

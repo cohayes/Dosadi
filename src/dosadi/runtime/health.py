@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any, Iterable, Mapping
 
+from dosadi.runtime.class_system import class_hardship
 from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.state import WardState, WorldState
 
@@ -321,6 +322,9 @@ def _apply_consequences(world: WorldState, by_ward: dict[str, WardHealthState]) 
                 migration_state.notes["disease_pressure"] = outbreak_sum
                 if outbreak_sum > 0.5:
                     ward.need_index = _clamp(ward.need_index + 0.05)
+            hardship = class_hardship(world, ward_id)
+            if hardship > 0.0:
+                state.chronic_burden = _clamp(state.chronic_burden + 0.05 * hardship)
     health_bucket["outbreaks_active"] = total_outbreaks
     health_bucket["labor_mult_avg"] = sum(labor_mults.values()) / max(1, len(labor_mults))
     health_bucket["avg_chronic_burden"] = sum(state.chronic_burden for state in by_ward.values()) / max(1, len(by_ward))
