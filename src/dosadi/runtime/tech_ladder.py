@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Iterable, Mapping
 
+from dosadi.runtime.education import meets_competence_requirements
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.runtime.ledger import ensure_ledger_config, ensure_ledger_state, post_tx
 from dosadi.world.materials import Material, InventoryRegistry, ensure_inventory_registry
@@ -19,6 +20,7 @@ class TechProjectSpec:
     duration_days: int
     unlocks: tuple[str, ...]
     tags: tuple[str, ...] = ()
+    competence_req: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -56,6 +58,7 @@ def _spec(
     duration_days: int = 7,
     unlocks: Iterable[str],
     tags: Iterable[str] | None = None,
+    competence_req: Mapping[str, float] | None = None,
 ) -> TechProjectSpec:
     return TechProjectSpec(
         tech_id=tech_id,
@@ -66,6 +69,7 @@ def _spec(
         duration_days=int(duration_days),
         unlocks=tuple(unlocks),
         tags=tuple(tags or ()),
+        competence_req=dict(competence_req or {}),
     )
 
 
@@ -127,6 +131,7 @@ def tech_registry() -> dict[str, TechProjectSpec]:
             duration_days=7,
             unlocks=("UNLOCK_CORRIDOR_L2",),
             tags=("corridor",),
+            competence_req={"LOGISTICS": 0.25},
         ),
         _spec(
             tech_id="tech:fab:simple:t3",
@@ -141,6 +146,17 @@ def tech_registry() -> dict[str, TechProjectSpec]:
             duration_days=8,
             unlocks=("UNLOCK_FABRICATION_SIMPLE_T3",),
             tags=("fabrication",),
+        ),
+        _spec(
+            tech_id="tech:education:academy:l2",
+            name="Academy Charter",
+            prereqs=("tech:workshop:parts:t2",),
+            cost_materials={Material.SEALANT: 2, Material.FASTENERS: 2, Material.METAL_PLATE: 2},
+            cost_labor_days=3,
+            duration_days=6,
+            unlocks=("UNLOCK_ACADEMY_L2",),
+            tags=("education",),
+            competence_req={"CIVICS": 0.3, "ENGINEERING": 0.35},
         ),
     ]
     return {spec.tech_id: spec for spec in projects}
@@ -240,6 +256,8 @@ def run_tech_for_day(world, *, day: int) -> None:
         if tech_id in state.completed or tech_id in state.active:
             continue
         if any(prereq not in state.completed for prereq in spec.prereqs):
+            continue
+        if not meets_competence_requirements(world, getattr(spec, "competence_req", {})):
             continue
         candidates.append(spec)
 

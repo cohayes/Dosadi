@@ -24,6 +24,9 @@ class FacilityKind(str, Enum):
     WAYSTATION_L2 = "WAYSTATION_L2"
     FORT_L2 = "FORT_L2"
     GARRISON_L2 = "GARRISON_L2"
+    SCHOOLHOUSE_L1 = "SCHOOLHOUSE_L1"
+    TRAINING_HALL_L1 = "TRAINING_HALL_L1"
+    ACADEMY_L2 = "ACADEMY_L2"
 
 
 def coerce_facility_kind(raw: object) -> FacilityKind:
@@ -199,6 +202,22 @@ _FACILITY_DEFAULTS: dict[FacilityKind, dict[str, object]] = {
         "tier": 2,
         "role_tags": {"defense", "corridor"},
         "consumes": {"ADV_COMPONENTS": 1.0, "SEALANT": 1.0, "TRAINING_SUPPLIES": 1.0},
+    },
+    FacilityKind.SCHOOLHOUSE_L1: {
+        "tier": 1,
+        "role_tags": {"civic", "education"},
+        "base_throughput": {"students": 40},
+    },
+    FacilityKind.TRAINING_HALL_L1: {
+        "tier": 1,
+        "role_tags": {"security", "education"},
+        "base_throughput": {"cadets": 20},
+    },
+    FacilityKind.ACADEMY_L2: {
+        "requires_unlocks": {"UNLOCK_ACADEMY_L2"},
+        "tier": 2,
+        "role_tags": {"civic", "education"},
+        "base_throughput": {"fellows": 12},
     },
 }
 
