@@ -42,6 +42,7 @@ from dosadi.runtime.war import run_war_for_day
 from dosadi.runtime.local_interactions import run_interactions_for_day
 from dosadi.runtime.law_enforcement import run_enforcement_for_day
 from dosadi.runtime.ledger import run_ledger_for_day
+from dosadi.runtime.finance import run_finance_week
 from dosadi.runtime.health import run_health_for_day
 from dosadi.runtime.migration import run_migration_for_day
 from dosadi.runtime.institutions import ensure_inst_config, run_institutions_for_day
@@ -220,6 +221,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         run_corridor_improvement_planner(world, day=world.day)
         run_incident_engine_for_day(world, day=world.day)
         run_governance_failure_for_day(world, day=world.day)
+        run_finance_week(world, day=world.day)
         run_ledger_for_day(world, day=world.day)
         run_enforcement_for_day(world, day=world.day)
         run_real_factions_for_day(world, day=world.day)

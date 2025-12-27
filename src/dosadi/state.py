@@ -71,6 +71,7 @@ from .runtime.maintenance import MaintenanceConfig, MaintenanceLedger, Maintenan
 from .runtime.faction_interference import InterferenceConfig, InterferenceState
 from .runtime.suit_wear import SuitRepairLedger, SuitWearConfig, SuitWearState
 from .runtime.ledger import LedgerConfig, LedgerState
+from .runtime.finance import FinanceConfig, Loan, Patronage
 from .runtime.labor import BargainingEvent, LaborConfig, LaborOrgState
 from .agent.suits import SuitState
 from typing import TYPE_CHECKING
@@ -899,6 +900,11 @@ class WorldState:
     council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
     ledger_cfg: LedgerConfig = field(default_factory=LedgerConfig)
     ledger_state: LedgerState = field(default_factory=LedgerState)
+    finance_cfg: FinanceConfig = field(default_factory=FinanceConfig)
+    loans: dict[str, Loan] = field(default_factory=dict)
+    patronage: list[Patronage] = field(default_factory=list)
+    finance_events: list[dict[str, object]] = field(default_factory=list)
+    finance_last_run_day: int = -1
     inst_cfg: InstitutionConfig = field(default_factory=InstitutionConfig)
     inst_policy_by_ward: Dict[str, WardInstitutionPolicy] = field(default_factory=dict)
     inst_state_by_ward: Dict[str, WardInstitutionState] = field(default_factory=dict)

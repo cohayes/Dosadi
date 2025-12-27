@@ -18,6 +18,7 @@ from dosadi.runtime.ledger import save_ledger_seed
 from dosadi.runtime.treaties import save_treaties_seed
 from dosadi.runtime.smuggling import save_smuggling_seed
 from dosadi.runtime.migration import save_migration_seed
+from dosadi.runtime.finance import save_finance_seed
 from dosadi.testing.kpis import collect_kpis
 
 
@@ -73,6 +74,8 @@ def save_seed(
     save_culture_seed(world, culture_path)
     ledger_path = vault_dir / "seeds" / seed_id / "ledger_accounts.json"
     save_ledger_seed(world, ledger_path)
+    finance_path = vault_dir / "seeds" / seed_id / "finance.json"
+    save_finance_seed(world, finance_path)
     treaties_path = vault_dir / "seeds" / seed_id / "treaties.json"
     save_treaties_seed(world, treaties_path)
     smuggling_path = vault_dir / "seeds" / seed_id / "smuggling.json"
@@ -99,6 +102,9 @@ def save_seed(
     if ledger_path.exists():
         entry["ledger_path"] = str(ledger_path.relative_to(vault_dir))
         entry["ledger_sha256"] = sha256(ledger_path.read_bytes()).hexdigest()
+    if finance_path.exists():
+        entry["finance_path"] = str(finance_path.relative_to(vault_dir))
+        entry["finance_sha256"] = sha256(finance_path.read_bytes()).hexdigest()
     if treaties_path.exists():
         entry["treaties_path"] = str(treaties_path.relative_to(vault_dir))
         entry["treaties_sha256"] = sha256(treaties_path.read_bytes()).hexdigest()
