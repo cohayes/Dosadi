@@ -37,6 +37,7 @@ from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, WardInstitutionState
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
 from .runtime.media import MediaConfig, MediaMessage
+from .runtime.espionage import EspionageConfig, IntelOpOutcome, IntelOpPlan
 from .runtime.culture_wars import CultureConfig, WardCultureState
 from .runtime.education import EducationConfig, WardEducationState
 from .runtime.urban import UrbanConfig, WardUrbanState
@@ -1000,6 +1001,10 @@ class WorldState:
     raid_history: list[RaidOutcome] = field(default_factory=list)
     corridor_stress: dict[str, float] = field(default_factory=dict)
     collapsed_corridors: set[str] = field(default_factory=set)
+    espionage_cfg: EspionageConfig = field(default_factory=EspionageConfig)
+    intel_ops_active: dict[str, IntelOpPlan] = field(default_factory=dict)
+    intel_ops_history: list[IntelOpOutcome] = field(default_factory=list)
+    counterintel_by_ward: dict[str, float] = field(default_factory=dict)
     defense_cfg: DefenseConfig = field(default_factory=DefenseConfig)
     ward_defense: dict[str, WardDefenseState] = field(default_factory=dict)
     deterrence_cfg: object | None = None
