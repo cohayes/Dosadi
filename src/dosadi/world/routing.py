@@ -93,7 +93,11 @@ def compute_route(
     if not cfg.enabled:
         return None
 
-    cache_key = f"{from_node}->{to_node}:{perspective_agent_id}:{getattr(world, 'day', 0)}"
+    sanction_stamp = ""
+    sanction_rules = getattr(world, "sanction_rules", None)
+    if isinstance(sanction_rules, dict) and sanction_rules:
+        sanction_stamp = ":" + ";".join(sorted(sanction_rules.keys()))
+    cache_key = f"{from_node}->{to_node}:{perspective_agent_id}:{getattr(world, 'day', 0)}{sanction_stamp}"
     cached = _ROUTE_CACHE.get(cache_key)
     if cached is not None:
         return cached
