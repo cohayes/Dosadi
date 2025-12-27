@@ -5,6 +5,7 @@ from hashlib import sha256
 from typing import Iterable, Mapping
 
 from dosadi.runtime.education import meets_competence_requirements
+from dosadi.runtime.ideology import tech_delay_multiplier
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.runtime.ledger import ensure_ledger_config, ensure_ledger_state, post_tx
 from dosadi.world.materials import Material, InventoryRegistry, ensure_inventory_registry
@@ -270,8 +271,8 @@ def run_tech_for_day(world, *, day: int) -> None:
             continue
         if not inventory.inv(_owner_for_research(world)).can_afford(spec.cost_materials):
             continue
+        sponsor_budget, sponsor_ward = (sponsor_candidates[0] if sponsor_candidates else (0.0, None))
         if ledger_cfg.enabled:
-            sponsor_budget, sponsor_ward = (sponsor_candidates[0] if sponsor_candidates else (0.0, None))
             if sponsor_budget <= 0.0 or sponsor_ward is None:
                 continue
             prev_len = len(ledger_state.txs) if ledger_state is not None else 0
@@ -287,7 +288,8 @@ def run_tech_for_day(world, *, day: int) -> None:
             if not posted or (ledger_state is not None and len(ledger_state.txs) <= prev_len):
                 continue
         inventory.inv(_owner_for_research(world)).apply_bom(spec.cost_materials)
-        complete_day = day + max(1, int(spec.duration_days))
+        duration_multiplier = tech_delay_multiplier(world, sponsor_ward)
+        complete_day = day + max(1, int(round(spec.duration_days * duration_multiplier)))
         state.active[spec.tech_id] = ActiveTechProject(
             tech_id=spec.tech_id,
             started_day=day,

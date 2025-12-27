@@ -931,6 +931,8 @@ class WorldState:
     market_state: MarketSignalsState = field(default_factory=MarketSignalsState)
     escort_cfg: EscortConfig = field(default_factory=EscortConfig)
     escort_state: EscortState = field(default_factory=EscortState)
+    ideology_cfg: Any = None
+    ideology_by_ward: Dict[str, Any] = field(default_factory=dict)
     delivery_due_queue: List[tuple[int, str]] = field(default_factory=list)
     carriers_available: int = 1
     next_carrier_seq: int = 0
