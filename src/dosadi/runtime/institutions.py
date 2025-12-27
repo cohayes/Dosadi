@@ -65,6 +65,8 @@ class WardInstitutionPolicy:
     customs_tariff_bias: float = 0.0
     customs_contraband_bias: float = 0.0
     customs_bribe_tolerance: float = 0.1
+    propaganda_budget_points: float = 0.0
+    censorship_bias: float = 0.0
     zoning_residential_bias: float = 0.0
     zoning_industrial_bias: float = 0.0
     zoning_civic_bias: float = 0.0

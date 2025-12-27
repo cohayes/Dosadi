@@ -25,6 +25,7 @@ from dosadi.runtime.eating import (
 from dosadi.runtime.belief_formation import run_belief_formation_for_day
 from dosadi.runtime.culture_wars import run_culture_for_day
 from dosadi.runtime.education import run_education_update
+from dosadi.runtime.ideology import run_ideology_update
 from dosadi.runtime.event_to_memory_router import run_router_for_day
 from dosadi.runtime.governance_failures import run_governance_failure_for_day
 from dosadi.runtime.scouting import maybe_create_scout_missions, step_scout_missions_for_day
@@ -230,6 +231,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         run_belief_formation_for_day(world, day=world.day)
         run_health_for_day(world, day=world.day)
         run_migration_for_day(world, day=world.day)
+        run_ideology_update(world, day=world.day)
         run_education_update(world, day=world.day)
         run_urban_for_day(world, day=world.day)
         run_culture_for_day(world, day=world.day)

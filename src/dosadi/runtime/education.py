@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any, Mapping
 
+from dosadi.runtime.ideology import ideology_domain_modifiers, ideology_gain_multiplier
 from dosadi.runtime.institutions import ensure_policy
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 
@@ -199,6 +200,9 @@ def run_education_update(world: Any, *, day: int) -> None:
         facility_counts = _facility_counts(ward)
         affinity = _facility_affinity(facility_counts)
         modifiers = _culture_modifiers(world, ward_id)
+        ideology_mods = ideology_domain_modifiers(world, ward_id)
+        for domain, mod in ideology_mods.items():
+            modifiers[domain] = modifiers.get(domain, 1.0) * mod
         weights = _normalized_weights(policy, modifiers, affinity)
         penalty = _penalties(world, ward_id, cfg)
 
@@ -211,6 +215,7 @@ def run_education_update(world: Any, *, day: int) -> None:
         teacher_pool = _teacher_pool_update(edu_state, spend, facility_signal, cfg)
 
         gain = cfg.base_gain_per_update * (1.0 + 0.5 * spend) * (0.7 + 0.3 * teacher_pool)
+        gain *= ideology_gain_multiplier(world, ward_id)
         gain *= 1.0 - penalty
 
         for domain, weight in weights.items():
