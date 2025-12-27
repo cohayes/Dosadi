@@ -51,6 +51,7 @@ from .runtime.defense import DefenseConfig, WardDefenseState
 from .runtime.market_signals import MarketSignalsConfig, MarketSignalsState
 from .runtime.production_runtime import FacilityProductionState, ProductionConfig, ProductionState
 from .runtime.smuggling import SmugglingConfig, SmugglingNetworkState
+from .runtime.policing import PolicingConfig, WardPolicingState
 from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
@@ -996,6 +997,8 @@ class WorldState:
     incidents: IncidentLedger = field(default_factory=IncidentLedger)
     incident_cfg: IncidentConfig = field(default_factory=IncidentConfig)
     incident_state: IncidentState = field(default_factory=IncidentState)
+    policing_cfg: PolicingConfig = field(default_factory=PolicingConfig)
+    policing_by_ward: dict[str, WardPolicingState] = field(default_factory=dict)
     intf_cfg: InterferenceConfig = field(default_factory=InterferenceConfig)
     intf_state: InterferenceState = field(default_factory=InterferenceState)
     focus_cfg: FocusConfig = field(default_factory=FocusConfig)
