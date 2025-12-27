@@ -1050,6 +1050,9 @@ class WorldState:
     cells_by_ward: dict[str, list[object]] = field(default_factory=dict)
     cell_ops_active: dict[str, object] = field(default_factory=dict)
     cell_ops_history: list[object] = field(default_factory=list)
+    leadership_cfg: Any = None
+    leadership_by_polity: dict[str, Any] = field(default_factory=dict)
+    succession_events: list[object] = field(default_factory=list)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
