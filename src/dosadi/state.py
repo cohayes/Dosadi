@@ -28,6 +28,7 @@ from .runtime.admin_log import AdminLogEntry
 from .runtime.council_metrics import CouncilMetrics, CouncilStaffingConfig
 from .runtime.escort_protocols import EscortConfig, EscortState
 from .runtime.staffing import StaffingConfig, StaffingState
+from .runtime.workforce import FacilityStaffing, WardWorkforcePools, WorkforceConfig
 from .runtime.stockpile_policy import DepotPolicyLedger, StockpilePolicyConfig, StockpilePolicyState
 from .runtime.work_details import WorkDetailType
 from .runtime.war import RaidOutcome, RaidPlan, WarConfig
@@ -965,6 +966,9 @@ class WorldState:
     scout_cfg: ScoutConfig = field(default_factory=ScoutConfig)
     next_mission_seq: int = 0
     workforce: WorkforceLedger = field(default_factory=WorkforceLedger)
+    workforce_cfg: WorkforceConfig = field(default_factory=WorkforceConfig)
+    workforce_by_ward: dict[str, WardWorkforcePools] = field(default_factory=dict)
+    staffing_by_facility: dict[str, FacilityStaffing] = field(default_factory=dict)
     staffing_cfg: StaffingConfig = field(default_factory=StaffingConfig)
     staffing_state: StaffingState = field(default_factory=StaffingState)
     suit_cfg: SuitWearConfig = field(default_factory=SuitWearConfig)

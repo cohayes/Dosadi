@@ -47,6 +47,7 @@ class Facility:
     facility_id: str
     kind: FacilityKind = FacilityKind.DEPOT
     site_node_id: str = ""
+    ward_id: str = ""
     created_tick: int = 0
     status: str = "ACTIVE"
     state: dict = field(default_factory=dict)
@@ -64,6 +65,9 @@ class Facility:
     base_throughput: Dict[str, float] = field(default_factory=dict)
     consumes: Dict[str, float] = field(default_factory=dict)
     produces: Dict[str, float] = field(default_factory=dict)
+    staff_req: Dict[str, float] = field(default_factory=dict)
+    staff_affinity: Dict[str, float] = field(default_factory=dict)
+    staff_min: Dict[str, float] = field(default_factory=dict)
     last_run_day: int = -1
 
     def __getattr__(self, name: str) -> Any:  # pragma: no cover - trivial passthrough
@@ -93,6 +97,7 @@ class FacilityLedger:
             fid: {
                 "kind": fac.kind.value if isinstance(fac.kind, FacilityKind) else str(fac.kind),
                 "site": fac.site_node_id,
+                "ward": getattr(fac, "ward_id", ""),
                 "status": fac.status,
                 "last_day": fac.last_update_day,
                 "last_run_day": getattr(fac, "last_run_day", -1),
@@ -100,6 +105,9 @@ class FacilityLedger:
                 "requires": sorted(getattr(fac, "requires_unlocks", set())),
                 "tier": getattr(fac, "tier", 0),
                 "role_tags": sorted(getattr(fac, "role_tags", set())),
+                "staff_req": {k: v for k, v in sorted(getattr(fac, "staff_req", {}).items())},
+                "staff_affinity": {k: v for k, v in sorted(getattr(fac, "staff_affinity", {}).items())},
+                "staff_min": {k: v for k, v in sorted(getattr(fac, "staff_min", {}).items())},
             }
             for fid, fac in sorted(self.facilities.items())
         }
@@ -165,6 +173,7 @@ _FACILITY_DEFAULTS: dict[FacilityKind, dict[str, object]] = {
         "role_tags": {"chem", "industry"},
         "consumes": {"CHEM_SALTS": 3.0, "FIBER": 1.0},
         "produces": {"SEALANT": 4.0, "GASKETS": 2.0},
+        "staff_req": {"ENGINEER": 3.0, "REFINER": 4.0, "ADMIN": 1.0},
     },
     FacilityKind.WORKSHOP_T2: {
         "requires_unlocks": {"UNLOCK_WORKSHOP_PARTS_T2"},
@@ -172,6 +181,7 @@ _FACILITY_DEFAULTS: dict[FacilityKind, dict[str, object]] = {
         "role_tags": {"industry"},
         "consumes": {"SCRAP_METAL": 4.0},
         "produces": {"FASTENERS": 3.0, "FITTINGS": 2.0, "METAL_PLATE": 1.0},
+        "staff_req": {"ENGINEER": 2.0, "MAINTAINER": 2.0, "ADMIN": 1.0},
     },
     FacilityKind.FAB_SHOP_T3: {
         "requires_unlocks": {"UNLOCK_FABRICATION_SIMPLE_T3"},
@@ -179,45 +189,53 @@ _FACILITY_DEFAULTS: dict[FacilityKind, dict[str, object]] = {
         "role_tags": {"industry", "fabrication"},
         "consumes": {"FASTENERS": 1.0, "SEALANT": 1.0, "METAL_PLATE": 1.0},
         "produces": {"ADV_COMPONENTS": 1.0},
+        "staff_req": {"ENGINEER": 4.0, "MAINTAINER": 3.0, "ADMIN": 1.0},
     },
     FacilityKind.WAYSTATION_L2: {
         "requires_unlocks": {"UNLOCK_CORRIDOR_L2"},
         "tier": 2,
         "role_tags": {"logistics_support", "corridor"},
+        "staff_req": {"ADMIN": 2.0, "COURIER": 2.0, "GUARD": 1.0},
     },
     FacilityKind.OUTPOST_L1: {
         "requires_unlocks": {"UNLOCK_OUTPOST_L1"},
         "tier": 1,
         "role_tags": {"defense", "corridor"},
         "consumes": {"SCRAP_METAL": 2.0, "FASTENERS": 1.0, "FILTER_MEDIA": 1.0},
+        "staff_req": {"GUARD": 3.0, "ADMIN": 1.0},
     },
     FacilityKind.FORT_L2: {
         "requires_unlocks": {"UNLOCK_FORT_L2"},
         "tier": 2,
         "role_tags": {"defense", "corridor"},
         "consumes": {"ADV_COMPONENTS": 1.0, "SEALANT": 1.0, "FILTER_MEDIA": 1.0},
+        "staff_req": {"GUARD": 6.0, "ADMIN": 2.0},
     },
     FacilityKind.GARRISON_L2: {
         "requires_unlocks": {"UNLOCK_GARRISON_L2"},
         "tier": 2,
         "role_tags": {"defense", "corridor"},
         "consumes": {"ADV_COMPONENTS": 1.0, "SEALANT": 1.0, "TRAINING_SUPPLIES": 1.0},
+        "staff_req": {"GUARD": 5.0, "ADMIN": 2.0},
     },
     FacilityKind.SCHOOLHOUSE_L1: {
         "tier": 1,
         "role_tags": {"civic", "education"},
         "base_throughput": {"students": 40},
+        "staff_req": {"ADMIN": 2.0, "MEDIC": 1.0},
     },
     FacilityKind.TRAINING_HALL_L1: {
         "tier": 1,
         "role_tags": {"security", "education"},
         "base_throughput": {"cadets": 20},
+        "staff_req": {"GUARD": 3.0, "ADMIN": 1.0},
     },
     FacilityKind.ACADEMY_L2: {
         "requires_unlocks": {"UNLOCK_ACADEMY_L2"},
         "tier": 2,
         "role_tags": {"civic", "education"},
         "base_throughput": {"fellows": 12},
+        "staff_req": {"ADMIN": 3.0, "MEDIC": 1.0},
     },
 }
 
@@ -248,6 +266,12 @@ def apply_facility_defaults(facility: Facility) -> None:
         facility.consumes = dict(defaults.get("consumes", {}))
     if not facility.produces:
         facility.produces = dict(defaults.get("produces", {}))
+    if not facility.staff_req:
+        facility.staff_req = dict(defaults.get("staff_req", {}))
+    if not facility.staff_affinity:
+        facility.staff_affinity = dict(defaults.get("staff_affinity", {}))
+    if not facility.staff_min:
+        facility.staff_min = dict(defaults.get("staff_min", {}))
     if facility.tier <= 0:
         facility.tier = int(defaults.get("tier", 1)) or 1
 
@@ -281,6 +305,7 @@ def ensure_facility_ledger(world) -> FacilityLedger:
                     facility_id=fid,
                     kind=coerce_facility_kind(fac.get("kind", fac.get("type", FacilityKind.DEPOT.value))),
                     site_node_id=str(fac.get("site_node_id", fid)),
+                    ward_id=str(fac.get("ward_id", fac.get("site_node_id", fid))),
                     created_tick=int(fac.get("created_tick", 0)),
                     status=str(fac.get("status", "ACTIVE")),
                     state=dict(fac),
@@ -306,6 +331,9 @@ def ensure_facility_ledger(world) -> FacilityLedger:
                     base_throughput=dict(fac.get("base_throughput", {})),
                     consumes=dict(fac.get("consumes", {})),
                     produces=dict(fac.get("produces", {})),
+                    staff_req=dict(fac.get("staff_req", {})),
+                    staff_affinity=dict(fac.get("staff_affinity", {})),
+                    staff_min=dict(fac.get("staff_min", {})),
                     last_run_day=int(fac.get("last_run_day", fac.get("last_update_day", -1))),
                 )
             else:
@@ -313,6 +341,7 @@ def ensure_facility_ledger(world) -> FacilityLedger:
                     facility_id=fid,
                     kind=coerce_facility_kind(getattr(fac, "kind", FacilityKind.DEPOT)),
                     site_node_id=str(getattr(fac, "site_node_id", fid)),
+                    ward_id=str(getattr(fac, "ward_id", getattr(fac, "site_node_id", fid))),
                     created_tick=int(getattr(fac, "created_tick", 0)),
                     status=str(getattr(fac, "status", "ACTIVE")),
                     state=fac.__dict__ if hasattr(fac, "__dict__") else {},
@@ -330,6 +359,9 @@ def ensure_facility_ledger(world) -> FacilityLedger:
                     base_throughput=dict(getattr(fac, "base_throughput", {}) or {}),
                     consumes=dict(getattr(fac, "consumes", {}) or {}),
                     produces=dict(getattr(fac, "produces", {}) or {}),
+                    staff_req=dict(getattr(fac, "staff_req", {}) or {}),
+                    staff_affinity=dict(getattr(fac, "staff_affinity", {}) or {}),
+                    staff_min=dict(getattr(fac, "staff_min", {}) or {}),
                     last_run_day=int(getattr(fac, "last_run_day", getattr(fac, "last_update_day", -1))),
                 )
         ledger = FacilityLedger(facilities=facilities)
