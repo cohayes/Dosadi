@@ -38,6 +38,7 @@ from .runtime.telemetry import DebugConfig, EventRing, Metrics
 from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, WardInstitutionState
 from .runtime.class_system import ClassConfig, WardClassState
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
+from .runtime.constitution import ConstitutionConfig, ConstitutionalEvent, ConstitutionState, Settlement
 from .runtime.media import MediaConfig, MediaMessage
 from .runtime.comms import CommsConfig, CommsModifiers, CommsNodeState
 from .runtime.espionage import EspionageConfig, IntelOpOutcome, IntelOpPlan
@@ -1066,6 +1067,10 @@ class WorldState:
     leadership_cfg: Any = None
     leadership_by_polity: dict[str, Any] = field(default_factory=dict)
     succession_events: list[object] = field(default_factory=list)
+    constitution_cfg: ConstitutionConfig = field(default_factory=ConstitutionConfig)
+    settlements: dict[str, Settlement] = field(default_factory=dict)
+    constitution_by_polity: dict[str, ConstitutionState] = field(default_factory=dict)
+    constitution_events: list[ConstitutionalEvent] = field(default_factory=list)
     shadow_cfg: ShadowStateConfig = field(default_factory=ShadowStateConfig)
     influence_edges_by_ward: dict[str, list[InfluenceEdge]] = field(default_factory=dict)
     shadow_accounts: dict[str, ShadowAccount] = field(default_factory=dict)

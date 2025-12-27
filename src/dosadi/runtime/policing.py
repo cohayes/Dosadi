@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass, field
 from hashlib import sha256
 from typing import Any, Iterable, Mapping
 
+from dosadi.runtime.constitution import policing_constraints_for_ward
+
 
 DOCTRINE_KEYS: tuple[str, ...] = ("COMMUNITY", "PROCEDURAL", "MILITARIZED", "TERROR")
 
@@ -240,6 +242,14 @@ def policing_effects(world: Any, ward_id: str, *, day: int | None = None) -> Pol
         update_policing_doctrine(world, ward_id, current_day)
 
     mix = _normalize_mix(state.doctrine_mix)
+    constraints = policing_constraints_for_ward(world, ward_id, day=current_day)
+    if constraints:
+        mix = dict(mix)
+        mix["TERROR"] = min(mix.get("TERROR", 0.0), constraints.get("terror_cap", 1.0))
+        mix["PROCEDURAL"] = max(mix.get("PROCEDURAL", 0.0), constraints.get("procedural_floor", 0.0))
+        mix = _normalize_mix(mix)
+        state.doctrine_mix = mix
+
     capacity = get_policing_capacity(world, ward_id, current_day)
 
     detection = capacity * _weighted_sum(mix, "detection") * (0.7 + 0.6 * _clamp01(state.informant_reliance))
