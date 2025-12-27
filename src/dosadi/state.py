@@ -35,6 +35,7 @@ from .runtime.war import RaidOutcome, RaidPlan, WarConfig
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
+from .runtime.mobility import MobilityConfig, MobilityEvent, PolityMobilityState
 from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, WardInstitutionState
 from .runtime.class_system import ClassConfig, WardClassState
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
@@ -1087,6 +1088,9 @@ class WorldState:
     shadow_accounts: dict[str, ShadowAccount] = field(default_factory=dict)
     corruption_by_ward: dict[str, CorruptionIndex] = field(default_factory=dict)
     shadow_events: list[dict[str, object]] = field(default_factory=list)
+    mobility_cfg: MobilityConfig = field(default_factory=MobilityConfig)
+    mobility_by_polity: dict[str, PolityMobilityState] = field(default_factory=dict)
+    mobility_events: list[MobilityEvent] = field(default_factory=list)
 
     def register_ward(self, ward: WardState) -> None:
         self.wards[ward.id] = ward
