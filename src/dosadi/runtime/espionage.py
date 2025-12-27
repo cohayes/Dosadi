@@ -6,6 +6,7 @@ from hashlib import sha256
 from typing import Any, Iterable
 
 from dosadi.runtime.telemetry import ensure_metrics, record_event
+from dosadi.runtime.policing import policing_effects
 
 
 @dataclass(slots=True)
@@ -333,7 +334,9 @@ def resolve_intel_ops(world: Any, *, day: int | None = None) -> list[IntelOpOutc
     to_remove: list[str] = []
     for op_id, plan in sorted(active.items()):
         coverage = _target_counterintel(world, plan.target_id)
+        effects = policing_effects(world, plan.target_id, day=world.day)
         detect_prob = min(1.0, cfg.base_detect_rate + coverage * cfg.counterintel_efficiency)
+        detect_prob = min(1.0, detect_prob * max(0.1, effects.detection_mult))
         success_prob = min(1.0, cfg.base_success_rate * (1.0 - coverage) + plan.intensity * 0.25)
         detect_roll = _stable_value(cfg, op_id, world.day, "detect")
         success_roll = _stable_value(cfg, op_id, world.day, "success")

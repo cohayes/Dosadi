@@ -15,6 +15,7 @@ from dosadi.runtime.crackdown import border_modifiers
 from dosadi.runtime.ledger import BLACK_MARKET, STATE_TREASURY, ensure_accounts, transfer
 from dosadi.runtime.telemetry import ensure_metrics, record_event
 from dosadi.world.factions import pseudo_rand01
+from dosadi.runtime.policing import policing_effects
 
 
 def _clamp01(value: float) -> float:
@@ -278,8 +279,11 @@ def process_customs_crossing(
     tariff = declared_value * tariff_rate
 
     escorted = bool(getattr(shipment, "escort_agent_ids", None))
+    effects = policing_effects(world, crossing.to_control, day=day)
+
     inspection_prob = _effective_inspection_prob(cfg, policy, phase_key, escorted=escorted, flags=flags)
     inspection_prob *= float(modifiers.get("inspection_mult", 1.0))
+    inspection_prob *= max(0.1, effects.detection_mult)
     inspection_prob = _clamp01(inspection_prob)
     inspect_roll = pseudo_rand01(
         "|".join(
@@ -303,6 +307,7 @@ def process_customs_crossing(
     if inspection:
         score = _contraband_score(shipment)
         detection_prob = _contraband_detection_prob(cfg, policy, phase_key, corruption=getattr(inst_state, "corruption", 0.0))
+        detection_prob *= max(0.1, effects.detection_mult)
         detection_prob *= float(modifiers.get("detection_mult", 1.0))
         detection_prob = _clamp01(detection_prob)
         detect_roll = pseudo_rand01(
