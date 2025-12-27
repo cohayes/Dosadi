@@ -39,6 +39,7 @@ from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, Ward
 from .runtime.class_system import ClassConfig, WardClassState
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
 from .runtime.media import MediaConfig, MediaMessage
+from .runtime.comms import CommsConfig, CommsModifiers, CommsNodeState
 from .runtime.espionage import EspionageConfig, IntelOpOutcome, IntelOpPlan
 from .runtime.culture_wars import CultureConfig, WardCultureState
 from .runtime.education import EducationConfig, WardEducationState
@@ -961,6 +962,10 @@ class WorldState:
     media_inbox_by_faction: Dict[str, deque[str]] = field(default_factory=dict)
     media_stats: Dict[str, float] = field(default_factory=dict)
     next_media_seq: int = 0
+    comms_cfg: CommsConfig = field(default_factory=CommsConfig)
+    comms_nodes: Dict[str, CommsNodeState] = field(default_factory=dict)
+    comms_mod_by_ward: Dict[str, CommsModifiers] = field(default_factory=dict)
+    comms_events: List[Dict[str, object]] = field(default_factory=list)
     delivery_due_queue: List[tuple[int, str]] = field(default_factory=list)
     carriers_available: int = 1
     next_carrier_seq: int = 0
