@@ -20,6 +20,7 @@ from dosadi.runtime.smuggling import save_smuggling_seed
 from dosadi.runtime.policing import save_policing_seed
 from dosadi.runtime.migration import save_migration_seed
 from dosadi.runtime.finance import save_finance_seed
+from dosadi.runtime.archives import save_archives_seed
 from dosadi.testing.kpis import collect_kpis
 
 
@@ -85,6 +86,8 @@ def save_seed(
     save_migration_seed(world, migration_path)
     policing_path = vault_dir / "seeds" / seed_id / "policing.json"
     save_policing_seed(world, policing_path)
+    archives_path = vault_dir / "seeds" / seed_id / "archives.json"
+    save_archives_seed(world, archives_path)
 
     entry = {
         "seed_id": seed_id,
@@ -117,6 +120,9 @@ def save_seed(
     if policing_path.exists():
         entry["policing_path"] = str(policing_path.relative_to(vault_dir))
         entry["policing_sha256"] = sha256(policing_path.read_bytes()).hexdigest()
+    if archives_path.exists():
+        entry["archives_path"] = str(archives_path.relative_to(vault_dir))
+        entry["archives_sha256"] = sha256(archives_path.read_bytes()).hexdigest()
     if meta:
         entry.update({k: v for k, v in meta.items() if k not in entry})
 
