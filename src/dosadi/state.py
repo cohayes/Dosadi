@@ -905,6 +905,11 @@ class WorldState:
     patronage: list[Patronage] = field(default_factory=list)
     finance_events: list[dict[str, object]] = field(default_factory=list)
     finance_last_run_day: int = -1
+    insurance_cfg: Any = None
+    insurers: dict[str, Any] = field(default_factory=dict)
+    premiums_by_corridor: dict[str, Any] = field(default_factory=dict)
+    insured_flows: dict[str, Any] = field(default_factory=dict)
+    insurance_events: list[dict[str, object]] = field(default_factory=list)
     inst_cfg: InstitutionConfig = field(default_factory=InstitutionConfig)
     inst_policy_by_ward: Dict[str, WardInstitutionPolicy] = field(default_factory=dict)
     inst_state_by_ward: Dict[str, WardInstitutionState] = field(default_factory=dict)
