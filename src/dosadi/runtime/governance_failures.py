@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any, Dict, Iterable, List, Mapping
 
+from dosadi.runtime.class_system import class_hardship, class_inequality
 from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.runtime.labor import labor_sector_multiplier
 from dosadi.world.incidents import Incident, IncidentKind, IncidentLedger
@@ -175,9 +176,11 @@ def _propensity_scores(world: Any, ward_id: str) -> dict[str, float]:
     discipline = inst["discipline"]
     anti_state = culture["anti_state"]
     queue_order = culture["queue_order"]
+    hardship = class_hardship(world, ward_id)
+    inequality = class_inequality(world, ward_id)
 
-    strike_score = max(0.0, shortage * 0.6 + unrest * 0.35 - mitigation * 0.4)
-    riot_score = max(0.0, unrest * 0.4 + anti_state * 0.25 + (1.0 - queue_order) * 0.2 - mitigation * 0.35)
+    strike_score = max(0.0, shortage * 0.6 + unrest * 0.35 + 0.25 * hardship + 0.15 * inequality - mitigation * 0.4)
+    riot_score = max(0.0, unrest * 0.35 + anti_state * 0.25 + (1.0 - queue_order) * 0.2 + 0.2 * hardship - mitigation * 0.35)
     secession_score = max(0.0, anti_state * 0.2 + (1.0 - legitimacy) * 0.4 + corruption * 0.1 - mitigation * 0.1)
     coup_plot_score = max(0.0, corruption * 0.3 + (1.0 - discipline) * 0.2 + (1.0 - inst.get("audit", 0.0)) * 0.2 - mitigation * 0.25)
 
