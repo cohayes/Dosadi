@@ -157,6 +157,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     from dosadi.runtime.staffing import StaffingConfig, StaffingState, run_staffing_policy
     from dosadi.runtime.law_enforcement import run_enforcement_for_day
     from dosadi.runtime.ledger import run_ledger_for_day
+    from dosadi.runtime.evidence_producers import run_evidence_update
     from dosadi.runtime.truth_regimes import run_truth_regimes_update
     from dosadi.runtime.finance import run_finance_week
     from dosadi.world.corridor_infrastructure import run_corridor_improvement_planner
@@ -187,6 +188,7 @@ def _run_daily_pipeline(world: Any, *, day: int) -> None:
     run_stockpile_policy_for_day(world, day=day)
     run_corridor_improvement_planner(world, day=day)
     run_incident_engine_for_day(world, day=day)
+    run_evidence_update(world, day=day)
     run_governance_failure_for_day(world, day=day)
     run_finance_week(world, day=day)
     run_ledger_for_day(world, day=day)
