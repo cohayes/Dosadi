@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, MutableMapping
 
+from dosadi.runtime.events import EventKind, WorldEvent, ensure_event_bus
 from dosadi.runtime.telemetry import ensure_metrics
 from dosadi.world.facilities import FacilityKind, ensure_facility_ledger
 from dosadi.world.incidents import IncidentLedger
@@ -84,9 +85,11 @@ SCHEMA = _schema()
 def ensure_kpi_store(world: Any) -> KPIStore:
     store = getattr(world, "kpis", None)
     if isinstance(store, KPIStore):
+        ensure_kpi_event_subscription(world, store)
         return store
     store = KPIStore()
     world.kpis = store
+    ensure_kpi_event_subscription(world, store)
     return store
 
 
@@ -105,6 +108,53 @@ def _set(store: KPIStore, name: str, value: float, tick: int) -> None:
     if key is None:
         return
     store.ensure_key(key, tick=tick).update(value, tick)
+
+
+@dataclass(slots=True)
+class KPIEventSubscriber:
+    store: KPIStore
+    deliveries_completed: float = 0.0
+    deliveries_failed: float = 0.0
+    depots_built: int = 0
+    corridors: int = 0
+    protocols_authored: int = 0
+    enforcement_actions: int = 0
+
+    def __call__(self, event: WorldEvent) -> None:
+        tick = event.tick
+        if event.kind == EventKind.TICK:
+            _set(self.store, "progress.tick", event.tick, tick)
+            _set(self.store, "progress.day", event.day, tick)
+            return
+        if event.kind == EventKind.DAY_ROLLOVER:
+            _set(self.store, "progress.day", event.day, tick)
+        if event.kind == EventKind.DEPOT_BUILT:
+            self.depots_built += 1
+            _set(self.store, "logistics.depots_built", self.depots_built, tick)
+        elif event.kind == EventKind.CORRIDOR_ESTABLISHED:
+            self.corridors += 1
+            _set(self.store, "logistics.corridors_established", self.corridors, tick)
+        elif event.kind == EventKind.DELIVERY_COMPLETED:
+            self.deliveries_completed += 1.0
+            self._update_deliveries(tick)
+        elif event.kind == EventKind.DELIVERY_FAILED:
+            self.deliveries_failed += 1.0
+            self._update_deliveries(tick)
+        elif event.kind == EventKind.PROTOCOL_AUTHORED:
+            self.protocols_authored += 1
+            _set(self.store, "governance.protocols_authored", self.protocols_authored, tick)
+        elif event.kind == EventKind.ENFORCEMENT_ACTION:
+            self.enforcement_actions += 1
+            _set(self.store, "governance.enforcement_actions", self.enforcement_actions, tick)
+        elif event.kind == EventKind.INCIDENT_RECORDED:
+            current = self.store.values.get("safety.incidents_total", KPIValue())
+            _set(self.store, "safety.incidents_total", getattr(current, "value", 0.0) + 1.0, tick)
+
+    def _update_deliveries(self, tick: int) -> None:
+        _set(self.store, "logistics.deliveries_completed", self.deliveries_completed, tick)
+        total = self.deliveries_completed + self.deliveries_failed
+        success_rate = 0.0 if total <= 0 else self.deliveries_completed / max(1.0, total)
+        _set(self.store, "logistics.delivery_success_rate", success_rate, tick)
 
 
 def _count_agents(world: Any) -> tuple[int, int]:
@@ -240,9 +290,21 @@ def _update_safety_kpis(world: Any, store: KPIStore, tick: int) -> None:
     deaths_total = _from_metrics(metrics, "deaths_total", 0.0)
     _set(store, "safety.injuries_total", injuries_total, tick)
     _set(store, "safety.deaths_total", deaths_total, tick)
-    total, alive = _count_agents(world)
-    ratio = 1.0 if total == 0 else alive / max(1, total)
-    _set(store, "safety.population_alive_ratio", ratio, tick)
+
+
+def ensure_kpi_event_subscription(world: Any, store: KPIStore | None = None) -> None:
+    bus = ensure_event_bus(world)
+    store = store if isinstance(store, KPIStore) else getattr(world, "kpis", None)
+    if not isinstance(store, KPIStore):
+        return
+    existing = getattr(world, "kpi_event_subscription_id", None)
+    subscriber = getattr(world, "_kpi_event_subscriber", None)
+    if isinstance(existing, int) and existing > 0 and isinstance(subscriber, KPIEventSubscriber):
+        return
+    handler = KPIEventSubscriber(store=store)
+    sub_id = bus.subscribe(handler)
+    world.kpi_event_subscription_id = sub_id
+    world._kpi_event_subscriber = handler
 
 
 def _update_economy_kpis(world: Any, store: KPIStore, tick: int) -> None:

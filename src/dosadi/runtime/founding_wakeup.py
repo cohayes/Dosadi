@@ -38,6 +38,8 @@ from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 from dosadi.runtime.protocols import update_protocol_adoption_metrics
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
+from dosadi.runtime.events import drain_event_bus, publish_tick_events
+from dosadi.runtime.kpis import ensure_kpi_event_subscription
 from dosadi.runtime.success_contracts import (
     ContractResult,
     evaluate_contract,
@@ -135,6 +137,9 @@ def step_world_once(world: WorldState) -> None:
     memory_config = getattr(world, "memory_config", None) or MemoryConfig()
     world.memory_config = memory_config
 
+    publish_tick_events(world, tick)
+    ensure_kpi_event_subscription(world)
+
     for agent_id in sorted(world.agents):
         agent = world.agents[agent_id]
         step_agent_sleep_wake(world, agent, tick, memory_config)
@@ -160,6 +165,7 @@ def step_world_once(world: WorldState) -> None:
     process_projects(world, tick=tick)
 
     world.tick += 1
+    drain_event_bus(world)
 
 
 def _phase_A_groups_and_council(world: WorldState, tick: int, rng: random.Random, cfg: RuntimeConfig) -> None:

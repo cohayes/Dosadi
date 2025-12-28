@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
 from dosadi.runtime.telemetry import EventRing, Metrics, ensure_event_ring, ensure_metrics
+from dosadi.runtime.events import ensure_event_bus
 from dosadi.runtime.evidence import ensure_evidence_buffer, get_top_evidence
 from dosadi.runtime.success_contracts import MilestoneStatus, ensure_contract_state
 from dosadi.world.construction import ProjectStatus
@@ -187,10 +188,12 @@ def _contract_panel(world) -> list[str]:
 @dataclass(slots=True)
 class DebugCockpitCLI:
     width: int = 100
+    event_kind_filter: set[str] | None = None
 
     def render(self, world, *, ward_id: str | None = None) -> str:
         telemetry = ensure_metrics(world)
         ring = ensure_event_ring(world)
+        bus = ensure_event_bus(world)
         lines: list[str] = []
 
         lines.append(_section("Executive Summary"))
@@ -223,11 +226,36 @@ class DebugCockpitCLI:
         lines.append(_section("Scenario contract"))
         lines.extend(_contract_panel(world))
 
+        if bus.config.enabled and bus.config.max_events > 0:
+            lines.append(_section("World events"))
+            lines.extend(self._event_bus_panel(bus))
+
         if ring.capacity > 0:
             lines.append(_section("Recent key events"))
             lines.extend(_recent_events(ring))
 
         return "\n".join(lines).strip() + "\n"
+
+    def _event_bus_panel(self, bus) -> list[str]:
+        start_seq = max(-1, bus.latest_seq() - 25)
+        events = bus.get_since(start_seq)
+        if self.event_kind_filter:
+            events = [evt for evt in events if evt.kind in self.event_kind_filter]
+        tail = events[-10:]
+        if not tail:
+            return ["(no events yet)"]
+
+        lines: list[str] = []
+        for evt in tail:
+            payload_keys = ", ".join(k for k, _ in evt.payload)
+            subj = evt.subject_id or "n/a"
+            lines.append(
+                _fmt_row(
+                    f"#{evt.seq} {evt.kind}",
+                    f"tick={evt.tick} day={evt.day} subject={subj} payload_keys=[{payload_keys}]",
+                )
+            )
+        return lines
 
     def _exec_summary(self, world, telemetry: Metrics) -> list[str]:
         phase_state = getattr(world, "phase_state", None)

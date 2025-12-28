@@ -24,6 +24,8 @@ from dosadi.state import WorldState
 from dosadi.runtime.proto_council import run_proto_council_tuning
 from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 from dosadi.runtime.agent_preferences import maybe_update_desired_work_type
+from dosadi.runtime.events import drain_event_bus, publish_tick_events
+from dosadi.runtime.kpis import ensure_kpi_event_subscription
 
 
 @dataclass(slots=True)
@@ -139,6 +141,9 @@ def step_wakeup_prime_once(world: WorldState) -> None:
     memory_config: MemoryConfig = getattr(world, "memory_config", None) or MemoryConfig()
     world.memory_config = memory_config
 
+    publish_tick_events(world, tick)
+    ensure_kpi_event_subscription(world)
+
     for agent in world.agents.values():
         step_agent_sleep_wake(world, agent, tick, memory_config)
         step_agent_memory_maintenance(world, agent, tick, memory_config)
@@ -153,6 +158,7 @@ def step_wakeup_prime_once(world: WorldState) -> None:
     _maybe_run_proto_council(world, tick)
 
     world.tick += 1
+    drain_event_bus(world)
 
 
 def run_wakeup_prime(
