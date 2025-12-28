@@ -86,6 +86,7 @@ from .runtime.trade_federations import (
     FederationConfig,
 )
 from .runtime.truth_regimes import IntegrityState, TruthConfig, TruthEvent
+from .runtime.success_contracts import ContractConfig, ContractRuntimeState, SuccessContract
 from .runtime.labor import BargainingEvent, LaborConfig, LaborOrgState
 from .agent.suits import SuitState
 from typing import TYPE_CHECKING
@@ -914,6 +915,9 @@ class WorldState:
     council_staffing_config: CouncilStaffingConfig = field(default_factory=CouncilStaffingConfig)
     ledger_cfg: LedgerConfig = field(default_factory=LedgerConfig)
     ledger_state: LedgerState = field(default_factory=LedgerState)
+    contract_cfg: ContractConfig = field(default_factory=ContractConfig)
+    active_contract: SuccessContract | None = None
+    contract_state: ContractRuntimeState = field(default_factory=ContractRuntimeState)
     finance_cfg: FinanceConfig = field(default_factory=FinanceConfig)
     loans: dict[str, Loan] = field(default_factory=dict)
     patronage: list[Patronage] = field(default_factory=list)

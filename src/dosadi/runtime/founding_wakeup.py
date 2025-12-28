@@ -38,11 +38,16 @@ from dosadi.runtime.protocol_authoring import maybe_author_movement_protocols
 from dosadi.runtime.protocols import update_protocol_adoption_metrics
 from dosadi.runtime.queue_episodes import QueueEpisodeEmitter
 from dosadi.runtime.queues import process_all_queues
+from dosadi.runtime.success_contracts import (
+    ContractResult,
+    evaluate_contract,
+)
 from dosadi.world.construction import process_projects
 from dosadi.runtime.work_details import ensure_scout_detail_for_gather_goal
 from dosadi.state import WorldState
 from dosadi.world.scenarios.founding_wakeup import generate_founding_wakeup_mvp
 from dosadi.systems.protocols import ProtocolStatus, ProtocolType
+from dosadi.scenarios.founding_wakeup.contracts import build_founding_wakeup_contract
 
 
 @dataclass
@@ -84,6 +89,7 @@ class FoundingWakeupReport:
     metrics: Dict[str, float]
     summary: Dict[str, object] = field(default_factory=dict)
     success: Dict[str, bool] = field(default_factory=dict)
+    contract_result: ContractResult | None = None
 
 
 def _step_agent_movement(world: WorldState) -> None:
@@ -479,12 +485,22 @@ def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> Found
     world.runtime_config = runtime_cfg
     world.rng.seed(seed)
 
+    contract_bundle = build_founding_wakeup_contract(scenario_id="founding_wakeup_mvp", max_ticks=max_ticks)
+    world.contract_cfg = contract_bundle.config
+    world.active_contract = contract_bundle.contract
+
+    contract_result: ContractResult | None = None
+
     baseline_snapshot: HazardSnapshot | None = None
     final_snapshot: HazardSnapshot | None = None
 
     while world.tick < runtime_cfg.max_ticks:
         step_world_once(world)
         current_tick = world.tick
+
+        contract_result = contract_result or evaluate_contract(world, current_tick)
+        if contract_result is not None and contract_result.ended_reason in {"SUCCESS", "FAILURE"}:
+            break
 
         if baseline_snapshot is None:
             registry = getattr(world, "protocols", None)
@@ -506,11 +522,22 @@ def run_founding_wakeup_mvp(num_agents: int, max_ticks: int, seed: int) -> Found
         hazard_rate_by_edge=_compute_hazard_rates_for_target_edges(world),
     )
 
+    if contract_result is None:
+        contract_result = evaluate_contract(world, world.tick) or ContractResult(
+            contract_id=world.active_contract.contract_id if world.active_contract else "founding_wakeup_contract_v1",
+            scenario_id="founding_wakeup_mvp",
+            tick_end=world.tick,
+            ended_reason="TIMEOUT",
+            ended_detail=f"timeout at tick {world.tick}",
+            milestones=list(getattr(world.active_contract, "milestones", [])),
+        )
+
     report = build_founding_wakeup_report(
         world=world,
         cfg=runtime_cfg,
         baseline_snapshot=baseline_snapshot,
         final_snapshot=final_snapshot,
+        contract_result=contract_result,
     )
     return report
 
@@ -520,6 +547,7 @@ def build_founding_wakeup_report(
     cfg: Optional[RuntimeConfig] = None,
     baseline_snapshot: HazardSnapshot | None = None,
     final_snapshot: HazardSnapshot | None = None,
+    contract_result: ContractResult | None = None,
 ) -> FoundingWakeupReport:
     cfg = cfg or getattr(world, "runtime_config", None) or RuntimeConfig()
     summary = {
@@ -528,6 +556,9 @@ def build_founding_wakeup_report(
         "groups": len(world.groups),
         "protocols": len(world.protocols.protocols_by_id),
     }
+    if contract_result is not None:
+        summary["ended_reason"] = contract_result.ended_reason
+        summary["ended_detail"] = contract_result.ended_detail
     success = evaluate_founding_wakeup_success(
         world=world,
         baseline_snapshot=baseline_snapshot,
@@ -548,7 +579,13 @@ def build_founding_wakeup_report(
     }
     flags["scenario_success"] = "OK" if summary["scenario_success"] else "MISSING"
     summary["flags"] = flags
-    return FoundingWakeupReport(world=world, metrics=dict(world.metrics), summary=summary, success=success)
+    return FoundingWakeupReport(
+        world=world,
+        metrics=dict(world.metrics),
+        summary=summary,
+        success=success,
+        contract_result=contract_result,
+    )
 
 
 @dataclass(slots=True)

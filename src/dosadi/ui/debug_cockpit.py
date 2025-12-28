@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
 from dosadi.runtime.telemetry import EventRing, Metrics, ensure_event_ring, ensure_metrics
+from dosadi.runtime.success_contracts import MilestoneStatus, ensure_contract_state
 from dosadi.world.construction import ProjectStatus
 from dosadi.world.facilities import FacilityKind, ensure_facility_ledger
 from dosadi.world.logistics import DeliveryStatus, ensure_logistics
@@ -138,6 +139,32 @@ def _planner_panel(world, telemetry: Metrics) -> list[str]:
     return lines
 
 
+def _contract_panel(world) -> list[str]:
+    contract = getattr(world, "active_contract", None)
+    state = ensure_contract_state(world)
+    if contract is None:
+        return ["no active contract"]
+    lines = [
+        _fmt_row("contract", getattr(contract, "contract_id", "?")),
+        _fmt_row("scenario", getattr(contract, "scenario_id", "?")),
+    ]
+    if state.result is not None:
+        lines.append(_fmt_row("ended", f"{state.result.ended_reason} @ {state.result.tick_end}"))
+        if getattr(state.result, "ended_detail", ""):
+            lines.append(_fmt_row("detail", state.result.ended_detail))
+    if state.last_evaluation_tick >= 0:
+        lines.append(_fmt_row("last evaluation", str(state.last_evaluation_tick)))
+    if state.last_progress_signature is not None:
+        lines.append(_fmt_row("progress signature", str(state.last_progress_signature)))
+    lines.append("milestones:")
+    milestones = sorted(getattr(contract, "milestones", []), key=lambda m: (getattr(m, "priority", 0), getattr(m, "milestone_id", "")))
+    for milestone in milestones:
+        status_value = milestone.status.value if isinstance(milestone.status, MilestoneStatus) else str(getattr(milestone, "status", ""))
+        tick_str = f" @ {milestone.achieved_tick}" if getattr(milestone, "achieved_tick", None) is not None else ""
+        lines.append(f" • {getattr(milestone, 'milestone_id', '?')}: {status_value}{tick_str}")
+    return lines
+
+
 @dataclass(slots=True)
 class DebugCockpitCLI:
     width: int = 100
@@ -170,6 +197,9 @@ class DebugCockpitCLI:
 
         lines.append(_section("Planner motives"))
         lines.extend(_planner_panel(world, telemetry))
+
+        lines.append(_section("Scenario contract"))
+        lines.extend(_contract_panel(world))
 
         if ring.capacity > 0:
             lines.append(_section("Recent key events"))
