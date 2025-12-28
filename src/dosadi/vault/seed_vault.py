@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
@@ -21,6 +22,7 @@ from dosadi.runtime.policing import save_policing_seed
 from dosadi.runtime.migration import save_migration_seed
 from dosadi.runtime.finance import save_finance_seed
 from dosadi.runtime.archives import save_archives_seed
+from dosadi.runtime.scorecards import compute_scorecard
 from dosadi.testing.kpis import collect_kpis
 
 
@@ -89,6 +91,7 @@ def save_seed(
     archives_path = vault_dir / "seeds" / seed_id / "archives.json"
     save_archives_seed(world, archives_path)
 
+    scorecard = compute_scorecard(world)
     entry = {
         "seed_id": seed_id,
         "scenario_id": scenario_id,
@@ -98,6 +101,7 @@ def save_seed(
         "snapshot_path": str(snapshot_path.relative_to(vault_dir)),
         "snapshot_sha256": snapshot_sha,
         "kpis": collect_kpis(world),
+        "scorecard": asdict(scorecard),
     }
     if inst_path.exists():
         entry["institutions_path"] = str(inst_path.relative_to(vault_dir))

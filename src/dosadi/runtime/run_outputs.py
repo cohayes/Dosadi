@@ -90,6 +90,7 @@ def append_timeline_row(
     world_signature: str | None = None,
     year: int | None = None,
     write_csv: bool = True,
+    scorecard: Mapping[str, Any] | None = None,
 ) -> Mapping[str, Any]:
     """Append a milestone entry to ``timeline.jsonl`` (and CSV).
 
@@ -113,6 +114,8 @@ def append_timeline_row(
         "world_signature": world_signature,
         "kpis": dict(kpis),
     }
+    if scorecard is not None:
+        row["scorecard"] = dict(scorecard)
 
     timeline_path = run_dir / "timeline.jsonl"
     with open(timeline_path, "a", encoding="utf-8") as fp:
@@ -132,13 +135,20 @@ def append_timeline_row(
             "snapshot_sha256",
             "world_signature",
             "kpis",
+            "scorecard",
         ]
         needs_header = not csv_path.exists()
         with open(csv_path, "a", encoding="utf-8", newline="") as fp:
             writer = csv.DictWriter(fp, fieldnames=fieldnames)
             if needs_header:
                 writer.writeheader()
-            writer.writerow({**{k: row[k] for k in fieldnames if k != "kpis"}, "kpis": json.dumps(row["kpis"], sort_keys=True)})
+            writer.writerow(
+                {
+                    **{k: row[k] for k in fieldnames if k not in {"kpis", "scorecard"}},
+                    "kpis": json.dumps(row["kpis"], sort_keys=True),
+                    "scorecard": json.dumps(row.get("scorecard", {}), sort_keys=True),
+                }
+            )
 
     return row
 

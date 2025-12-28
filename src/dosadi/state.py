@@ -35,6 +35,7 @@ from .runtime.war import RaidOutcome, RaidPlan, WarConfig
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
+from .runtime.kpis import KPIStore
 from .runtime.mobility import MobilityConfig, MobilityEvent, PolityMobilityState
 from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, WardInstitutionState
 from .runtime.class_system import ClassConfig, WardClassState
@@ -906,6 +907,7 @@ class WorldState:
     facility_belief_summaries: Dict[str, FacilityBeliefSummary] = field(default_factory=dict)
     facility_protocol_tuning: Dict[str, FacilityProtocolTuning] = field(default_factory=dict)
     metrics: Metrics = field(default_factory=Metrics)
+    kpis: KPIStore = field(default_factory=KPIStore)
     event_ring: EventRing = field(default_factory=EventRing)
     treaty_cfg: Any = None
     treaties: Dict[str, Any] = field(default_factory=dict)
