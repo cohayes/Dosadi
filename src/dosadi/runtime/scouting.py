@@ -1,11 +1,9 @@
 from __future__ import annotations
-
-import random
 from dataclasses import dataclass
-from hashlib import sha256
 from typing import Iterable, Sequence
 
 from dosadi.agents.core import AgentState
+from dosadi.runtime.rng_service import ensure_rng_service, RNGService
 from dosadi.runtime.scouting_config import ScoutConfig
 from dosadi.world.discovery import DiscoveryConfig, expand_frontier
 from dosadi.world.survey_map import SurveyEdge, SurveyMap, SurveyNode, edge_key
@@ -26,10 +24,10 @@ class TravelOutcome:
     discovery: dict[str, object] | None
 
 
-def rng_for(mission_id: str, day: int, world_seed: int) -> random.Random:
-    digest = sha256(f"{world_seed}:{mission_id}:{day}".encode("utf-8")).digest()
-    seed = int.from_bytes(digest[:8], "big")
-    return random.Random(seed)
+def rng_for(mission_id: str, day: int, rng_service: RNGService) -> RNGService:
+    """Backwards compatible shim returning the RNG service itself."""
+
+    return rng_service
 
 
 def _day_to_tick(world, day: int) -> int:
@@ -70,7 +68,9 @@ def _derive_node_id(mission_id: str, day: int, survey: SurveyMap) -> str:
         salt += 1
 
 
-def _choose_neighbor(current_node_id: str, survey: SurveyMap, rng: random.Random) -> str | None:
+def _choose_neighbor(
+    current_node_id: str, survey: SurveyMap, rng_service: RNGService, *, scope: dict[str, object]
+) -> str | None:
     neighbors: list[str] = []
     for key, edge in survey.edges.items():
         if current_node_id not in key:
@@ -82,27 +82,7 @@ def _choose_neighbor(current_node_id: str, survey: SurveyMap, rng: random.Random
     if not neighbors:
         return None
     neighbors.sort()
-    return neighbors[int(rng.random() * len(neighbors))]
-
-
-def _create_edge(
-    current_node_id: str,
-    new_node_id: str,
-    rng: random.Random,
-    *,
-    tick: int,
-    cfg: ScoutConfig,
-) -> SurveyEdge:
-    distance = rng.uniform(50.0, 500.0)
-    return SurveyEdge(
-        a=current_node_id,
-        b=new_node_id,
-        distance_m=distance,
-        travel_cost=distance,
-        hazard=0.0,
-        confidence=cfg.confidence_new_node,
-        last_seen_tick=tick,
-    )
+    return rng_service.choice("scout:neighbor", neighbors, scope=scope)
 
 
 def _advance_mission(
@@ -112,7 +92,7 @@ def _advance_mission(
     *,
     day: int,
     cfg: ScoutConfig,
-    rng: random.Random,
+    rng_service: RNGService,
     discovery_cfg: DiscoveryConfig,
 ) -> TravelOutcome:
     tick = _day_to_tick(world, day)
@@ -120,6 +100,7 @@ def _advance_mission(
     created_node: SurveyNode | None = None
     created_edge: SurveyEdge | None = None
     next_node_id = mission.current_node_id
+    base_scope = {"mission_id": mission.mission_id, "day": day}
 
     if discovery_cfg.enabled:
         node_budget = min(mission.discovery_budget_nodes, discovery_cfg.max_new_nodes_per_day)
@@ -151,8 +132,9 @@ def _advance_mission(
             if created_edge:
                 mission.discovered_edges.append(created_edge.key)
     else:
-        neighbor = _choose_neighbor(mission.current_node_id, survey, rng)
-        if neighbor and rng.random() < cfg.new_edge_chance:
+        neighbor = _choose_neighbor(mission.current_node_id, survey, rng_service, scope=base_scope)
+        edge_roll = rng_service.rand("scout:edge_roll", scope=base_scope)
+        if neighbor and edge_roll < cfg.new_edge_chance:
             next_node_id = neighbor
         else:
             next_node_id = mission.current_node_id
@@ -178,6 +160,7 @@ def maybe_create_scout_missions(world, cfg: ScoutConfig | None = None) -> list[s
     world.scout_cfg = cfg
     discovery_cfg: DiscoveryConfig = getattr(world, "discovery_cfg", None) or DiscoveryConfig()
     world.discovery_cfg = discovery_cfg
+    rng_service = ensure_rng_service(world)
     ledger = ensure_scout_missions(world)
     survey: SurveyMap = getattr(world, "survey_map", SurveyMap())
     day = getattr(world, "day", 0)
@@ -202,7 +185,7 @@ def maybe_create_scout_missions(world, cfg: ScoutConfig | None = None) -> list[s
 
         world.next_mission_seq = getattr(world, "next_mission_seq", 0) + 1
         mission_id = f"scout:{day}:{world.next_mission_seq}"
-        heading = rng_for(mission_id, day, getattr(world, "seed", 0)).uniform(0.0, 360.0)
+        heading = rng_service.rand("scout:mission_heading", scope={"mission_id": mission_id, "day": day}) * 360.0
 
         mission = ScoutMission(
             mission_id=mission_id,
@@ -256,6 +239,7 @@ def step_scout_missions_for_day(world, day: int | None = None, cfg: ScoutConfig 
     world.scout_cfg = cfg
     discovery_cfg: DiscoveryConfig = getattr(world, "discovery_cfg", None) or DiscoveryConfig()
     world.discovery_cfg = discovery_cfg
+    rng_service = ensure_rng_service(world)
     ledger = ensure_scout_missions(world)
     survey: SurveyMap = getattr(world, "survey_map", SurveyMap())
     day = getattr(world, "day", 0) if day is None else day
@@ -270,14 +254,14 @@ def step_scout_missions_for_day(world, day: int | None = None, cfg: ScoutConfig 
         mission.days_elapsed += 1
         mission.last_step_day = day
 
-        rng = rng_for(mission.mission_id, day, getattr(world, "seed", 0))
+        mission_scope = {"mission_id": mission.mission_id, "day": day, "step": mission.days_elapsed}
         outcome = _advance_mission(
             world,
             mission,
             survey,
             day=day,
             cfg=cfg,
-            rng=rng,
+            rng_service=rng_service,
             discovery_cfg=discovery_cfg,
         )
         mission.current_node_id = outcome.next_node_id
@@ -285,7 +269,8 @@ def step_scout_missions_for_day(world, day: int | None = None, cfg: ScoutConfig 
             mission.discoveries.append(dict(outcome.discovery))
 
         fail_probability = _fail_probability(mission, survey, cfg)
-        if rng.random() < fail_probability:
+        fail_roll = rng_service.rand("scout:mission_fail", scope=mission_scope)
+        if fail_roll < fail_probability:
             _finalize_mission(ledger, mission, status=MissionStatus.FAILED, day=day, world=world)
             continue
 

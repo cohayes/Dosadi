@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import heapq
-import random
-from hashlib import sha256
 from typing import Any, Dict, Iterable, List, MutableMapping
 
 from dosadi.world.facilities import FacilityLedger, ensure_facility_ledger
@@ -12,6 +10,7 @@ from dosadi.world.logistics import DeliveryStatus, LogisticsLedger, release_cour
 from dosadi.world.phases import WorldPhase
 from dosadi.world.events import EventKind as WorldEventKind, WorldEvent, WorldEventLog
 from dosadi.runtime.events import EventKind, ensure_event_bus
+from dosadi.runtime.rng_service import ensure_rng_service, RNGService
 
 
 @dataclass(slots=True)
@@ -34,15 +33,6 @@ class IncidentConfig:
 class IncidentState:
     last_run_day: int = -1
     next_incident_seq: int = 0
-
-
-def _seed_int(*parts: object) -> int:
-    blob = ":".join(str(part) for part in parts)
-    return int(sha256(blob.encode("utf-8")).hexdigest(), 16) % (2**32)
-
-
-def _derived_rng(*parts: object) -> random.Random:
-    return random.Random(_seed_int(*parts))
 
 
 def _ensure_ledger(world: Any) -> IncidentLedger:
@@ -95,13 +85,20 @@ def _ward_for_location(world: Any, location_id: str | None) -> str | None:
     return str(ward_id) if ward_id else None
 
 
-def _bounded_candidates(candidates: Iterable[str], max_count: int, seed: int) -> List[str]:
+def _bounded_candidates(
+    candidates: Iterable[str],
+    max_count: int,
+    rng_service: RNGService,
+    *,
+    stream_key: str,
+    scope: Dict[str, object],
+) -> List[str]:
     ids = list(sorted(set(candidates)))
     if not ids:
         return []
-    rng = random.Random(seed)
     if len(ids) <= max_count:
         return ids
+    rng = rng_service.stream(stream_key, scope=scope)
     return rng.sample(ids, max_count)
 
 
@@ -202,9 +199,15 @@ def _schedule_delivery_incidents(
         if logistics.deliveries.get(delivery_id, None)
         and logistics.deliveries[delivery_id].status in active_status
     ]
-    base_seed = getattr(world, "seed", 0)
+    rng_service = ensure_rng_service(world)
     bound = max(1, cfg.max_incidents_per_day * 10)
-    sampled = _bounded_candidates(candidates, bound, _seed_int(base_seed, day, "deliveries"))
+    sampled = _bounded_candidates(
+        candidates,
+        bound,
+        rng_service,
+        stream_key="incident:deliveries:sample",
+        scope={"day": day},
+    )
     scheduled = 0
 
     for delivery_id in sampled:
@@ -214,12 +217,12 @@ def _schedule_delivery_incidents(
         if delivery is None:
             continue
 
-        per_target_seed = _seed_int(base_seed, day, delivery_id)
-        rng = _derived_rng(per_target_seed, "incident-engine", "delivery")
-        severity = rng.random()
+        scope = {"day": day, "delivery_id": delivery_id}
+        severity = rng_service.rand("incident:delivery:severity", scope=scope)
 
         if phase == WorldPhase.PHASE2:
-            if rng.random() < cfg.p_delivery_delay_p2:
+            delay_roll = rng_service.rand("incident:delivery:delay", scope=scope)
+            if delay_roll < cfg.p_delivery_delay_p2:
                 state.next_incident_seq += 1
                 inc = Incident(
                     incident_id=_incident_id(day, seq=state.next_incident_seq),
@@ -240,7 +243,8 @@ def _schedule_delivery_incidents(
             WorldPhase.PHASE2: cfg.p_delivery_loss_p2,
         }.get(phase, cfg.p_delivery_loss_p0)
 
-        if rng.random() < prob_loss:
+        loss_roll = rng_service.rand("incident:delivery:loss", scope=scope)
+        if loss_roll < prob_loss:
             state.next_incident_seq += 1
             inc = Incident(
                 incident_id=_incident_id(day, seq=state.next_incident_seq),
@@ -272,17 +276,23 @@ def _schedule_facility_incidents(
 
     facilities: FacilityLedger = ensure_facility_ledger(world)
     candidates = [fid for fid, fac in facilities.items() if getattr(fac, "status", "ACTIVE") == "ACTIVE"]
-    base_seed = getattr(world, "seed", 0)
+    rng_service = ensure_rng_service(world)
     bound = max(1, cfg.max_incidents_per_day * 10)
-    sampled = _bounded_candidates(candidates, bound, _seed_int(base_seed, day, "facilities"))
+    sampled = _bounded_candidates(
+        candidates,
+        bound,
+        rng_service,
+        stream_key="incident:facilities:sample",
+        scope={"day": day},
+    )
     scheduled = 0
 
     cultures = getattr(world, "culture_by_ward", {}) or {}
     for facility_id in sampled:
         if scheduled >= remaining_budget:
             break
-        rng = _derived_rng(base_seed, day, facility_id, "facility")
-        severity = rng.random()
+        scope = {"day": day, "facility_id": facility_id}
+        severity = rng_service.rand("incident:facility:severity", scope=scope)
         facility = facilities.get(facility_id)
         ward_id = _ward_for_location(world, getattr(facility, "site_node_id", None)) if facility is not None else None
         prob = cfg.p_facility_downtime_p2
@@ -295,7 +305,8 @@ def _schedule_facility_incidents(
                 anti_raider = float(norms.get("norm:anti_raider", 0.0))
                 bias = 1.0 + 0.6 * anti_state + 0.3 * vigilante - 0.25 * anti_raider
                 prob = max(0.0, min(cfg.p_facility_downtime_p2 * max(0.2, bias), cfg.p_facility_downtime_p2 * 1.8))
-        if rng.random() >= prob:
+        downtime_roll = rng_service.rand("incident:facility:downtime", scope=scope)
+        if downtime_roll >= prob:
             continue
 
         state.next_incident_seq += 1
