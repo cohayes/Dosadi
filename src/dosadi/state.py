@@ -35,6 +35,7 @@ from .runtime.war import RaidOutcome, RaidPlan, WarConfig
 from .runtime.incident_engine import IncidentConfig, IncidentState
 from .runtime.scouting_config import ScoutConfig
 from .runtime.telemetry import DebugConfig, EventRing, Metrics
+from .runtime.rng_service import RNGConfig, RNGService
 from .runtime.events import EventBus, EventBusConfig
 from .runtime.kpis import KPIStore
 from .runtime.evidence import EvidenceBuffer, EvidenceConfig
@@ -864,6 +865,8 @@ class WorldState:
     day: int = 0
     seed: int = 0
     rng: random.Random = field(default_factory=random.Random)
+    rng_service_cfg: RNGConfig = field(default_factory=RNGConfig)
+    rng_service: RNGService | None = None
     time_min: int = 0
     config: WorldConfig = field(default_factory=WorldConfig)
     wards: MutableMapping[str, WardState] = field(default_factory=dict)
