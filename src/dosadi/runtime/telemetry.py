@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 import json
 from typing import Any, Iterable, Iterator, Mapping, MutableMapping
 
+from .events import EventKind, ensure_event_bus, tick_to_day
+
 
 @dataclass(slots=True)
 class TopKEntry:
@@ -152,12 +154,25 @@ def ensure_event_ring(world: Any) -> EventRing:
 
 
 def record_event(world: Any, event: Mapping[str, object]) -> None:
+    payload = dict(event)
+    tick = int(payload.get("tick", getattr(world, "tick", 0) or 0))
+    if "day" not in payload:
+        payload["day"] = tick_to_day(world, tick)
+    kind = str(payload.get("type") or payload.get("kind") or EventKind.TICK)
+    subject_id = payload.get("subject_id") or payload.get("target_id")
+    bus_payload = {k: v for k, v in payload.items() if k not in {"type", "kind", "day", "tick"}}
+    bus = ensure_event_bus(world)
+    bus.publish(
+        kind=kind,
+        tick=tick,
+        day=int(payload.get("day", 0)),
+        subject_id=str(subject_id) if subject_id is not None else None,
+        payload=bus_payload,
+    )
+
     ring = ensure_event_ring(world)
     if ring.capacity <= 0:
         return
-    payload = dict(event)
-    if "day" not in payload:
-        payload["day"] = getattr(world, "day", 0)
     ring.append(payload)
 
 

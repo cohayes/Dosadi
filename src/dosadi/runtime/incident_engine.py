@@ -10,7 +10,8 @@ from dosadi.world.facilities import FacilityLedger, ensure_facility_ledger
 from dosadi.world.incidents import Incident, IncidentKind, IncidentLedger
 from dosadi.world.logistics import DeliveryStatus, LogisticsLedger, release_courier
 from dosadi.world.phases import WorldPhase
-from dosadi.world.events import EventKind, WorldEvent, WorldEventLog
+from dosadi.world.events import EventKind as WorldEventKind, WorldEvent, WorldEventLog
+from dosadi.runtime.events import EventKind, ensure_event_bus
 
 
 @dataclass(slots=True)
@@ -119,7 +120,7 @@ def _emit_event(world: Any, incident: Incident) -> None:
     event = WorldEvent(
         event_id="",
         day=getattr(world, "day", 0),
-        kind=EventKind.INCIDENT,
+        kind=WorldEventKind.INCIDENT,
         subject_kind=incident.target_kind,
         subject_id=incident.target_id,
         severity=incident.severity,
@@ -147,8 +148,22 @@ def _emit_event(world: Any, incident: Incident) -> None:
         )
         world.events = legacy_events
 
+    bus = ensure_event_bus(world)
+    bus.publish(
+        kind=EventKind.INCIDENT_RECORDED,
+        tick=getattr(world, "tick", 0),
+        day=getattr(world, "day", 0),
+        subject_id=incident.target_id,
+        ward_id=_ward_for_location(world, getattr(incident, "target_id", None)),
+        payload={
+            "incident_id": incident.incident_id,
+            "incident_kind": incident.kind.value,
+            "severity": incident.severity,
+        },
+    )
 
-def _emit_facility_state_event(world: Any, *, facility_id: str, kind: EventKind, payload: Dict[str, object]) -> None:
+
+def _emit_facility_state_event(world: Any, *, facility_id: str, kind: WorldEventKind, payload: Dict[str, object]) -> None:
     log = _ensure_event_log(world)
     event = WorldEvent(
         event_id="",
@@ -376,7 +391,7 @@ def _resolve_facility_downtime(
     _emit_facility_state_event(
         world,
         facility_id=facility.facility_id,
-        kind=EventKind.FACILITY_DOWNTIME,
+        kind=WorldEventKind.FACILITY_DOWNTIME,
         payload={
             "incident_id": incident.incident_id,
             "downtime_days": downtime_days,
@@ -404,7 +419,7 @@ def _reactivate_facilities(world: Any, *, day: int) -> None:
             _emit_facility_state_event(
                 world,
                 facility_id=facility.facility_id,
-                kind=EventKind.FACILITY_REACTIVATED,
+                kind=WorldEventKind.FACILITY_REACTIVATED,
                 payload={"target_id": facility.facility_id, "severity": 0.0},
             )
 
