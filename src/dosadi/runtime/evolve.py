@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Sequence
@@ -10,13 +10,14 @@ from dosadi.playbook.scenario_runner import FoundingWakeupScenarioConfig
 
 from dosadi.runtime.founding_wakeup import step_world_once
 from dosadi.runtime.run_outputs import append_timeline_row, generate_run_id, prepare_run_directory
+from dosadi.runtime.scorecards import compute_scorecard
+from dosadi.runtime.kpis import flatten_kpis_for_report
 from dosadi.runtime.snapshot import load_snapshot, restore_world, world_signature
 from dosadi.runtime.timewarp import DEFAULT_TICKS_PER_DAY, TimewarpConfig, step_day
 from dosadi.runtime.wakeup_prime import step_wakeup_prime_once
 from dosadi.vault.seed_vault import save_seed
 from dosadi.world.scenarios.founding_wakeup import generate_founding_wakeup_mvp
 from dosadi.scenarios.wakeup_prime import WakeupPrimeScenarioConfig, generate_wakeup_scenario_prime
-from dosadi.testing.kpis import collect_kpis
 
 
 @dataclass(slots=True)
@@ -122,7 +123,9 @@ def _record_milestone(
     )
 
     signature = world_signature(world) if cfg.signature_enabled else None
-    kpis = collect_kpis(world) if cfg.kpi_enabled else {}
+    scorecard = compute_scorecard(world) if cfg.kpi_enabled else None
+    kpis = flatten_kpis_for_report(getattr(world, "kpis", None)) if cfg.kpi_enabled else {}
+    scorecard_payload = asdict(scorecard) if scorecard is not None else None
     snapshot_path = Path(cfg.vault_dir, snapshot_entry.get("snapshot_path", ""))
 
     row = append_timeline_row(
@@ -138,8 +141,11 @@ def _record_milestone(
         kpis=kpis,
         world_signature=signature,
         year=day // 365,
+        scorecard=scorecard_payload,
     )
     row["seed_id"] = seed_id
+    if scorecard_payload is not None:
+        row["scorecard"] = scorecard_payload
     return row
 
 
@@ -250,6 +256,7 @@ def _evolve_world(
             )
         )
 
+    final_scorecard = milestones[-1].get("scorecard") if milestones else None
     return {
         "run_id": run_id,
         "scenario_id": scenario_id,
@@ -260,6 +267,7 @@ def _evolve_world(
         "run_dir": run_dir,
         "milestones": milestones,
         "vault_dir": cfg.vault_dir,
+        "scorecard": final_scorecard,
     }
 
 
