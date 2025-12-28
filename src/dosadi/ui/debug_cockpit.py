@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
 from dosadi.runtime.telemetry import EventRing, Metrics, ensure_event_ring, ensure_metrics
+from dosadi.runtime.evidence import ensure_evidence_buffer, get_top_evidence
 from dosadi.runtime.success_contracts import MilestoneStatus, ensure_contract_state
 from dosadi.world.construction import ProjectStatus
 from dosadi.world.facilities import FacilityKind, ensure_facility_ledger
@@ -46,6 +47,24 @@ def _shortages(telemetry: Metrics) -> list[str]:
 def _extraction_sites(telemetry: Metrics) -> list[str]:
     bucket = telemetry.topk.get("extraction.top_sites")
     return _topk_lines(bucket, prefix="•")
+
+
+def _evidence_panel(world, *, polity_id: str | None = None) -> list[str]:
+    buffer = ensure_evidence_buffer(world, polity_id or getattr(world, "default_polity_id", "polity:default"))
+    if not buffer.items:
+        return ["evidence (none)"]
+    lines: list[str] = []
+    for item in get_top_evidence(buffer, "evidence.", k=10):
+        payload = item.payload or {}
+        detail = ""
+        if "items" in payload and isinstance(payload.get("items"), list):
+            detail = f"items={len(payload['items'])}"
+        elif payload:
+            detail = ", ".join(f"{k}={payload[k]}" for k in sorted(payload))
+        lines.append(
+            f"• {item.key} score={item.score:.2f} conf={item.confidence:.2f} {detail}".rstrip()
+        )
+    return lines or ["evidence (none)"]
 
 
 def _ledger_panel(telemetry: Metrics) -> list[str]:
@@ -182,6 +201,9 @@ class DebugCockpitCLI:
 
         lines.append(_section("What is scarce?"))
         lines.extend(_shortages(telemetry))
+
+        lines.append(_section("Governance evidence"))
+        lines.extend(_evidence_panel(world))
 
         lines.append(_section("What is producing value?"))
         lines.extend(_extraction_sites(telemetry))

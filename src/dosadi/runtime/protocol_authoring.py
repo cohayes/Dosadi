@@ -7,6 +7,7 @@ from typing import Iterable, List
 from dosadi.agents.core import AgentState, Goal, GoalHorizon, GoalOrigin, GoalStatus, GoalType, make_goal_id
 from dosadi.state import WorldState
 from dosadi.systems.protocols import ProtocolRegistry, activate_protocol, create_movement_protocol_from_goal
+from dosadi.runtime.evidence_producers import dangerous_edges_from_evidence
 
 
 def handle_protocol_authoring(
@@ -38,6 +39,9 @@ def maybe_author_movement_protocols(
     """
 
     dangerous_edge_ids = list(dangerous_edge_ids)
+    if not dangerous_edge_ids:
+        polity_id = getattr(world, "default_polity_id", "polity:default")
+        dangerous_edge_ids = dangerous_edges_from_evidence(world, polity_id)
     if not dangerous_edge_ids:
         return False
 
