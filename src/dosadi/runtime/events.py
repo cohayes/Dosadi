@@ -29,6 +29,13 @@ class EventKind:
     CONSTRUCTION_PROJECT_STARTED = "CONSTRUCTION_PROJECT_STARTED"
     CONSTRUCTION_PROJECT_COMPLETED = "CONSTRUCTION_PROJECT_COMPLETED"
     SCOUT_MISSION_COMPLETED = "SCOUT_MISSION_COMPLETED"
+    WATER_ALLOCATION_SET = "water.allocation.set"
+    WATER_ENTITLEMENT_ISSUED = "water.entitlement.issued"
+    WATER_PERMIT_VERIFIED = "water.permit.verified"
+    WATER_UNITS_DISPENSED = "water.units.dispensed"
+    WATER_LEDGER_RECONCILED = "water.ledger.reconciled"
+    WATER_AUDIT_FINDINGS = "water.audit.findings"
+    WATER_SANCTION_APPLIED = "water.sanction.applied"
 
 
 @dataclass(frozen=True, slots=True)
