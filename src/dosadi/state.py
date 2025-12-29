@@ -73,6 +73,7 @@ from .world.construction import ProjectLedger
 from .world.expansion_planner import ExpansionPlannerConfig, ExpansionPlannerState
 from .world.materials import InventoryRegistry
 from .world.water import WellState
+from .world.water_access import WaterAccessConfig, WaterAccessLedger
 from .world.workforce import WorkforceLedger
 from .world.incidents import IncidentLedger
 from .runtime.focus_mode import FocusConfig, FocusState
@@ -963,6 +964,8 @@ class WorldState:
     admin_logs: Dict[str, AdminLogEntry] = field(default_factory=dict)
     next_admin_log_seq: int = 0
     well: WellState = field(default_factory=WellState)
+    water_access_cfg: WaterAccessConfig = field(default_factory=WaterAccessConfig)
+    water_access: WaterAccessLedger = field(default_factory=WaterAccessLedger)
     inventories: InventoryRegistry = field(default_factory=InventoryRegistry)
     place_environment: Dict[str, PlaceEnvironmentState] = field(default_factory=dict)
     enf_cfg: Any = None
@@ -1239,6 +1242,8 @@ __all__ = [
     "SuitServiceLedgerEntry",
     "StockState",
     "SuitState",
+    "WaterAccessConfig",
+    "WaterAccessLedger",
     "WardState",
     "WorldConfig",
     "WorldState",

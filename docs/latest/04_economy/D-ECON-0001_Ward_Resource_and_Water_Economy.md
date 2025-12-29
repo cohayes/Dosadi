@@ -14,6 +14,7 @@ depends_on:
   - D-INFO-0004    # Scholars_and_Clerks_Branch
   - D-HEALTH-0002  # Food_Waste_and_Metabolism
   - D-AGENT-0001   # Human_Agent_Biology_and_Drives (placeholder)
+  - D-ECON-0011    # Water_Allocation_and_Access_Control (access-control & permits companion)
 ---
 
 # Ward Resource & Water Economy
