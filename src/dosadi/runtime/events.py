@@ -39,6 +39,13 @@ class EventKind:
     WATER_LEDGER_RECONCILED = "water.ledger.reconciled"
     WATER_AUDIT_FINDINGS = "water.audit.findings"
     WATER_SANCTION_APPLIED = "water.sanction.applied"
+    MANDATE_ISSUED = "mandate.issued"
+    MANDATE_PROGRESS_UPDATED = "mandate.progress.updated"
+    AUDIT_OPENED = "audit.opened"
+    MANDATE_ADJUDICATED = "mandate.adjudicated"
+    SHARE_ADJUSTED = "share.adjusted"
+    REPLACEMENT_CONSIDERED = "replacement.considered"
+    REPLACEMENT_EXECUTED = "replacement.executed"
 
 
 @dataclass(frozen=True, slots=True)
