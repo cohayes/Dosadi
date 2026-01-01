@@ -12,6 +12,7 @@ from dosadi.world.materials import Material, InventoryRegistry, ensure_inventory
 from dosadi.runtime.tech_ladder import has_unlock
 from dosadi.runtime.governance_failures import production_multiplier_for_ward
 from dosadi.runtime.labor import update_labor_for_day
+from dosadi.runtime.careers import update_careers_for_day
 from dosadi.runtime.institutions import _ward_for_location
 from dosadi.world.recipes import Recipe, RecipeRegistry, ensure_recipe_registry
 
@@ -225,6 +226,7 @@ def run_production_for_day(world, *, day: int) -> None:
         state.jobs_started_by_facility = {}
 
     update_class_system_for_day(world, day=day)
+    update_careers_for_day(world, day=day)
     update_labor_for_day(world, day=day)
 
     facilities = ensure_facility_ledger(world)

@@ -93,6 +93,7 @@ from .runtime.trade_federations import (
     FederationConfig,
 )
 from .runtime.truth_regimes import IntegrityState, TruthConfig, TruthEvent
+from .runtime.careers import CareerConfig
 from .runtime.success_contracts import ContractConfig, ContractRuntimeState, SuccessContract
 from .runtime.labor import BargainingEvent, LaborConfig, LaborOrgState
 from .agent.suits import SuitState
@@ -904,6 +905,10 @@ class WorldState:
     trades: List[Dict[str, object]] = field(default_factory=list)
     labor_postings: List[Dict[str, object]] = field(default_factory=list)
     labor_assignments: List[Dict[str, object]] = field(default_factory=list)
+    career_cfg: CareerConfig = field(default_factory=CareerConfig)
+    career_roles: Dict[str, object] = field(default_factory=dict)
+    career_events: List[Dict[str, object]] = field(default_factory=list)
+    career_last_run_day: int = -1
     desired_work_details: Dict["WorkDetailType", int] = field(default_factory=dict)
     active_work_details: Dict["WorkDetailType", int] = field(default_factory=dict)
     goals: Dict[str, "Goal"] = field(default_factory=dict)
