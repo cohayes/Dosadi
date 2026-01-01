@@ -29,6 +29,9 @@ class EventKind:
     CONSTRUCTION_PROJECT_STARTED = "CONSTRUCTION_PROJECT_STARTED"
     CONSTRUCTION_PROJECT_COMPLETED = "CONSTRUCTION_PROJECT_COMPLETED"
     SCOUT_MISSION_COMPLETED = "SCOUT_MISSION_COMPLETED"
+    CORRIDOR_DEGRADED = "CORRIDOR_DEGRADED"
+    CORRIDOR_CLOSED = "CORRIDOR_CLOSED"
+    CORRIDOR_COLLAPSED = "CORRIDOR_COLLAPSED"
     WATER_ALLOCATION_SET = "water.allocation.set"
     WATER_ENTITLEMENT_ISSUED = "water.entitlement.issued"
     WATER_PERMIT_VERIFIED = "water.permit.verified"
@@ -227,6 +230,12 @@ def publish_tick_events(world: object, tick: int) -> None:
     current_day = tick_to_day(world, tick)
     if getattr(world, "day", None) != current_day:
         setattr(world, "day", current_day)
+        from dosadi.runtime.corridor_cascade import update_corridor_cascades
+
+        try:
+            update_corridor_cascades(world, current_day)
+        except Exception:
+            pass
         bus.publish(kind=EventKind.DAY_ROLLOVER, tick=tick, day=current_day)
     bus.publish(kind=EventKind.TICK, tick=tick, day=current_day)
 

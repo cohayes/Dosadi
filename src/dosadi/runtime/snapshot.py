@@ -15,6 +15,7 @@ from dosadi.agents.core import GoalStatus
 from dosadi.systems.protocols import ProtocolStatus
 from dosadi.admin_log import AdminEventLog
 from dosadi.memory.episodes import EpisodeBuffers
+from dosadi.runtime.events import EventBus
 
 SNAPSHOT_SCHEMA_VERSION = "world_snapshot_v1"
 
@@ -60,10 +61,23 @@ def to_snapshot_dict(obj: Any) -> Any:
         payload = {field.name: to_snapshot_dict(getattr(obj, field.name)) for field in fields(obj)}
         return {"__type__": f"{obj.__class__.__module__}.{obj.__class__.__qualname__}", "data": payload}
 
+    if callable(obj):
+        name = getattr(obj, "__name__", None) or getattr(obj, "__qualname__", None)
+        return {"__callable__": str(name or obj)}
+
     if isinstance(obj, AdminEventLog):
         return {
             "__type__": f"{AdminEventLog.__module__}.{AdminEventLog.__qualname__}",
             "events": [to_snapshot_dict(evt) for evt in getattr(obj, "_events", [])],
+        }
+
+    if isinstance(obj, EventBus):
+        return {
+            "__type__": f"{EventBus.__module__}.{EventBus.__qualname__}",
+            "data": {
+                "base_seq": getattr(obj, "_base_seq", 0),
+                "next_seq": getattr(obj, "_next_seq", 0),
+            },
         }
 
     if isinstance(obj, set):
@@ -103,6 +117,9 @@ def from_snapshot_dict(obj: Any) -> Any:
             enum_cls = _resolve_type(obj["__enum__"])
             return enum_cls(obj["value"])
 
+        if "__callable__" in obj:
+            return obj.get("__callable__")
+
         if "__set__" in obj:
             return set(from_snapshot_dict(item) for item in obj.get("__set__", []))
 
@@ -135,6 +152,8 @@ def from_snapshot_dict(obj: Any) -> Any:
                 for evt in obj.get("events", []):
                     log._events.append(from_snapshot_dict(evt))
                 return log
+            if cls is EventBus:
+                return EventBus()
 
         return {key: from_snapshot_dict(value) for key, value in obj.items()}
 

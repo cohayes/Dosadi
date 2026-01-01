@@ -6,6 +6,7 @@ import math
 from typing import Any, Dict, Mapping
 
 from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
+from dosadi.runtime.corridor_cascade import corridor_status
 from dosadi.runtime.sanctions import is_transit_denied
 
 from .corridor_infrastructure import travel_time_multiplier_for_edge
@@ -136,6 +137,9 @@ def compute_route(
             if edge_obj and edge_obj.closed_until_day is not None:
                 if getattr(world, "day", 0) < edge_obj.closed_until_day:
                     continue
+            status = corridor_status(world, ekey)
+            if status in {"CLOSED", "COLLAPSED"}:
+                continue
             edge_payload = {
                 "a": node,
                 "b": nbr,

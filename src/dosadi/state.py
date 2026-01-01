@@ -43,6 +43,7 @@ from .runtime.mobility import MobilityConfig, MobilityEvent, PolityMobilityState
 from .runtime.institutions import InstitutionConfig, WardInstitutionPolicy, WardInstitutionState
 from .runtime.class_system import ClassConfig, WardClassState
 from .runtime.corridor_risk import CorridorRiskConfig, CorridorRiskLedger
+from .runtime.corridor_cascade import CorridorCascadeConfig, CorridorCascadeLedger
 from .runtime.constitution import ConstitutionConfig, ConstitutionalEvent, ConstitutionState, Settlement
 from .runtime.media import MediaConfig, MediaMessage
 from .runtime.comms import CommsConfig, CommsModifiers, CommsNodeState
@@ -1052,6 +1053,8 @@ class WorldState:
     extraction: ExtractionLedger = field(default_factory=ExtractionLedger)
     risk_cfg: CorridorRiskConfig = field(default_factory=CorridorRiskConfig)
     risk_ledger: CorridorRiskLedger = field(default_factory=CorridorRiskLedger)
+    corridor_cascade_cfg: CorridorCascadeConfig = field(default_factory=CorridorCascadeConfig)
+    corridor_cascade: CorridorCascadeLedger = field(default_factory=CorridorCascadeLedger)
     escort2_cfg: EscortPolicyV2Config = field(default_factory=EscortPolicyV2Config)
     escort2_state: EscortPolicyV2State = field(default_factory=EscortPolicyV2State)
     extract_cfg: ExtractionConfig = field(default_factory=ExtractionConfig)
