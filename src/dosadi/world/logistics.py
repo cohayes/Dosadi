@@ -12,6 +12,12 @@ from dosadi.runtime.telemetry import ensure_metrics
 import math
 
 from dosadi.runtime.belief_queries import belief_score, planner_perspective_agent
+from dosadi.runtime.corridor_cascade import (
+    corridor_status,
+    corridor_state,
+    ensure_cascade_config,
+    record_delivery_outcome,
+)
 from dosadi.runtime.governance_failures import delivery_disruption_prob_for_ward
 from dosadi.runtime.institutions import _ward_for_location
 from dosadi.runtime.escort_protocols import (
@@ -26,12 +32,17 @@ from dosadi.runtime.local_interactions import (
     enqueue_interaction_opportunity,
     ensure_interaction_config,
 )
+from dosadi.runtime.rng_service import ensure_rng_service
 from dosadi.world.materials import ensure_inventory_registry, material_from_key
 
 from .corridor_infrastructure import suit_wear_multiplier_for_edge, travel_time_multiplier_for_edge
 from .routing import Route, compute_route
 from .survey_map import SurveyEdge, SurveyMap, edge_key
 from .workforce import Assignment, AssignmentKind, WorkforceLedger, ensure_workforce
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
 
 
 @dataclass(slots=True)
@@ -281,7 +292,8 @@ def _edge_closed(world, edge: SurveyEdge | None) -> bool:
     if edge is None:
         return True
     if edge.closed_until_day is None:
-        return False
+        status = corridor_status(world, edge.key)
+        return status in {"CLOSED", "COLLAPSED"}
     return getattr(world, "day", 0) < edge.closed_until_day
 
 
@@ -434,8 +446,32 @@ def release_courier(world, carrier_id: str | None) -> None:
 
 
 def _delivery_should_fail(world, delivery_id: str, day: int) -> bool:
+    logistics = getattr(world, "logistics", None)
+    delivery = getattr(logistics, "deliveries", {}).get(delivery_id)
+    cfg = ensure_cascade_config(world)
+    rng_service = ensure_rng_service(world)
+
+    if delivery is not None:
+        for corridor_id in getattr(delivery, "route_corridors", []) or []:
+            status = corridor_status(world, corridor_id)
+            if status == "COLLAPSED":
+                delivery.notes["failure_corridor"] = corridor_id
+                record_delivery_outcome(world, corridor_id, day=day, success=False)
+                return True
+            state = corridor_state(world, corridor_id)
+            escort_level = _clamp01(getattr(world, "corridor_escort_level", {}).get(corridor_id, 0.0))
+            fail_prob = _clamp01(state.risk * (1.0 - cfg.escort_effect * escort_level))
+            roll = rng_service.rand(
+                f"{cfg.rng_stream_prefix}delivery_outcome",
+                scope={"day": day, "delivery_id": delivery_id, "corridor_id": corridor_id},
+            )
+            if roll < fail_prob:
+                delivery.notes["failure_corridor"] = corridor_id
+                record_delivery_outcome(world, corridor_id, day=day, success=False)
+                return True
+            record_delivery_outcome(world, corridor_id, day=day, success=True)
+
     loss_rate = float(getattr(world, "logistics_loss_rate", 0.0) or 0.0)
-    delivery = getattr(getattr(world, "logistics", None), "deliveries", {}).get(delivery_id)
     ward_ids: list[str] = []
     if delivery is not None:
         ward_a = _ward_for_location(world, getattr(delivery, "origin_node_id", None))
@@ -560,6 +596,9 @@ def _deliver(world, delivery: DeliveryRequest, tick: int) -> None:
     delivery.deliver_tick = tick
     release_courier(world, delivery.assigned_carrier_id)
     release_escorts(world, delivery.delivery_id)
+    day = getattr(world, "day", 0)
+    for corridor_id in delivery.route_corridors:
+        record_delivery_outcome(world, corridor_id, day=day, success=True)
 
     agent = getattr(world, "agents", {}).get(delivery.assigned_carrier_id)
     if agent is not None:
