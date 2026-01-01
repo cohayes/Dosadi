@@ -38,6 +38,7 @@ from dosadi.runtime.facility_updates import update_facilities_for_day
 from dosadi.runtime.incident_engine import run_incident_engine_for_day
 from dosadi.runtime.faction_interference import run_faction_interference_for_day
 from dosadi.runtime.factions import run_real_factions_for_day
+from dosadi.runtime.mandates import run_mandate_system_for_day
 from dosadi.runtime.war import run_war_for_day
 from dosadi.runtime.local_interactions import run_interactions_for_day
 from dosadi.runtime.evidence_producers import run_evidence_update
@@ -225,6 +226,7 @@ def step_day(world, *, days: int = 1, cfg: Optional[TimewarpConfig] = None) -> N
         run_incident_engine_for_day(world, day=world.day)
         run_evidence_update(world, day=world.day)
         run_governance_failure_for_day(world, day=world.day)
+        run_mandate_system_for_day(world, day=world.day)
         run_finance_week(world, day=world.day)
         run_ledger_for_day(world, day=world.day)
         run_enforcement_for_day(world, day=world.day)

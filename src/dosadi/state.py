@@ -61,6 +61,7 @@ from .runtime.production_runtime import FacilityProductionState, ProductionConfi
 from .runtime.smuggling import SmugglingConfig, SmugglingNetworkState
 from .runtime.policing import PolicingConfig, WardPolicingState
 from .runtime.archives import ArchivesConfig, ArchiveState, CanonEvent, CounterNarrative, NarrativeState
+from .runtime.mandates import MandateSystemConfig, MandateSystemState
 from .agent.memory_crumbs import CrumbStore
 from .agent.memory_episodes import EpisodeBuffer
 from .agent.memory_stm import STMBoringWinner
@@ -289,6 +290,9 @@ class FactionState:
     members: List[str] = field(default_factory=list)
     assets: StockState = field(default_factory=StockState)
     metrics: FactionMetrics = field(default_factory=FactionMetrics)
+    water_share_ratio: float = 1.0
+    performance_index: float = 0.5
+    audit_risk: float = 0.0
     loyalty_to_king: float = 0.5
     smuggling_profile: MutableMapping[str, float] = field(default_factory=dict)
     specialization: Optional[str] = None
@@ -918,6 +922,8 @@ class WorldState:
     event_bus: EventBus = field(default_factory=EventBus)
     evidence_cfg: EvidenceConfig = field(default_factory=EvidenceConfig)
     evidence_by_polity: dict[str, EvidenceBuffer] = field(default_factory=dict)
+    mandate_cfg: MandateSystemConfig = field(default_factory=MandateSystemConfig)
+    mandate_state: MandateSystemState = field(default_factory=MandateSystemState)
     kpis: KPIStore = field(default_factory=KPIStore)
     kpi_event_subscription_id: int | None = None
     event_ring: EventRing = field(default_factory=EventRing)
